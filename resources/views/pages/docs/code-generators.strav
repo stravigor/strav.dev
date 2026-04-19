@@ -1,0 +1,512 @@
+@layout('layouts/docs')
+
+@set('title', 'Generators - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Generators</h1>
+
+<p>The generators module produces TypeScript source files from your schema definitions. Strav provides three generators: a model generator, an API generator, and a route generator.</p>
+
+All generators share a common configuration system and produce barrel exports (<code>index.ts</code>) for each output directory.
+
+<h2>Configuration</h2>
+
+Output directories are configured via <code>config/generators.ts</code>:
+
+<pre><code class="language-typescript">// config/generators.ts
+export default {
+  paths: {
+    // Generated file paths
+    // models: 'app/models',
+    // enums: 'app/enums',
+    // controllers: 'app/http/controllers',
+    // services: 'app/services',
+    // events: 'app/events',
+    // validators: 'app/validators',
+    // policies: 'app/policies',
+    // resources: 'app/resources',
+    // routes: 'start',
+
+    // Database paths (for schemas and migrations)
+    // schemas: 'database/schemas',      // Where schema definitions are located
+    // migrations: 'database/migrations'  // Where migration files are generated
+  },
+  modelNaming: {
+    public: null,      // No prefix for public models: User, Project
+    tenants: 'Tenant'  // "Tenant" prefix for tenant models: TenantExperiment, TenantBelief
+  }
+}
+</code></pre>
+
+<p>Override any path to change where generated files are placed. Unspecified paths use the defaults shown above. Cross-directory imports (e.g. controller → service) are computed automatically from the configured paths.</p>
+
+<h3>Database Paths</h3>
+
+The <code>schemas</code> and <code>migrations</code> paths allow you to customize where your database files are located:
+
+<ul>
+<li><strong>schemas</strong>: Directory containing your schema definitions (default: <code>database/schemas</code>)</li>
+<li><strong>migrations</strong>: Directory where migration files are generated and stored (default: <code>database/migrations</code>)</li>
+</ul>
+
+<p>This is useful when you want to organize your database files in a different structure, for example:</p>
+
+<pre><code class="language-typescript">export default {
+  paths: {
+    schemas: 'src/db/schemas',
+    migrations: 'src/db/migrations'
+  }
+}
+</code></pre>
+
+<h3>Model Naming</h3>
+
+The optional <code>modelNaming</code> configuration allows you to add prefixes to generated model class names. This is useful in multi-tenant architectures to avoid naming conflicts:
+
+<pre><code class="language-typescript">// config/generators.ts
+export default {
+  modelNaming: {
+    public: null,        // Public models: User, Project (no prefix)
+    tenants: 'Tenant'    // Tenant models: TenantExperiment, TenantBelief
+  }
+}
+</code></pre>
+
+<p>When prefixes are configured:</p>
+<ul>
+<li><strong>Class names</strong> get prefixed: <code>class TenantExperiment extends BaseModel</code></li>
+<li><strong>Type references</strong> use correct prefixes: <code>declare project: Project</code> (public) vs <code>declare experiment: TenantExperiment</code> (tenant)</li>
+<li><strong>Cross-scope references</strong> work automatically: tenant models can reference public models without prefixes</li>
+<li><strong>Decorator strings</strong> use the appropriate model names: <code>@reference({ model: 'TenantProject', ... })</code></li>
+<li><strong>Barrel exports</strong> reflect the prefixed names: <code>export { default as TenantExperiment }</code></li>
+</ul>
+
+File names remain unchanged (<code>experiment.ts</code>), only the class names are prefixed.
+
+<h2>Barrel exports</h2>
+
+Every directory with generated files gets an <code>index.ts</code> barrel file. This allows single-import access to all generated classes:
+
+<pre><code class="language-typescript">import { User, Project, Task } from '../models'
+import { UserService, ProjectService } from '../services'
+import { UserEvents, ProjectEvents } from '../events'
+</code></pre>
+
+Barrel files use <code>export { default as X }</code> for default-exported classes (models, controllers, services, policies) and <code>export * from</code> for named exports (enums, events, validators).
+
+<h2>Prettier formatting</h2>
+
+When writing files to disk (<code>writeAll()</code>), all generated TypeScript files are automatically formatted with Prettier. The formatter resolves the project's <code>.prettierrc</code> config from each file's location, so your formatting preferences are applied consistently.
+
+<p>If Prettier is not installed, files are written unformatted.</p>
+
+<h2>ModelGenerator</h2>
+
+<p>Generates model classes and enum files from schemas. It operates entirely in memory — no database connection is needed.</p>
+
+<h3>Usage via CLI</h3>
+
+<pre><code class="language-bash"><h1>Generate models for all scopes</h1>
+bun strav generate:models
+
+<h1>Generate models for specific scope</h1>
+bun strav generate:models --scope=public    # Only public models
+bun strav generate:models --scope=tenants   # Only tenant models
+bun strav generate:models --scope=all       # Both scopes (default)
+</code></pre>
+
+<p>When using multi-tenant architecture with separate schemas, models are generated in scoped directories:</p>
+<ul>
+<li><code>app/models/public/</code> - System-wide models (users, organizations, etc.)</li>
+<li><code>app/models/tenants/</code> - Tenant-specific models (application data)</li>
+</ul>
+
+<h3>Programmatic usage</h3>
+
+<pre><code class="language-typescript">import { ModelGenerator } from '@strav/cli'
+import type { GeneratorConfig } from '@strav/cli'
+
+const config: GeneratorConfig = {
+  paths: { models: 'app/models', enums: 'app/enums' },
+  modelNaming: {
+    public: null,      // No prefix for public models
+    tenants: 'Tenant'  // "Tenant" prefix for tenant models
+  }
+}
+
+// Generate for a specific scope
+const generator = new ModelGenerator(schemas, representation, config, 'public')
+// Or: new ModelGenerator(schemas, representation, config, 'tenants', allSchemasMap)
+
+// Generate in memory
+const files = generator.generate()
+// files = [{ path: 'app/models/public/user.ts', content: '...' }, ...]
+
+// Generate and write to disk
+const written = await generator.writeAll()
+</code></pre>
+
+The <code>config</code> parameter is optional — defaults are used when omitted. The <code>scope</code> parameter appends <code>/public</code> or <code>/tenants</code> to the configured model and enum paths.
+
+<h2>What gets generated</h2>
+
+<h3>Model files</h3>
+
+For each non-association schema, a model file is produced in <code>app/models/</code>:
+
+<pre><code class="language-typescript">// app/models/user.ts — Generated by Strav -- DO NOT EDIT
+import { DateTime } from 'luxon'
+import BaseModel from '@strav/database'
+import { primary, associate } from '@strav/database'
+import { UserRole } from '../enums/user'
+import type Team from './team'
+
+export default class User extends BaseModel {
+  static override softDeletes = true
+
+  @primary
+  declare pid: string
+
+  declare username: string | null
+  role: UserRole = UserRole.User
+
+  declare createdAt: DateTime
+  declare updatedAt: DateTime
+  declare deletedAt: DateTime | null
+
+  @associate({ through: 'team_user', foreignKey: 'user_pid', otherKey: 'team_id', model: 'Team', targetPK: 'id' })
+  declare teams: Team[]
+}
+</code></pre>
+
+<h3>Enum files</h3>
+
+Enums are grouped by their owning entity in <code>app/enums/</code>:
+
+<pre><code class="language-typescript">// app/enums/user.ts — Generated by Strav -- DO NOT EDIT
+export enum UserRole {
+  User = 'user',
+  Admin = 'admin',
+  Staff = 'staff',
+  Visitor = 'visitor',
+}
+</code></pre>
+
+<h2>Generation rules</h2>
+
+<h3>Property declarations</h3>
+
+<ul>
+<li><strong><code>declare</code> keyword</strong>: Used for properties without a schema default (DB-generated PKs, timestamps, nullable fields). These are invisible to <code>Object.keys()</code> on a fresh instance, preventing them from being included in INSERT statements.</li>
+<li><strong>Initializer</strong>: Used for properties with a schema <code>.default()</code>. These get included in INSERT statements.</li>
+</ul>
+
+<h3>Type mapping</h3>
+
+<p>| PostgreSQL type | TypeScript type |</p>
+<p>|----------------|-----------------|</p>
+| <code>serial</code>, <code>integer</code>, <code>smallint</code>, <code>real</code>, <code>double</code> | <code>number</code> |
+| <code>bigserial</code>, <code>bigint</code> | <code>bigint</code> |
+| <code>varchar</code>, <code>text</code>, <code>uuid</code>, <code>char</code> | <code>string</code> |
+| <code>boolean</code> | <code>boolean</code> |
+| <code>timestamp</code>, <code>timestamptz</code> | <code>DateTime</code> |
+| <code>json</code>, <code>jsonb</code> | <code>Record<string, unknown></code> |
+| Custom enum | Generated enum type (e.g., <code>UserRole</code>) |
+
+<h3>Relationships</h3>
+
+<ul>
+<li><strong><code>@reference</code></strong>: Generated for schema <code>parent</code> fields and <code>t.reference()</code> fields. Produces a FK property and a reference property.</li>
+<li><strong><code>@associate</code></strong>: Generated from <code>defineAssociation</code> schemas. Both sides of the many-to-many get an <code>@associate</code> decorator.</li>
+</ul>
+
+<h3>Soft deletes</h3>
+
+If the archetype includes a <code>deleted_at</code> timestamp, the model gets <code>static override softDeletes = true</code> and a <code>declare deletedAt: DateTime | null</code> property.
+
+<h2>ApiGenerator</h2>
+
+<p>Generates the full application layer from schemas: event constants, validators, policies, services, and controllers. Every generated file is archetype-aware.</p>
+
+<h3>Usage via CLI</h3>
+
+<pre><code class="language-bash">bun strav generate:api
+</code></pre>
+
+<h3>Programmatic usage</h3>
+
+<pre><code class="language-typescript">import { ApiGenerator } from '@strav/cli'
+import type { GeneratorConfig } from '@strav/cli'
+
+const config: GeneratorConfig = {
+  paths: { controllers: 'app/controllers/api' },
+}
+
+const generator = new ApiGenerator(schemas, representation, config)
+
+// Generate in memory
+const files = generator.generate()
+
+// Generate and write to disk
+const written = await generator.writeAll()
+</code></pre>
+
+The <code>config</code> parameter is optional — defaults are used when omitted.
+
+<h3>What gets generated</h3>
+
+<p>For each non-association schema, 6 files are produced:</p>
+
+<h4>Event constants — <code>app/events/{name}.ts</code></h4>
+
+<p>Named constants for use with the Emitter. Events vary by archetype:</p>
+
+<pre><code class="language-typescript">// app/events/user.ts
+export const UserEvents = {
+  CREATED: 'user.created',
+  UPDATED: 'user.updated',
+  SYNCED:  'user.synced',
+  DELETED: 'user.deleted',
+} as const
+</code></pre>
+
+<p>| Archetype | Events |</p>
+<p>|-----------|--------|</p>
+<p>| entity, attribute, contribution, reference | CREATED, UPDATED, SYNCED, DELETED |</p>
+<p>| component | UPDATED, SYNCED |</p>
+<p>| event | CREATED |</p>
+<p>| configuration | UPDATED, SYNCED |</p>
+
+<h4>Validator rules — <code>app/validators/{name}_validator.ts</code></h4>
+
+Auto-generated from field definitions. Each validator has <code>store</code> and <code>update</code> rule sets:
+
+<pre><code class="language-typescript">// app/validators/user_validator.ts
+export const UserRules: Record<string, RuleSet> = {
+  store: {
+    username: [required(), string()],
+    role: [oneOf(['user', 'admin', 'staff'])],
+  },
+  update: {
+    username: [string()],
+    role: [oneOf(['user', 'admin', 'staff'])],
+  },
+}
+</code></pre>
+
+Rules are derived from field type (pgType → type rule), required flag (→ <code>required()</code> on store only), enum values (→ <code>oneOf()</code>), varchar length (→ <code>max()</code>), and schema validators (min, max, email, url, regex).
+
+Reference FK fields (e.g., <code>authorPid</code> from <code>t.reference('user')</code>) are included using their FK column name and validated with the referenced PK's type rule.
+
+<p>System-managed fields are excluded: id, timestamps, parent FK.</p>
+
+<h4>Policy skeleton — <code>app/policies/{name}_policy.ts</code></h4>
+
+A class with methods per archetype. All default to <code>return true</code> — customize the logic:
+
+<pre><code class="language-typescript">// app/policies/user_policy.ts
+export default class UserPolicy {
+  canList(actor: any): boolean { return true }
+  canView(actor: any, user: any): boolean { return true }
+  canCreate(actor: any): boolean { return true }
+  canUpdate(actor: any, user: any): boolean { return true }
+  canDelete(actor: any, user: any): boolean { return true }
+}
+</code></pre>
+
+See the <a href="./policy.md">Policy guide</a> for the full archetype → method mapping.
+
+<h4>Resource — <code>app/resources/{name}_resource.ts</code></h4>
+
+A <code>Resource<T></code> subclass that controls the JSON shape for API responses. Fields are derived from the schema columns:
+
+<pre><code class="language-typescript">// app/resources/user_resource.ts
+import { Resource } from '@strav/http'
+import type User from '../models/user'
+
+export default class UserResource extends Resource<User> {
+  define(user: User) {
+    return {
+      pid: user.pid,
+      username: user.username,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    }
+  }
+}
+</code></pre>
+
+<p>Field inclusion rules:</p>
+<ul>
+<li><strong>Included</strong>: All regular columns — PKs, FKs, data fields, timestamps</li>
+<li><strong>Excluded</strong>: <code>deleted_at</code> (soft-delete internal) and columns marked <code>sensitive</code> in the schema</li>
+</ul>
+
+See the <a href="./http.md#api-resources">HTTP guide</a> for full Resource documentation.
+
+<h4>Service — <code>app/services/{name}_service.ts</code></h4>
+
+Injectable class wrapping model CRUD and event dispatch. Uses <code>merge()</code> to assign validated data onto model instances:
+
+<pre><code class="language-typescript">// app/services/user_service.ts
+@inject
+export default class UserService {
+  async list(page: number, perPage: number) {
+    return query(User).paginate(page, perPage)
+  }
+  async find(id) { return User.find(id) }
+  async create(data) {
+    const user = new User()
+    user.merge(data)
+    await user.save()
+    await Emitter.emit(UserEvents.CREATED, user)
+    return user
+  }
+  async update(id, data) { /<em> find → merge → save → emit UPDATED </em>/ }
+  async delete(id) { /<em> find → delete → emit DELETED </em>/ }
+}
+</code></pre>
+
+Services are decorated with <code>@inject</code> so the DI container can resolve them as controller dependencies.
+
+The <code>list</code> method returns a <code>PaginationResult<T></code> with <code>data</code> and <code>meta</code> (page, perPage, total, lastPage, from, to).
+
+<p>Archetype-specific behaviour:</p>
+<ul>
+<li><strong>Dependent archetypes</strong> (attribute, component, event, configuration, contribution): <code>listByParent(parentId, page, perPage)</code> uses the query builder with pagination.</li>
+<li><strong>Event archetype</strong>: Only <code>listByParent</code>, <code>find</code>, <code>append</code> (no update/delete).</li>
+<li><strong>Component</strong>: Only <code>listByParent</code>, <code>find</code>, <code>update</code> (no create/delete).</li>
+<li><strong>Configuration</strong>: <code>get(parentId)</code>, <code>upsert(parentId, data)</code>, <code>reset(parentId)</code>.</li>
+</ul>
+
+<h4>Controller — <code>app/http/controllers/{name}_controller.ts</code></h4>
+
+<p>Injectable class with the service as a constructor dependency. Each action validates input, calls the service, and returns a response serialized through the Resource:</p>
+
+<pre><code class="language-typescript">// app/http/controllers/user_controller.ts
+@inject
+export default class UserController {
+  constructor(protected service: UserService) {}
+
+  async index(ctx: Context) {
+    const page = Number(ctx.query.get('page')) || 1
+    const perPage = Number(ctx.query.get('perPage')) || 20
+    const result = await this.service.list(page, perPage)
+    return ctx.json(UserResource.paginate(result))
+  }
+
+  async store(ctx: Context) {
+    const body = await ctx.body<Record<string, unknown>>()
+    const { data: validated, errors } = validate(body, UserRules.store!)
+    if (errors) return ctx.json({ errors }, 422)
+    const item = await this.service.create(validated)
+    return ctx.json(UserResource.make(item), 201)
+  }
+  // show uses Resource.make(), update uses Resource.make(), destroy returns 204
+}
+</code></pre>
+
+The <code>index</code> action reads <code>?page=1&perPage=20</code> from the query string, defaults to page 1 with 20 items per page, and returns a paginated response with both <code>data</code> and <code>meta</code>.
+
+<p>For dependent archetypes, the parent FK is added after validation so it isn't stripped:</p>
+
+<pre><code class="language-typescript">  async store(ctx: Context) {
+    const body = await ctx.body<Record<string, unknown>>()
+    const { data: validated, errors } = validate(body, PostRules.store!)
+    if (errors) return ctx.json({ errors }, 422)
+    const item = await this.service.create({ ...validated, userPid: ctx.params.parentId! })
+    return ctx.json(PostResource.make(item), 201)
+  }
+</code></pre>
+
+Controllers are decorated with <code>@inject</code> for constructor injection. <code>router.resource()</code> automatically resolves them via <code>app.make()</code> with full DI.
+
+Actions vary by archetype — event controllers have no <code>update</code>/<code>destroy</code>, component controllers have no <code>store</code>/<code>destroy</code>.
+
+<h3>Route file — <code>start/api_routes.ts</code></h3>
+
+<code>generate:api</code> also produces a route file that wires all controllers to the router. Routes are fully derived from archetypes and parent relationships — no manual wiring needed. Controller import paths are computed automatically from the configured <code>routes</code> and <code>controllers</code> directories.
+
+<pre><code class="language-typescript">// start/api_routes.ts — Generated by Strav
+import { router } from '@strav/http'
+import { auth } from '@strav/http'
+
+import {
+  UserController,
+  PostController,
+  CommentController,
+  PostSettingController,
+} from '../app/http/controllers'
+
+router.group({ prefix: '/api', middleware: [auth()] }, r => {
+  r.resource('/users', UserController)
+
+  r.group({ prefix: '/users/:parentId' }, r => {
+    r.resource('/posts', PostController)
+  })
+
+  r.group({ prefix: '/posts/:parentId' }, r => {
+    r.resource('/comments', CommentController)
+    r.resource('/settings', PostSettingController).singleton()
+  })
+})
+</code></pre>
+
+<p>Routing rules by archetype:</p>
+
+<p>| Archetype | Routing | Notes |</p>
+<p>|-----------|---------|-------|</p>
+| entity, reference | <code>r.resource()</code> at root | Full CRUD |
+| contribution, attribute, component, event | <code>r.resource()</code> nested under parent | Actions vary by archetype |
+| configuration | <code>r.resource().singleton()</code> under parent | No <code>:id</code> param — show, update, destroy |
+<p>| association | Skipped | No routes |</p>
+
+Route paths are auto-pluralized: <code>user</code> → <code>/users</code>, <code>category</code> → <code>/categories</code>. Dependent schemas strip the parent prefix: <code>post_content</code> (parent: post) → <code>/contents</code>.
+
+<h4>API routing mode</h4>
+
+The route generator reads <code>config/http.ts</code> to determine whether routes use a URL prefix or a subdomain:
+
+<pre><code class="language-typescript">// config/http.ts
+import { ApiRouting } from '@strav/cli'
+
+export default {
+  // ...
+  api: {
+    routing: ApiRouting.Prefix,   // ApiRouting.Prefix | ApiRouting.Subdomain
+    prefix: '/api',                // used when routing = Prefix
+    subdomain: 'api',              // used when routing = Subdomain
+  },
+}
+</code></pre>
+
+<strong>Prefix mode</strong> (default) — routes live under <code>/api</code>:
+
+<pre><code>GET /api/users
+POST /api/users/:parentId/posts
+</code></pre>
+
+<strong>Subdomain mode</strong> — routes live on a subdomain (e.g. <code>api.example.com</code>):
+
+<pre><code>GET api.example.com/users
+POST api.example.com/users/:parentId/posts
+</code></pre>
+
+When using subdomain mode, make sure <code>domain</code> is set correctly in <code>config/http.ts</code> so the router can extract subdomains from the <code>Host</code> header.
+
+<p>Import the generated file from your bootstrap:</p>
+
+<pre><code class="language-typescript">// index.ts
+await import('./start/api_routes')
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

@@ -1,0 +1,414 @@
+@layout('layouts/docs')
+
+@set('title', 'Search - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Search</h1>
+
+Full-text search with a unified API across multiple engines. Built-in drivers for <strong>Meilisearch</strong>, <strong>Typesense</strong>, and <strong>Algolia</strong>. Custom drivers can be added via <code>extend()</code>.
+
+The <code>searchable()</code> mixin integrates search directly into your ORM models — upsert on save, remove on delete, query with a single static method.
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/search
+bun strav install search
+</code></pre>
+
+The <code>install</code> command copies <code>config/search.ts</code> into your project. The file is yours to edit.
+
+<h2>Setup</h2>
+
+<h3>1. Register SearchManager</h3>
+
+<h4>Using a service provider (recommended)</h4>
+
+<pre><code class="language-typescript">import { SearchProvider } from '@strav/search'
+
+app.use(new SearchProvider())
+</code></pre>
+
+The <code>SearchProvider</code> registers <code>SearchManager</code> as a singleton. It depends on the <code>config</code> provider.
+
+<h4>Manual setup</h4>
+
+<pre><code class="language-typescript">import SearchManager from '@strav/search'
+
+app.singleton(SearchManager)
+app.resolve(SearchManager)
+</code></pre>
+
+<h3>2. Configure drivers</h3>
+
+Edit <code>config/search.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  default: env('SEARCH_DRIVER', 'meilisearch'),
+  prefix: env('SEARCH_PREFIX', ''),
+
+  drivers: {
+    meilisearch: {
+      driver: 'meilisearch',
+      host: env('MEILISEARCH_HOST', 'localhost'),
+      port: env('MEILISEARCH_PORT', '7700').int(),
+      apiKey: env('MEILISEARCH_KEY', ''),
+    },
+
+    typesense: {
+      driver: 'typesense',
+      host: env('TYPESENSE_HOST', 'localhost'),
+      port: env('TYPESENSE_PORT', '8108').int(),
+      apiKey: env('TYPESENSE_KEY', ''),
+      protocol: 'http',
+    },
+
+    algolia: {
+      driver: 'algolia',
+      appId: env('ALGOLIA_APP_ID', ''),
+      apiKey: env('ALGOLIA_SECRET', ''),
+    },
+  },
+}
+</code></pre>
+
+<h3>3. Set environment variables</h3>
+
+<pre><code class="language-env">SEARCH_DRIVER=meilisearch
+MEILISEARCH_HOST=localhost
+MEILISEARCH_PORT=7700
+MEILISEARCH_KEY=your-master-key
+</code></pre>
+
+<h2>Searchable mixin</h2>
+
+Add full-text search to any model with the <code>searchable()</code> mixin:
+
+<pre><code class="language-typescript">import BaseModel from '@strav/database'
+import { searchable } from '@strav/search'
+
+class Article extends searchable(BaseModel) {
+  declare id: number
+  declare title: string
+  declare body: string
+  declare status: string
+
+  static tableName = 'articles'
+
+  static searchableAs() {
+    return 'articles'
+  }
+
+  toSearchableArray() {
+    return { id: this.id, title: this.title, body: this.body }
+  }
+
+  shouldBeSearchable() {
+    return this.status === 'published'
+  }
+}
+</code></pre>
+
+Works with <code>compose()</code> for multiple mixins:
+
+<pre><code class="language-typescript">import { compose } from '@strav/kernel'
+import { softDeletes } from '@strav/database'
+
+class Article extends compose(BaseModel, softDeletes, searchable) {
+  // ...
+}
+</code></pre>
+
+<h3>searchableAs</h3>
+
+Returns the index name. Defaults to the model's <code>tableName</code>. Override to customize:
+
+<pre><code class="language-typescript">static searchableAs() {
+  return 'blog_articles'
+}
+</code></pre>
+
+<h3>toSearchableArray</h3>
+
+Converts a model instance to a document for the search index. By default, returns all own properties that don't start with <code>_</code>. Override to control which fields are indexed:
+
+<pre><code class="language-typescript">toSearchableArray() {
+  return {
+    id: this.id,
+    title: this.title,
+    body: this.body,
+    author_name: this.authorName,
+  }
+}
+</code></pre>
+
+<h3>shouldBeSearchable</h3>
+
+Controls whether a specific instance should be indexed. Defaults to <code>true</code>. Override to conditionally exclude records:
+
+<pre><code class="language-typescript">shouldBeSearchable() {
+  return this.status === 'published'
+}
+</code></pre>
+
+<h3>searchableSettings</h3>
+
+Configure index settings (searchable, filterable, sortable attributes). Returns <code>undefined</code> by default, which uses engine defaults:
+
+<pre><code class="language-typescript">static searchableSettings() {
+  return {
+    searchableAttributes: ['title', 'body'],
+    filterableAttributes: ['status', 'category_id'],
+    sortableAttributes: ['created_at', 'title'],
+  }
+}
+</code></pre>
+
+<h2>Searching</h2>
+
+<h3>From a model</h3>
+
+<pre><code class="language-typescript">const results = await Article.search('typescript generics')
+</code></pre>
+
+<p>The result object:</p>
+
+<pre><code class="language-typescript">{
+  hits: [
+    { document: { id: 1, title: 'TS Guide', body: '...' }, highlights: { ... } },
+    { document: { id: 2, title: 'Generics 101', body: '...' } },
+  ],
+  totalHits: 2,
+  page: 1,
+  perPage: 20,
+  processingTimeMs: 3,
+}
+</code></pre>
+
+<h3>Search options</h3>
+
+<pre><code class="language-typescript">const results = await Article.search('typescript', {
+  filter: { status: 'published' },
+  sort: ['created_at:desc'],
+  page: 2,
+  perPage: 10,
+  attributesToRetrieve: ['id', 'title'],
+  attributesToHighlight: ['title', 'body'],
+})
+</code></pre>
+
+<p>Filters can also be passed as an engine-native string:</p>
+
+<pre><code class="language-typescript">// Meilisearch filter syntax
+await Article.search('test', { filter: 'status = published AND category_id = 3' })
+
+// Typesense filter syntax
+await Article.search('test', { filter: 'status:=published' })
+</code></pre>
+
+<h2>Auto-indexing</h2>
+
+<p>Register event listeners so models are automatically indexed on create/update and removed on delete:</p>
+
+<pre><code class="language-typescript">Article.bootSearch('article')
+</code></pre>
+
+This hooks into events emitted by generated services (<code>article.created</code>, <code>article.updated</code>, <code>article.synced</code>, <code>article.deleted</code>). Call <code>bootSearch()</code> once during app bootstrap.
+
+<h2>search helper</h2>
+
+The <code>search</code> helper provides a standalone API for working with indexes directly, without going through a model:
+
+<pre><code class="language-typescript">import { search } from '@strav/search'
+</code></pre>
+
+<h3>Indexing documents</h3>
+
+<pre><code class="language-typescript">await search.upsert('articles', 1, { title: 'Hello', body: '...' })
+
+await search.upsertMany('articles', [
+  { id: 1, title: 'First' },
+  { id: 2, title: 'Second' },
+])
+</code></pre>
+
+<h3>Removing documents</h3>
+
+<pre><code class="language-typescript">await search.delete('articles', 1)
+await search.deleteMany('articles', [1, 2, 3])
+</code></pre>
+
+<h3>Querying</h3>
+
+<pre><code class="language-typescript">const results = await search.query('articles', 'typescript', {
+  filter: { status: 'published' },
+  page: 1,
+  perPage: 20,
+})
+</code></pre>
+
+<h3>Index management</h3>
+
+<pre><code class="language-typescript">await search.createIndex('articles', {
+  searchableAttributes: ['title', 'body'],
+  filterableAttributes: ['status'],
+})
+
+await search.flush('articles')       // remove all documents, keep index
+await search.deleteIndex('articles') // delete the entire index
+</code></pre>
+
+<h2>Index prefix</h2>
+
+The <code>prefix</code> config option prepends a string to all index names. Useful for multi-environment setups:
+
+<pre><code class="language-env">SEARCH_PREFIX=dev_
+</code></pre>
+
+With this config, <code>Article.searchableAs()</code> returning <code>'articles'</code> resolves to the index <code>dev_articles</code>.
+
+<h2>Multiple engines</h2>
+
+<p>You can configure and use multiple engines simultaneously:</p>
+
+<pre><code class="language-typescript">// Use a named engine
+const typesense = SearchManager.engine('typesense')
+await typesense.search('articles', 'query')
+
+// Or via the helper
+search.engine('algolia').search('articles', 'query')
+</code></pre>
+
+<h2>Custom driver</h2>
+
+Register a custom search driver with <code>extend()</code>:
+
+<pre><code class="language-typescript">import { search } from '@strav/search'
+import type { SearchEngine } from '@strav/search'
+
+search.extend('sonic', (config) => {
+  return new SonicDriver(config)
+})
+</code></pre>
+
+The factory receives the driver's config object from <code>config/search.ts</code>. The returned object must implement the <code>SearchEngine</code> interface.
+
+<p>Then set it as the driver in your config:</p>
+
+<pre><code class="language-typescript">// config/search.ts
+export default {
+  default: 'sonic',
+  drivers: {
+    sonic: {
+      driver: 'sonic',
+      host: env('SONIC_HOST', 'localhost'),
+      port: env('SONIC_PORT', '1491').int(),
+    },
+  },
+}
+</code></pre>
+
+<h2>CLI commands</h2>
+
+<p>The search package provides two CLI commands (auto-discovered by the framework):</p>
+
+<h3>search:import</h3>
+
+<p>Import all records for a model into the search index:</p>
+
+<pre><code class="language-bash">bun strav search:import app/models/article.ts
+bun strav search:import app/models/article.ts --chunk 1000
+</code></pre>
+
+<strong>Options:</strong>
+<ul>
+<li><code>--chunk <size></code> — Records per batch (default: <code>500</code>).</li>
+</ul>
+
+<h3>search:flush</h3>
+
+<p>Remove all documents from a model's search index:</p>
+
+<pre><code class="language-bash">bun strav search:flush app/models/article.ts
+</code></pre>
+
+<h2>Testing</h2>
+
+Use the <code>NullDriver</code> to disable search in tests:
+
+<pre><code class="language-env"><h1>.env.test</h1>
+SEARCH_DRIVER=null
+</code></pre>
+
+<p>Or swap in a recording engine at runtime:</p>
+
+<pre><code class="language-typescript">import SearchManager from '@strav/search'
+import { NullDriver } from '@strav/search'
+
+SearchManager.useEngine(new NullDriver())
+</code></pre>
+
+Call <code>SearchManager.reset()</code> in test teardown to clear cached engines.
+
+<h2>Controller example</h2>
+
+<pre><code class="language-typescript">import { search } from '@strav/search'
+
+export default class ArticleController {
+  async search(ctx: Context) {
+    const { q, page = '1' } = ctx.query()
+
+    const results = await Article.search(q, {
+      page: parseInt(page, 10),
+      perPage: 20,
+      filter: { status: 'published' },
+    })
+
+    return ctx.json({
+      articles: results.hits.map((h) => h.document),
+      total: results.totalHits,
+      page: results.page,
+    })
+  }
+
+  async store(ctx: Context) {
+    const data = await ctx.body<{ title: string; body: string }>()
+    const article = await Article.create(data)
+
+    // If bootSearch() is active, indexing happens automatically.
+    // Otherwise, index manually:
+    await article.searchIndex()
+
+    return ctx.json(article, 201)
+  }
+}
+</code></pre>
+
+<h2>Drivers</h2>
+
+<h3>Meilisearch</h3>
+
+Default port <code>7700</code>. Uses Bearer token authentication. Filter objects are converted to Meilisearch syntax (<code>key = value</code>, <code>key IN [values]</code>). The recommended driver for most projects — fast, easy to self-host, and feature-rich.
+
+<h3>Typesense</h3>
+
+Default port <code>8108</code>. Uses <code>X-TYPESENSE-API-KEY</code> header. Document IDs are always strings. Batch imports use JSONL format. Supports wildcard auto-detection fields.
+
+<h3>Algolia</h3>
+
+Cloud-hosted. Uses <code>X-Algolia-Application-Id</code> and <code>X-Algolia-API-Key</code> headers. Indexes are created implicitly on first write. Pagination is 0-based internally (the API converts from 1-based). Settings map: <code>filterableAttributes</code> → <code>attributesForFaceting</code>.
+
+<h3>Null</h3>
+
+<p>No-op driver. All writes are discarded, searches return empty results. Useful for testing or disabling search in specific environments.</p>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

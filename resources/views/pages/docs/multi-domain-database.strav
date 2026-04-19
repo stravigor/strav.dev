@@ -1,0 +1,551 @@
+@layout('layouts/docs')
+
+@set('title', 'Multi-Domain Database Support - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Multi-Domain Database Support</h1>
+
+The <code>@strav/database</code> package provides comprehensive support for multi-domain applications using PostgreSQL schemas. You can organize your database into multiple domains (e.g., <code>public</code>, <code>tenant</code>, <code>factory</code>, <code>marketing</code>), with each domain having isolated schemas while sharing the same database instance.
+
+<h2>Domains</h2>
+
+<p>Domains allow you to organize your database schemas by business domain or tenant type:</p>
+
+<pre><code>database/schemas/
+├── public/          # System-wide schemas (users, organizations, etc.)
+├── tenant/          # Tenant-specific schemas (orders, products, etc.)
+├── factory/         # Factory-specific schemas (machines, production, etc.)
+└── marketing/       # Marketing-specific schemas (campaigns, analytics, etc.)
+
+database/migrations/
+├── public/          # Migrations for public domain
+├── tenant/          # Migrations for tenant domain
+├── factory/         # Migrations for factory domain
+└── marketing/       # Migrations for marketing domain
+</code></pre>
+
+<h3>Model Generation</h3>
+
+<p>By default, each domain gets a model prefix:</p>
+<ul>
+<li><code>public</code> → no prefix (<code>User</code>, <code>Organization</code>)</li>
+<li><code>tenant</code> → <code>Tenant</code> prefix (<code>TenantOrder</code>, <code>TenantProduct</code>)</li>
+<li><code>factory</code> → <code>Factory</code> prefix (<code>FactoryMachine</code>, <code>FactoryProduction</code>)</li>
+<li><code>marketing</code> → <code>Marketing</code> prefix (<code>MarketingCampaign</code>)</li>
+</ul>
+
+Prefixes can be customized in <code>config/generators.ts</code>:
+
+<pre><code class="language-typescript">export default {
+  modelNaming: {
+    public: '',           // No prefix for public models
+    tenant: 'Tenant',     // Custom prefix for tenant models
+    factory: 'Plant',     // Custom prefix for factory models
+    marketing: null,      // No prefix for marketing models
+  }
+}
+</code></pre>
+
+<h2>Overview</h2>
+
+The multi-tenant implementation uses PostgreSQL's <code>SET search_path</code> to transparently route queries to the correct tenant schema without requiring qualified table names. This approach provides:
+
+<ul>
+<li><strong>Complete data isolation</strong> between tenants</li>
+<li><strong>Transparent operation</strong> - existing queries work without modification</li>
+<li><strong>Shared connection pooling</strong> for efficiency</li>
+<li><strong>Schema-per-tenant</strong> architecture</li>
+<li><strong>AsyncLocalStorage</strong> for automatic context propagation</li>
+</ul>
+
+<h2>Configuration</h2>
+
+<p>Enable multi-tenant mode in your database configuration:</p>
+
+<pre><code class="language-typescript">// config/database.ts
+export default {
+  // Standard database configuration
+  host: env('DB_HOST', 'localhost'),
+  port: env('DB_PORT', 5432),
+  database: env('DB_DATABASE', 'myapp'),
+  username: env('DB_USER', 'postgres'),
+  password: env('DB_PASSWORD', ''),
+
+  // Multi-tenant configuration
+  multiTenant: {
+    enabled: true,
+  },
+}
+</code></pre>
+
+<h2>Basic Usage</h2>
+
+<h3>Setting Tenant Context</h3>
+
+Use <code>withSchema()</code> to execute database operations within a specific tenant's schema:
+
+<pre><code class="language-typescript">import { withSchema } from '@strav/database'
+import { User } from '../models/User'
+
+// All database operations within this block use company_123 schema
+await withSchema('company_123', async () => {
+  // ORM queries
+  const users = await User.all()
+  const admin = await User.findBy('role', 'admin')
+
+  // Query builder
+  const orders = await query(Order)
+    .where('status', 'pending')
+    .orderBy('created_at', 'DESC')
+    .all()
+
+  // Raw SQL
+  const stats = await sql<code>
+    SELECT COUNT(*) as total
+    FROM users
+    WHERE active = true
+  </code>
+})
+</code></pre>
+
+<h3>HTTP Integration</h3>
+
+<p>Create your own middleware in your app layer to extract and set tenant context:</p>
+
+<pre><code class="language-typescript">// app/middleware/tenant.ts
+import { withSchema, withoutSchema, SchemaManager } from '@strav/database'
+import type { Middleware } from '@strav/http'
+
+export const tenantMiddleware: Middleware = async (ctx, next) => {
+  // Extract tenant from subdomain
+  const host = ctx.request.headers.get('host')
+  const tenant = host?.split('.')[0] // tenant123.example.com -> tenant123
+
+  if (tenant &amp;&amp; tenant !== 'www') {
+    // Map to schema name
+    const schema = <code>tenant_${tenant}</code>
+
+    // Optionally validate tenant exists
+    const manager = container.resolve(SchemaManager)
+    if (await manager.tenantExists(schema)) {
+      return withSchema(schema, () => next())
+    }
+  }
+
+  // Continue without tenant context
+  return next()
+}
+
+// Alternative: Extract from header
+export const headerTenantMiddleware: Middleware = async (ctx, next) => {
+  const tenantId = ctx.request.headers.get('X-Tenant-ID')
+
+  if (tenantId) {
+    return withSchema(tenantId, () => next())
+  }
+
+  return next()
+}
+
+// For admin routes that need to bypass tenant isolation
+export const bypassTenant: Middleware = async (ctx, next) => {
+  return withoutSchema(() => next())
+}
+</code></pre>
+
+<p>Then use in your routes:</p>
+
+<pre><code class="language-typescript">// app/routes.ts
+import { router } from '@strav/http'
+import { tenantMiddleware, bypassTenant } from './middleware/tenant'
+
+// Apply tenant context to all routes
+router.use(tenantMiddleware)
+
+// Regular routes use tenant context automatically
+router.get('/users', async (ctx) => {
+  const users = await User.all() // Uses tenant schema
+  return ctx.json(users)
+})
+
+// Admin routes can bypass tenant isolation
+router.get('/admin/tenants', bypassTenant, async (ctx) => {
+  const manager = container.resolve(SchemaManager)
+  const tenants = await manager.listTenants() // Accesses all schemas
+  return ctx.json(tenants)
+})
+</code></pre>
+
+<h2>Tenant Management</h2>
+
+The <code>SchemaManager</code> class provides utilities for schema management:
+
+<h3>Creating Tenants</h3>
+
+<pre><code class="language-typescript">import { SchemaManager } from '@strav/database'
+
+const manager = container.resolve(SchemaManager)
+
+// Create a new tenant schema
+await manager.createSchema('company_123')
+
+// Clone structure from template schema
+await manager.cloneSchema('public', 'tenant_456')
+</code></pre>
+
+<h3>Running Migrations</h3>
+
+<pre><code class="language-typescript">// Migrate specific tenant
+await manager.migrateTenant('company_123')
+
+// Migrate all tenants
+await manager.migrateAllTenants()
+</code></pre>
+
+<h3>Managing Tenants</h3>
+
+<pre><code class="language-typescript">// Check if tenant exists
+const exists = await manager.tenantExists('company_123')
+
+// List all tenants
+const tenants = await manager.listTenants()
+// ['company_123', 'tenant_456', ...]
+
+// Get tenant statistics
+const stats = await manager.getTenantStats('company_123')
+console.log(stats)
+// { tables: 15, totalRows: 45678, sizeInBytes: 10485760 }
+
+// Delete tenant (CAUTION: irreversible!)
+await manager.deleteSchema('old_tenant')
+</code></pre>
+
+<h2>CLI Commands</h2>
+
+<p>The Strav CLI provides commands for working with domains:</p>
+
+<h3>Generate Migrations</h3>
+
+<pre><code class="language-bash"><h1>Generate migration for public domain</h1>
+bun strav generate:migration --scope=public --message="add user table"
+
+<h1>Generate migration for tenant domain</h1>
+bun strav generate:migration --scope=tenant --message="add orders table"
+
+<h1>Generate migration for custom domain</h1>
+bun strav generate:migration --scope=factory --message="add machine table"
+</code></pre>
+
+<h3>Run Migrations</h3>
+
+<pre><code class="language-bash"><h1>Run public migrations</h1>
+bun strav migrate --scope=public
+
+<h1>Run tenant migrations</h1>
+bun strav migrate --scope=tenant
+
+<h1>Run migrations for custom domain</h1>
+bun strav migrate --scope=factory
+</code></pre>
+
+<h3>Rollback Migrations</h3>
+
+<pre><code class="language-bash"><h1>Rollback public migrations</h1>
+bun strav rollback --scope=public
+
+<h1>Rollback last batch for tenant domain</h1>
+bun strav rollback --scope=tenant
+
+<h1>Rollback specific batch</h1>
+bun strav rollback --scope=tenant --batch=5
+</code></pre>
+
+<h3>Generate Models</h3>
+
+<pre><code class="language-bash"><h1>Generate models for all domains</h1>
+bun strav generate:models --scope=all
+
+<h1>Generate models for specific domain</h1>
+bun strav generate:models --scope=tenant
+bun strav generate:models --scope=factory
+</code></pre>
+
+<h2>Transactions</h2>
+
+<p>Transactions automatically preserve tenant context:</p>
+
+<pre><code class="language-typescript">await withSchema('company_123', async () => {
+  await transaction(async (trx) => {
+    // All queries within transaction use company_123 schema
+    const user = await User.create({ name: 'Alice' }, trx)
+    const profile = await Profile.create({ userId: user.id }, trx)
+
+    // Query builder with transaction
+    await query(Order, trx)
+      .where('user_id', user.id)
+      .update({ status: 'active' })
+  })
+})
+</code></pre>
+
+<h2>Background Jobs</h2>
+
+<p>Set tenant context in background jobs and workers:</p>
+
+<pre><code class="language-typescript">// In your job processor
+async function processJob(job: Job) {
+  const { tenantId, data } = job.payload
+
+  await withSchema(tenantId, async () => {
+    // All database operations use the tenant's schema
+    await processInvoices(data)
+    await sendNotifications()
+  })
+}
+</code></pre>
+
+<h2>Admin Operations</h2>
+
+<p>Bypass tenant isolation for administrative tasks:</p>
+
+<pre><code class="language-typescript">import { withoutSchema } from '@strav/database'
+
+// Access all schemas without tenant restriction
+await withoutSchema(async () => {
+  // Query across all tenant schemas
+  const report = await sql<code>
+    SELECT
+      schema_name,
+      (SELECT COUNT(*) FROM information_schema.tables
+       WHERE table_schema = schema_name) as table_count
+    FROM information_schema.schemata
+    WHERE schema_name LIKE 'tenant_%'
+  </code>
+})
+</code></pre>
+
+<h2>Direct Execution</h2>
+
+<p>Execute queries directly in a specific tenant:</p>
+
+<pre><code class="language-typescript">const manager = container.resolve(SchemaManager)
+
+// Execute query in specific tenant
+const users = await manager.executeTenant(
+  'company_123',
+  'SELECT * FROM users WHERE active = $1',
+  [true]
+)
+</code></pre>
+
+<h2>Best Practices</h2>
+
+<h3>1. Schema Naming</h3>
+
+<p>Use consistent schema naming conventions:</p>
+
+<pre><code class="language-typescript">// Good: predictable and safe
+const schema = <code>tenant_${tenantId.toLowerCase()}</code>
+
+// Validate schema names to prevent injection
+if (!/^[a-z0-9_]+$/.test(schema)) {
+  throw new Error('Invalid schema name')
+}
+</code></pre>
+
+<h3>2. Connection Pooling</h3>
+
+<p>Multi-tenant mode shares the connection pool efficiently. The search_path is set per-query, not per-connection, ensuring optimal resource usage.</p>
+
+<h3>3. Testing</h3>
+
+<p>Test with multiple tenants:</p>
+
+<pre><code class="language-typescript">// test/multi-tenant.test.ts
+import { withSchema, SchemaManager } from '@strav/database'
+
+beforeEach(async () => {
+  const manager = container.resolve(SchemaManager)
+  await manager.createSchema('test_schema_1')
+  await manager.createSchema('test_schema_2')
+})
+
+afterEach(async () => {
+  const manager = container.resolve(SchemaManager)
+  await manager.deleteSchema('test_schema_1')
+  await manager.deleteSchema('test_schema_2')
+})
+
+test('data isolation between tenants', async () => {
+  // Create user in tenant 1
+  await withSchema('test_schema_1', async () => {
+    await User.create({ email: 'user1@example.com' })
+  })
+
+  // Create user in tenant 2
+  await withSchema('test_schema_2', async () => {
+    await User.create({ email: 'user2@example.com' })
+  })
+
+  // Verify isolation
+  await withSchema('test_schema_1', async () => {
+    const users = await User.all()
+    expect(users).toHaveLength(1)
+    expect(users[0].email).toBe('user1@example.com')
+  })
+
+  await withSchema('test_schema_2', async () => {
+    const users = await User.all()
+    expect(users).toHaveLength(1)
+    expect(users[0].email).toBe('user2@example.com')
+  })
+})
+</code></pre>
+
+<h3>4. Migrations</h3>
+
+<p>Structure your migrations to work across all tenant schemas:</p>
+
+<pre><code class="language-typescript">// migrations/2024_01_01_create_users_table.ts
+export async function up(sql: SQL) {
+  await sql<code>
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  </code>
+}
+
+export async function down(sql: SQL) {
+  await sql<code>DROP TABLE IF EXISTS users</code>
+}
+</code></pre>
+
+<p>Then apply to all tenants:</p>
+
+<pre><code class="language-bash"><h1>Run migrations for all tenants</h1>
+bun run migrate:tenants
+</code></pre>
+
+<h3>5. Monitoring</h3>
+
+<p>Monitor tenant usage and performance:</p>
+
+<pre><code class="language-typescript">async function getTenantMetrics() {
+  const manager = container.resolve(SchemaManager)
+  const tenants = await manager.listTenants()
+
+  const metrics = await Promise.all(
+    tenants.map(async (tenant) => ({
+      tenant,
+      stats: await manager.getTenantStats(tenant),
+    }))
+  )
+
+  return metrics
+}
+</code></pre>
+
+<h2>Security Considerations</h2>
+
+<li><strong>Schema Isolation</strong>: Each tenant's data is completely isolated at the schema level</li>
+<li><strong>SQL Injection Protection</strong>: Always validate schema names before use</li>
+<li><strong>Connection Security</strong>: The search_path is set per-query, preventing cross-tenant data leaks</li>
+<li><strong>Audit Logging</strong>: Track tenant context in your audit logs</li>
+
+<pre><code class="language-typescript">// Audit log with tenant context
+function logDatabaseOperation(operation: string) {
+  const tenant = getCurrentTenant()
+  logger.info('Database operation', {
+    operation,
+    tenant: tenant?.schema ?? 'public',
+    timestamp: new Date(),
+  })
+}
+</code></pre>
+
+<h2>Troubleshooting</h2>
+
+<h3>Checking Current Tenant</h3>
+
+<pre><code class="language-typescript">import { getCurrentTenant, getCurrentSchema } from '@strav/database'
+
+// In your code
+const context = getCurrentTenant()
+console.log('Current schema:', getCurrentSchema())
+console.log('Has tenant context:', hasTenantContext())
+</code></pre>
+
+<h3>Debug Mode</h3>
+
+<p>Enable debug logging for tenant operations:</p>
+
+<pre><code class="language-typescript">// In development
+if (process.env.NODE_ENV === 'development') {
+  const original = getCurrentSchema
+  getCurrentSchema = () => {
+    const schema = original()
+    console.log(<code>[TENANT] Using schema: ${schema}</code>)
+    return schema
+  }
+}
+</code></pre>
+
+<h3>Common Issues</h3>
+
+<strong>Issue</strong>: Queries not using tenant schema
+<ul>
+<li>Check that multi-tenant mode is enabled in config</li>
+<li>Verify tenant context is set with <code>hasTenantContext()</code></li>
+<li>Ensure middleware is applied before route handlers</li>
+</ul>
+
+<strong>Issue</strong>: Cannot access public schema
+<ul>
+<li>Use <code>withoutSchema()</code> for operations that need public schema</li>
+<li>Use <code>bypassTenant</code> middleware for admin routes</li>
+</ul>
+
+<strong>Issue</strong>: Transaction rollback loses tenant context
+<ul>
+<li>Tenant context is preserved within transactions automatically</li>
+<li>Check that you're not manually manipulating search_path</li>
+</ul>
+
+<h2>API Reference</h2>
+
+<h3>Context Functions</h3>
+
+<ul>
+<li><code>withSchema(schema, callback)</code> - Execute callback within tenant context</li>
+<li><code>withoutSchema(callback)</code> - Execute callback without tenant isolation</li>
+<li><code>getCurrentTenant()</code> - Get current tenant context</li>
+<li><code>getCurrentSchema()</code> - Get current schema name</li>
+<li><code>hasTenantContext()</code> - Check if in tenant context</li>
+</ul>
+
+<h3>SchemaManager Methods</h3>
+
+<ul>
+<li><code>createSchema(schema)</code> - Create new tenant schema</li>
+<li><code>deleteSchema(schema)</code> - Delete tenant schema (irreversible)</li>
+<li><code>tenantExists(schema)</code> - Check if tenant exists</li>
+<li><code>listTenants()</code> - List all tenant schemas</li>
+<li><code>migrateTenant(schema)</code> - Run migrations for tenant</li>
+<li><code>migrateAllTenants()</code> - Run migrations for all tenants</li>
+<li><code>cloneSchema(source, target)</code> - Copy schema structure</li>
+<li><code>getTenantStats(schema)</code> - Get tenant statistics</li>
+<li><code>executeTenant(schema, sql, params)</code> - Execute query in tenant</li>
+</ul>
+
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

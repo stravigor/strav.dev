@@ -1,0 +1,573 @@
+@layout('layouts/docs')
+
+@set('title', 'RAG - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>RAG</h1>
+
+Vector retrieval framework for retrieval-augmented generation. Built-in drivers for <strong>pgvector</strong> (PostgreSQL), <strong>in-memory</strong> (testing), and <strong>null</strong> (disabled). Custom drivers can be added via <code>extend()</code>.
+
+The <code>retrievable()</code> mixin integrates vector search directly into your ORM models — chunk, embed, and store on save; remove on delete; semantic search with a single static method.
+
+Uses <code>@strav/brain</code> for embedding generation and <code>@strav/database</code> for pgvector storage.
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/rag
+bun strav install rag
+</code></pre>
+
+The <code>install</code> command copies <code>config/rag.ts</code> into your project. The file is yours to edit.
+
+<h2>Setup</h2>
+
+<h3>1. Register RagManager</h3>
+
+<h4>Using a service provider (recommended)</h4>
+
+<pre><code class="language-typescript">import { RagProvider } from '@strav/rag'
+
+app.use(new RagProvider())
+</code></pre>
+
+The <code>RagProvider</code> registers <code>RagManager</code> as a singleton. It depends on the <code>config</code> provider. Make sure <code>BrainProvider</code> and <code>DatabaseProvider</code> are also registered (for embeddings and pgvector storage respectively).
+
+<h4>Manual setup</h4>
+
+<pre><code class="language-typescript">import RagManager from '@strav/rag'
+
+app.singleton(RagManager)
+app.resolve(RagManager)
+</code></pre>
+
+<h3>2. Configure</h3>
+
+Edit <code>config/rag.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  default: env('RAG_DRIVER', 'pgvector'),
+  prefix: env('RAG_PREFIX', ''),
+
+  embedding: {
+    provider: env('RAG_EMBEDDING_PROVIDER', 'openai'),
+    model: env('RAG_EMBEDDING_MODEL', 'text-embedding-3-small'),
+    dimension: 1536,
+  },
+
+  chunking: {
+    strategy: 'recursive',
+    chunkSize: 512,
+    overlap: 64,
+  },
+
+  stores: {
+    pgvector: {
+      driver: 'pgvector',
+    },
+
+    memory: {
+      driver: 'memory',
+    },
+
+    null: {
+      driver: 'null',
+    },
+  },
+}
+</code></pre>
+
+<h3>3. Set environment variables</h3>
+
+<pre><code class="language-env">RAG_DRIVER=pgvector
+RAG_EMBEDDING_PROVIDER=openai
+RAG_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_API_KEY=sk-...
+</code></pre>
+
+The embedding provider must be configured in <code>config/ai.ts</code> (via <code>@strav/brain</code>). The RAG package calls <code>brain.embed()</code> under the hood.
+
+<h3>4. Enable pgvector (if using PostgreSQL driver)</h3>
+
+<p>The pgvector extension must be available in your PostgreSQL installation. The driver creates the extension and table automatically on first use.</p>
+
+<pre><code class="language-sql">-- If not already enabled at the database level:
+CREATE EXTENSION IF NOT EXISTS vector;
+</code></pre>
+
+<h2>Retrievable mixin</h2>
+
+Add vector search to any model with the <code>retrievable()</code> mixin:
+
+<pre><code class="language-typescript">import { BaseModel } from '@strav/database'
+import { retrievable } from '@strav/rag'
+
+class Article extends retrievable(BaseModel) {
+  declare id: number
+  declare title: string
+  declare body: string
+  declare status: string
+
+  static tableName = 'articles'
+
+  static retrievableAs() {
+    return 'articles'
+  }
+
+  toRetrievableContent() {
+    return <code>${this.title}\n\n${this.body}</code>
+  }
+
+  toRetrievableMetadata() {
+    return { source: 'articles', authority: 0.8 }
+  }
+
+  shouldBeRetrievable() {
+    return this.status === 'published'
+  }
+}
+</code></pre>
+
+Works with <code>compose()</code> for multiple mixins:
+
+<pre><code class="language-typescript">import { compose } from '@strav/kernel'
+import { searchable } from '@strav/search'
+
+class Article extends compose(BaseModel, searchable, retrievable) {
+  // Full-text search AND vector retrieval on the same model
+}
+</code></pre>
+
+<h3>retrievableAs</h3>
+
+Returns the collection name. Defaults to the model's <code>tableName</code>. Override to customize:
+
+<pre><code class="language-typescript">static retrievableAs() {
+  return 'knowledge_base'
+}
+</code></pre>
+
+<h3>toRetrievableContent</h3>
+
+Returns the text content to embed. This is the text that gets chunked and turned into vectors. By default, concatenates all own string properties that don't start with <code>_</code>. Override to control what gets embedded:
+
+<pre><code class="language-typescript">toRetrievableContent() {
+  return <code>${this.title}\n\n${this.body}</code>
+}
+</code></pre>
+
+<h3>toRetrievableMetadata</h3>
+
+Returns extra metadata stored alongside each vector. This metadata can be used for filtering during retrieval, and for reranking (e.g., <code>authority</code> and <code>createdAt</code>):
+
+<pre><code class="language-typescript">toRetrievableMetadata() {
+  return {
+    source: 'regulations',
+    authority: 0.95,
+    domain: 'legal',
+    createdAt: this.createdAt.toISOString(),
+  }
+}
+</code></pre>
+
+<h3>shouldBeRetrievable</h3>
+
+Controls whether a specific instance should be vectorized. Defaults to <code>true</code>. Override to conditionally exclude records:
+
+<pre><code class="language-typescript">shouldBeRetrievable() {
+  return this.status === 'published'
+}
+</code></pre>
+
+<h2>Chunking</h2>
+
+<p>Content is split into chunks before embedding. Each chunk becomes a separate vector in the store. The RAG package ships two chunking strategies:</p>
+
+<h3>Recursive (default)</h3>
+
+Splits by separators (<code>\n\n</code>, <code>\n</code>, <code>. </code>, <code> </code>) recursively until each piece fits within <code>chunkSize</code>. This preserves paragraph and sentence boundaries when possible. Falls back to character splitting for very long unbroken text.
+
+<h3>Fixed-size</h3>
+
+<p>Splits by raw character count with overlap. Simpler and more predictable, but doesn't respect content structure.</p>
+
+Configure in <code>config/rag.ts</code>:
+
+<pre><code class="language-typescript">chunking: {
+  strategy: 'recursive',  // 'recursive' or 'fixed'
+  chunkSize: 512,          // max characters per chunk
+  overlap: 64,             // characters of overlap between chunks
+}
+</code></pre>
+
+<h3>Custom chunker</h3>
+
+Implement the <code>Chunker</code> interface:
+
+<pre><code class="language-typescript">import type { Chunker, Chunk } from '@strav/rag'
+
+class SentenceChunker implements Chunker {
+  chunk(content: string): Chunk[] {
+    const sentences = content.match(/[^.!?]+[.!?]+/g) ?? [content]
+    let offset = 0
+    return sentences.map((s, i) => {
+      const chunk = {
+        content: s.trim(),
+        index: i,
+        startOffset: offset,
+        endOffset: offset + s.length,
+      }
+      offset += s.length
+      return chunk
+    })
+  }
+}
+</code></pre>
+
+<h2>Vectorizing</h2>
+
+<h3>Instance methods</h3>
+
+<pre><code class="language-typescript">const article = await Article.find(1)
+
+// Chunk, embed, and store in the vector store
+await article.vectorize()
+
+// Remove all chunks for this instance from the vector store
+await article.vectorRemove()
+</code></pre>
+
+<code>vectorize()</code> first removes any existing chunks for the model instance (via <code>deleteBySource</code>), then creates fresh chunks. This makes it safe to call on updates — it's a full re-vectorization.
+
+<h3>Bulk import</h3>
+
+<p>Import all records from the database into the vector store:</p>
+
+<pre><code class="language-typescript">const count = await Article.importAll()     // default batch size: 100
+const count = await Article.importAll(500)  // custom batch size
+</code></pre>
+
+This fetches rows from the database in batches, calls <code>vectorize()</code> on each, and returns the total number of records processed.
+
+<h3>Collection management</h3>
+
+<pre><code class="language-typescript">// Create the vector collection (with configured dimension)
+await Article.createVectorCollection()
+
+// Flush all vectors (remove documents, keep collection)
+await Article.flushVectors()
+</code></pre>
+
+<h2>Retrieving</h2>
+
+<h3>From a model</h3>
+
+<pre><code class="language-typescript">const result = await Article.retrieve('What is dependency injection?')
+</code></pre>
+
+<p>The result object:</p>
+
+<pre><code class="language-typescript">{
+  matches: [
+    {
+      id: '42_0',
+      content: 'Dependency injection is a design pattern...',
+      score: 0.92,
+      similarity: 0.92,
+      metadata: { source: 'articles', authority: 0.8, chunkIndex: 0 },
+    },
+    // ...
+  ],
+  query: 'What is dependency injection?',
+  processingTimeMs: 45,
+}
+</code></pre>
+
+<h3>Retrieve options</h3>
+
+<pre><code class="language-typescript">const result = await Article.retrieve('PSD3 compliance requirements', {
+  topK: 10,
+  threshold: 0.7,
+  filter: { domain: 'legal' },
+  rerank: {
+    similarityWeight: 0.6,
+    authorityWeight: 0.2,
+    recencyWeight: 0.2,
+  },
+})
+</code></pre>
+
+<h3>Reranking</h3>
+
+When <code>rerank</code> options are provided, the pipeline computes a composite score:
+
+<pre><code>finalScore = similarity × similarityWeight
+           + authority  × authorityWeight
+           + recency    × recencyWeight
+</code></pre>
+
+<ul>
+<li><strong>similarity</strong> — cosine similarity from the vector store (0–1)</li>
+<li><strong>authority</strong> — <code>metadata.authority</code> value (0–1). Set via <code>toRetrievableMetadata()</code></li>
+<li><strong>recency</strong> — time decay: <code>1 / (1 + ageDays/30)</code>. Uses <code>metadata.createdAt</code></li>
+</ul>
+
+<p>Results are re-sorted by composite score. This is designed for the Knowledge Currency Validator, which needs to rank grounding sources by both relevance and freshness.</p>
+
+<h2>Auto-vectorizing</h2>
+
+<p>Register event listeners so models are automatically vectorized on create/update and removed on delete:</p>
+
+<pre><code class="language-typescript">Article.bootRetrieval('article')
+</code></pre>
+
+This hooks into events emitted by generated services (<code>article.created</code>, <code>article.updated</code>, <code>article.synced</code>, <code>article.deleted</code>). Call <code>bootRetrieval()</code> once during app bootstrap.
+
+<p>Vectorization failures are silently caught — they should not break the event pipeline.</p>
+
+<h2>rag helper</h2>
+
+The <code>rag</code> helper provides a standalone API for working with vector stores directly, without going through a model:
+
+<pre><code class="language-typescript">import { rag } from '@strav/rag'
+</code></pre>
+
+<h3>Ingesting content</h3>
+
+<p>Chunk, embed, and store content in one call:</p>
+
+<pre><code class="language-typescript">const ids = await rag.ingest('knowledge_base', longDocument, {
+  metadata: { source: 'wiki', authority: 0.9, createdAt: new Date().toISOString() },
+  sourceId: 'doc-42',
+})
+// Returns array of generated chunk IDs
+</code></pre>
+
+<p>Per-call chunking overrides:</p>
+
+<pre><code class="language-typescript">const ids = await rag.ingest('regulations', document, {
+  chunkSize: 256,
+  overlap: 32,
+  strategy: 'fixed',
+  metadata: { domain: 'regulatory', authority: 0.95 },
+})
+</code></pre>
+
+<h3>Retrieving content</h3>
+
+<pre><code class="language-typescript">const result = await rag.retrieve('What changed in PSD3?', {
+  collection: 'regulations',
+  topK: 5,
+  threshold: 0.7,
+  filter: { domain: 'regulatory' },
+  rerank: {
+    similarityWeight: 0.5,
+    authorityWeight: 0.3,
+    recencyWeight: 0.2,
+  },
+})
+</code></pre>
+
+<h3>Removing content</h3>
+
+<pre><code class="language-typescript">// Remove specific chunks by ID
+await rag.delete('knowledge_base', ['id-1', 'id-2'])
+
+// Remove all chunks from a source (e.g., all chunks from document 42)
+await rag.deleteBySource('knowledge_base', 'doc-42')
+
+// Clear an entire collection
+await rag.flush('knowledge_base')
+</code></pre>
+
+<h3>Using the store directly</h3>
+
+<pre><code class="language-typescript">const store = rag.store()          // default store
+const store = rag.store('memory')  // named store
+
+// Low-level operations
+await store.createCollection('my_index', 1536)
+await store.upsert('my_index', documents)
+const result = await store.query('my_index', queryVector, { topK: 5 })
+await store.deleteCollection('my_index')
+</code></pre>
+
+<h2>Collection prefix</h2>
+
+The <code>prefix</code> config option prepends a string to all collection names. Useful for multi-environment setups:
+
+<pre><code class="language-env">RAG_PREFIX=dev_
+</code></pre>
+
+With this config, <code>Article.retrievableAs()</code> returning <code>'articles'</code> resolves to the collection <code>dev_articles</code>.
+
+<h2>Multiple stores</h2>
+
+<p>You can configure and use multiple stores simultaneously:</p>
+
+<pre><code class="language-typescript">// Use a named store
+const memStore = RagManager.store('memory')
+
+// Or via the helper
+rag.store('pgvector')
+</code></pre>
+
+<h2>Custom driver</h2>
+
+Register a custom vector store driver with <code>extend()</code>:
+
+<pre><code class="language-typescript">import { rag } from '@strav/rag'
+import type { VectorStore } from '@strav/rag'
+
+rag.extend('pinecone', (config) => {
+  return new PineconeDriver(config)
+})
+</code></pre>
+
+The factory receives the driver's config object from <code>config/rag.ts</code>. The returned object must implement the <code>VectorStore</code> interface:
+
+<pre><code class="language-typescript">interface VectorStore {
+  readonly name: string
+  createCollection(collection: string, dimension: number): Promise<void>
+  deleteCollection(collection: string): Promise<void>
+  upsert(collection: string, documents: VectorDocument[]): Promise<void>
+  delete(collection: string, ids: (string | number)[]): Promise<void>
+  deleteBySource(collection: string, sourceId: string | number): Promise<void>
+  flush(collection: string): Promise<void>
+  query(collection: string, vector: number[], options?: QueryOptions): Promise<QueryResult>
+}
+</code></pre>
+
+<p>Then set it as the driver in your config:</p>
+
+<pre><code class="language-typescript">// config/rag.ts
+export default {
+  default: 'pinecone',
+  stores: {
+    pinecone: {
+      driver: 'pinecone',
+      apiKey: env('PINECONE_API_KEY', ''),
+      environment: env('PINECONE_ENV', 'us-east-1-aws'),
+    },
+  },
+}
+</code></pre>
+
+<h2>CLI commands</h2>
+
+<p>The rag package provides two CLI commands (auto-discovered by the framework):</p>
+
+<h3>rag:ingest</h3>
+
+<p>Vectorize all records for a model into the vector store:</p>
+
+<pre><code class="language-bash">bun strav rag:ingest app/models/article.ts
+bun strav rag:ingest app/models/article.ts --chunk 50
+</code></pre>
+
+<strong>Options:</strong>
+<ul>
+<li><code>--chunk <size></code> — Records per batch (default: <code>100</code>).</li>
+</ul>
+
+<h3>rag:flush</h3>
+
+<p>Remove all vectors from a model's collection:</p>
+
+<pre><code class="language-bash">bun strav rag:flush app/models/article.ts
+</code></pre>
+
+<h2>Testing</h2>
+
+Use the <code>NullDriver</code> to disable RAG in tests:
+
+<pre><code class="language-env"><h1>.env.test</h1>
+RAG_DRIVER=null
+</code></pre>
+
+Or use the <code>MemoryDriver</code> for in-memory vector search (useful for integration tests that need actual similarity results):
+
+<pre><code class="language-env">RAG_DRIVER=memory
+</code></pre>
+
+<p>Swap stores at runtime:</p>
+
+<pre><code class="language-typescript">import RagManager, { MemoryDriver } from '@strav/rag'
+
+RagManager.useStore(new MemoryDriver())
+</code></pre>
+
+Call <code>RagManager.reset()</code> in test teardown to clear cached stores.
+
+<h2>Drivers</h2>
+
+<h3>pgvector</h3>
+
+The default driver. Uses PostgreSQL with the pgvector extension. Stores all collections in a single <code>_strav_vectors</code> table with a <code>collection</code> discriminator column.
+
+<strong>Table schema</strong> (created automatically on first <code>createCollection()</code> call):
+
+<pre><code class="language-sql">CREATE TABLE _strav_vectors (
+  id BIGSERIAL PRIMARY KEY,
+  collection VARCHAR(255) NOT NULL,
+  source_id VARCHAR(255),
+  content TEXT NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  embedding vector(1536),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+</code></pre>
+
+Similarity is computed via the <code><=></code> operator (cosine distance). Per-collection HNSW indexes are created for fast approximate nearest neighbor search.
+
+Requires: PostgreSQL with <a href="https://github.com/pgvector/pgvector">pgvector</a> extension installed.
+
+<h3>Memory</h3>
+
+In-memory vector store that computes cosine similarity in pure JavaScript. Documents are stored in <code>Map<string, VectorDocument[]></code>. Ideal for testing — no external dependencies required.
+
+The <code>MemoryDriver</code> exposes a <code>getCollection()</code> method for test assertions:
+
+<pre><code class="language-typescript">const driver = new MemoryDriver()
+await driver.upsert('test', documents)
+const stored = driver.getCollection('test')
+expect(stored.length).toBe(3)
+</code></pre>
+
+<h3>Null</h3>
+
+<p>No-op driver. All writes are discarded, queries return empty results. Useful for disabling RAG in specific environments without code changes.</p>
+
+<h2>Architecture</h2>
+
+The package follows the same Manager + Driver + Mixin + Helper architecture as <code>@strav/search</code>:
+
+<pre><code>RagProvider          →  registers RagManager singleton
+RagManager           →  config loading, driver resolution, collection naming
+VectorStore          →  interface implemented by drivers
+rag helper           →  convenience API (ingest, retrieve, delete, flush)
+retrievable() mixin  →  ORM integration (vectorize, vectorRemove, importAll)
+</code></pre>
+
+<h3>1:N chunk handling</h3>
+
+Unlike <code>searchable()</code> (1 model = 1 search document), <code>retrievable()</code> produces 1 model = N chunks = N vectors. The <code>deleteBySource()</code> method on <code>VectorStore</code> handles cleanup — it removes all chunks sharing the same <code>sourceId</code> (the model's primary key).
+
+When <code>vectorize()</code> is called:
+<li>Delete all existing chunks for this model ID</li>
+<li>Chunk the content using the configured strategy</li>
+<li>Batch embed all chunks via <code>brain.embed()</code></li>
+<li>Upsert all chunk vectors with <code>sourceId</code> set to the model's primary key</li>
+
+<p>This makes re-vectorization on update idempotent and clean.</p>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

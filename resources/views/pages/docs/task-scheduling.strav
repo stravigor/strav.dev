@@ -1,0 +1,237 @@
+@layout('layouts/docs')
+
+@set('title', 'Scheduler - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Scheduler</h1>
+
+<p>Cron-like periodic task execution — cleanup jobs, report generation, cache pruning, digest emails. Tasks are defined in code with a fluent API and run by a long-lived scheduler process that checks every minute.</p>
+
+<h2>Setup</h2>
+
+Define your tasks in <code>app/schedules.ts</code>:
+
+<pre><code class="language-typescript">import { Scheduler } from '@strav/queue'
+
+Scheduler.task('cleanup:sessions', async () => {
+  await db.sql<code>DELETE FROM "_stravigor_sessions" WHERE "expires_at" < NOW()</code>
+}).hourly()
+
+Scheduler.task('reports:daily', async () => {
+  const report = await generateDailyReport()
+  await saveReport(report)
+}).dailyAt('02:00')
+  .withoutOverlapping()
+</code></pre>
+
+No database tables, no DI container — <code>Scheduler</code> is a static registry like <code>Emitter</code>.
+
+<h2>Defining tasks</h2>
+
+<p>Register a task with a name and handler. Chain a frequency method to set its schedule:</p>
+
+<pre><code class="language-typescript">import { Scheduler } from '@strav/queue'
+
+Scheduler.task('task-name', async () => {
+  // your logic
+}).everyFiveMinutes()
+</code></pre>
+
+<p>The handler can be sync or async. The name is used for logging and overlap tracking.</p>
+
+<h2>Frequency methods</h2>
+
+<h3>Minute-based</h3>
+
+<pre><code class="language-typescript">.everyMinute()            // <em> </em> <em> </em> *
+.everyTwoMinutes()        // <em>/2 </em> <em> </em> *
+.everyFiveMinutes()       // <em>/5 </em> <em> </em> *
+.everyTenMinutes()        // <em>/10 </em> <em> </em> *
+.everyFifteenMinutes()    // <em>/15 </em> <em> </em> *
+.everyThirtyMinutes()     // <em>/30 </em> <em> </em> *
+</code></pre>
+
+<h3>Hourly</h3>
+
+<pre><code class="language-typescript">.hourly()                 // at minute 0
+.hourlyAt(45)             // at minute 45
+</code></pre>
+
+<h3>Daily</h3>
+
+<pre><code class="language-typescript">.daily()                  // midnight
+.dailyAt('02:30')         // at 02:30 UTC
+.twiceDaily(8, 20)        // at 08:00 and 20:00
+</code></pre>
+
+<h3>Weekly</h3>
+
+<pre><code class="language-typescript">.weekly()                 // Sunday at midnight
+.weeklyOn('monday', '08:00')
+.weeklyOn(5)              // Friday at midnight (0=Sun, 1=Mon, ..., 6=Sat)
+</code></pre>
+
+Day names are case-insensitive and accept full names or abbreviations: <code>monday</code>/<code>mon</code>, <code>tuesday</code>/<code>tue</code>, etc.
+
+<h3>Monthly</h3>
+
+<pre><code class="language-typescript">.monthly()                // 1st at midnight
+.monthlyOn(15, '09:30')   // 15th at 09:30
+</code></pre>
+
+<h3>Raw cron</h3>
+
+<p>For complex schedules, use a standard 5-field cron expression:</p>
+
+<pre><code class="language-typescript">.cron('<em>/10 8-17 </em> * 1-5')   // every 10 min, 8am–5pm, weekdays
+.cron('0 0 1,15 <em> </em>')        // 1st and 15th at midnight
+</code></pre>
+
+Supported syntax: <code><em></code>, exact (<code>5</code>), range (<code>1-5</code>), list (<code>1,3,5</code>), step (<code></em>/10</code>), range+step (<code>1-30/5</code>).
+
+<h3>Sporadic (human-like)</h3>
+
+<p>Run a task at random intervals within a range, simulating non-periodic, human-like behavior — useful for web scraping, polling external APIs, or any task where predictable timing is undesirable:</p>
+
+<pre><code class="language-typescript">import { Scheduler, TimeUnit } from '@strav/queue'
+
+// Run every 5–30 minutes at random
+Scheduler.task('scrape:prices', async () => {
+  await scrapePrices()
+}).sporadically(5, 30, TimeUnit.Minutes)
+
+// Run every 1–4 hours at random, prevent overlap
+Scheduler.task('poll:feed', async () => {
+  await pollExternalFeed()
+}).sporadically(1, 4, TimeUnit.Hours)
+  .withoutOverlapping()
+</code></pre>
+
+Available units: <code>TimeUnit.Minutes</code>, <code>TimeUnit.Hours</code>, <code>TimeUnit.Days</code>.
+
+Each time the task fires, the next run is scheduled at a new random delay within the range. The <code>nextRunAt</code> getter exposes the next scheduled time for debugging:
+
+<pre><code class="language-typescript">const schedule = Scheduler.task('poll', handler).sporadically(10, 60, TimeUnit.Minutes)
+console.log(schedule.nextRunAt)  // Date
+</code></pre>
+
+<h2>Options</h2>
+
+<h3>Overlap prevention</h3>
+
+<p>Prevent a task from running if the previous run hasn't finished yet (in-memory, single-process):</p>
+
+<pre><code class="language-typescript">Scheduler.task('heavy-report', async () => {
+  await generateLargeReport()  // takes 10+ minutes
+}).everyFiveMinutes()
+  .withoutOverlapping()
+</code></pre>
+
+<p>If the task is still running at the next tick, it is skipped.</p>
+
+<h2>Running the scheduler</h2>
+
+<h3>CLI</h3>
+
+<pre><code class="language-bash">bun strav schedule
+</code></pre>
+
+<p>Press Ctrl+C to stop gracefully — the scheduler finishes active tasks before exiting.</p>
+
+<h3>How it works</h3>
+
+<li>The runner sleeps until the next minute boundary (<code>XX:XX:00</code>).</li>
+<li>Checks which tasks are due using <code>Scheduler.due(now)</code>.</li>
+<li>Executes all due tasks concurrently via <code>Promise.allSettled</code> — one failing task doesn't block others.</li>
+<li>Repeats until stopped.</li>
+
+<p>Errors are logged to stderr but never crash the scheduler process.</p>
+
+<h2>Cron parser</h2>
+
+<p>The built-in parser is also available standalone:</p>
+
+<pre><code class="language-typescript">import { parseCron, cronMatches, nextCronDate } from '@strav/queue'
+
+const cron = parseCron('0 2 <em> </em> 1')           // Mondays at 2am
+cronMatches(cron, new Date())                  // true/false
+const next = nextCronDate(cron, new Date())    // next matching Date (UTC)
+</code></pre>
+
+<p>Standard cron rule: when both day-of-month and day-of-week are restricted, either match satisfies (OR logic).</p>
+
+<h2>Full example</h2>
+
+<pre><code class="language-typescript">// app/schedules.ts
+import { Scheduler, TimeUnit } from '@strav/queue'
+import { cache } from '@strav/kernel'
+import { Queue } from '@strav/queue'
+
+// Cleanup expired sessions every hour
+Scheduler.task('cleanup:sessions', async () => {
+  const result = await db.sql<code>
+    DELETE FROM "_stravigor_sessions" WHERE "expires_at" < NOW()
+  </code>
+  console.log(<code>Cleaned ${result.count} expired sessions</code>)
+}).hourly()
+
+// Generate reports at 2am, prevent overlap
+Scheduler.task('reports:daily', async () => {
+  const report = await generateDailyReport()
+  await saveReport(report)
+}).dailyAt('02:00')
+  .withoutOverlapping()
+
+// Prune cache every 6 hours
+Scheduler.task('cache:prune', async () => {
+  await cache.flush()
+}).cron('0 <em>/6 </em> <em> </em>')
+
+// Send weekly digest on Monday mornings
+Scheduler.task('emails:digest', async () => {
+  const users = await User.where('digest_enabled', true).all()
+  for (const user of users) {
+    await Queue.push('send-digest', { userId: user.id })
+  }
+}).weeklyOn('monday', '08:00')
+
+// Scrape competitor prices at random intervals (human-like)
+Scheduler.task('scrape:competitors', async () => {
+  await scrapeCompetitorPrices()
+}).sporadically(10, 45, TimeUnit.Minutes)
+  .withoutOverlapping()
+</code></pre>
+
+<h2>Testing</h2>
+
+Use <code>Scheduler.reset()</code> in your test teardown:
+
+<pre><code class="language-typescript">import { afterEach } from 'bun:test'
+import { Scheduler } from '@strav/queue'
+
+afterEach(() => {
+  Scheduler.reset()
+})
+</code></pre>
+
+<p>Test task scheduling without running the scheduler loop:</p>
+
+<pre><code class="language-typescript">import { Scheduler } from '@strav/queue'
+
+Scheduler.task('test', handler).dailyAt('02:00')
+
+// Check if due at a specific time
+const due = Scheduler.due(new Date('2024-06-15T02:00:00Z'))
+expect(due).toHaveLength(1)
+expect(due[0].name).toBe('test')
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

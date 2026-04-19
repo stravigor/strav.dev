@@ -1,0 +1,576 @@
+@layout('layouts/docs')
+
+@set('title', 'Devtools - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Devtools</h1>
+
+Application debugging and performance monitoring. Combines a <strong>request inspector</strong> (individual entry capture) with an <strong>APM dashboard</strong> (pre-aggregated metrics) — think Laravel Telescope + Laravel Pulse in one package.
+
+<p>Two modes:</p>
+
+<ul>
+<li><strong>Inspector</strong> — captures individual requests, queries, exceptions, logs, and jobs. Every entry is stored in full and grouped into batches so you can trace a single request across all its queries, logs, and side effects.</li>
+<li><strong>Metrics</strong> — records pre-aggregated performance data (slow requests, slow queries) in time buckets for at-a-glance monitoring without scanning raw entries.</li>
+</ul>
+
+Both modes feed into a built-in SPA dashboard served at <code>/_devtools</code>.
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/devtools
+bun strav install devtools
+</code></pre>
+
+The <code>install</code> command copies files into your project:
+
+<ul>
+<li><code>config/devtools.ts</code> — toggle collectors, recorders, thresholds.</li>
+<li><code>database/schemas/devtools_entries.ts</code> — the entries table schema.</li>
+<li><code>database/schemas/devtools_aggregates.ts</code> — the aggregates table schema.</li>
+</ul>
+
+<h2>Setup</h2>
+
+<h3>Register the provider</h3>
+
+<pre><code class="language-typescript">import { DevtoolsProvider } from '@strav/devtools'
+
+app.use(new DevtoolsProvider())
+</code></pre>
+
+<p>That's it. The provider automatically:</p>
+
+<ul>
+<li>Registers <code>DevtoolsManager</code> as a singleton</li>
+<li>Creates the storage tables</li>
+<li>Adds the request-tracking middleware to the router</li>
+<li>Mounts the dashboard at <code>/_devtools</code></li>
+<li>Tears down collectors on shutdown</li>
+</ul>
+
+It depends on the <code>database</code> provider.
+
+<p>Options:</p>
+
+<p>| Option | Default | Description |</p>
+<p>|--------|---------|-------------|</p>
+| <code>ensureTables</code> | <code>true</code> | Auto-create the entries and aggregates tables |
+| <code>middleware</code> | <code>true</code> | Auto-register the request-tracking middleware on the router |
+| <code>dashboard</code> | <code>true</code> | Auto-register the dashboard routes at <code>/_devtools</code> |
+| <code>guard</code> | — | Custom auth guard for the dashboard (see <a href="#dashboard-auth">Dashboard auth</a>) |
+
+<p>To add a custom dashboard auth guard:</p>
+
+<pre><code class="language-typescript">app.use(new DevtoolsProvider({
+  guard: (ctx) => ctx.get('user')?.isAdmin === true,
+}))
+</code></pre>
+
+<p>To disable auto-registration of middleware or dashboard (for manual control):</p>
+
+<pre><code class="language-typescript">app.use(new DevtoolsProvider({ middleware: false, dashboard: false }))
+</code></pre>
+
+<h3>Manual setup</h3>
+
+<p>If you prefer full control over middleware and route placement:</p>
+
+<pre><code class="language-typescript">import DevtoolsManager from '@strav/devtools'
+import { devtools } from '@strav/devtools'
+import { registerDashboard } from '@strav/devtools/dashboard/routes'
+
+// Register and resolve the manager
+app.singleton(DevtoolsManager)
+app.resolve(DevtoolsManager)
+
+// Create tables
+await devtools.ensureTables()
+// Or via CLI: bun strav devtools:setup
+
+// Add request-tracking middleware
+router.use(devtools.middleware())
+
+// Mount the dashboard
+registerDashboard(router)
+</code></pre>
+
+<p>The middleware captures request/response data, sets a batch ID on the context, and triggers query collection via a SQL proxy. All other collectors (exceptions, logs, jobs) activate automatically through Emitter events.</p>
+
+<h3>Configure</h3>
+
+Edit <code>config/devtools.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  enabled: env('DEVTOOLS_ENABLED', 'true').bool(),
+
+  routes: {
+    aliases: {
+      dashboard: 'devtools.dashboard',  // Dashboard routes
+      api: 'devtools.api'              // API routes
+    },
+    subdomain: undefined               // Optional subdomain
+  },
+
+  storage: {
+    pruneAfter: 24, // hours
+  },
+
+  collectors: {
+    request: { enabled: true, sizeLimit: 64 },
+    query: { enabled: true, slow: 100 },
+    exception: { enabled: true },
+    log: { enabled: true, level: 'debug' },
+    job: { enabled: true },
+  },
+
+  recorders: {
+    slowRequests: { enabled: true, threshold: 1000, sampleRate: 1.0 },
+    slowQueries: { enabled: true, threshold: 1000, sampleRate: 1.0 },
+  },
+}
+</code></pre>
+
+Set <code>DEVTOOLS_ENABLED=false</code> in production to disable all collection with zero overhead.
+
+<h3>Configuration reference</h3>
+
+<p>| Key | Default | Description |</p>
+<p>|-----|---------|-------------|</p>
+| <code>enabled</code> | <code>true</code> | Whether to enable all devtools collection |
+| <code>routes.aliases.dashboard</code> | <code>'devtools.dashboard'</code> | Route alias prefix for dashboard routes |
+| <code>routes.aliases.api</code> | <code>'devtools.api'</code> | Route alias prefix for API routes |
+| <code>routes.subdomain</code> | <code>undefined</code> | Optional subdomain for devtools routes |
+| <code>storage.pruneAfter</code> | <code>24</code> | Hours after which to delete old entries |
+| <code>collectors.*</code> | varies | Collector-specific configuration |
+| <code>recorders.*</code> | varies | Recorder-specific configuration |
+
+<h2>Collectors</h2>
+
+<p>Collectors capture individual events and store them as entries.</p>
+
+<h3>Request</h3>
+
+Middleware-based. Captures method, path, status, duration, memory usage, request/response headers, and IP. Sensitive headers (<code>authorization</code>, <code>cookie</code>) are automatically redacted.
+
+Tags: <code>status:<code></code>, <code>slow</code> (if >1000ms), <code>user:<id></code> (if authenticated).
+
+<pre><code class="language-typescript">collectors: {
+  request: { enabled: true, sizeLimit: 64 },
+}
+</code></pre>
+
+The <code>sizeLimit</code> option (in KB) controls the maximum body size captured.
+
+<h3>Query</h3>
+
+Intercepts SQL queries by proxying the <code>Bun.sql</code> connection. Captures query text, bindings, duration, and a <code>familyHash</code> for grouping similar queries. Queries to devtools' own tables (<code>_strav_devtools_*</code>) are excluded.
+
+Tags: <code>slow</code> (if exceeding threshold).
+
+<pre><code class="language-typescript">collectors: {
+  query: { enabled: true, slow: 100 },
+}
+</code></pre>
+
+The <code>slow</code> option (in ms) marks queries above this duration.
+
+<h3>Exception</h3>
+
+Listens to <code>http:error</code> Emitter events. Captures error class, message, stack trace (first 20 lines), and request context (path, method). Uses <code>familyHash</code> to group occurrences of the same error.
+
+Tags: error class name (e.g. <code>TypeError</code>).
+
+<h3>Log</h3>
+
+Listens to <code>log:entry</code> Emitter events. Filters by minimum level.
+
+<pre><code class="language-typescript">collectors: {
+  log: { enabled: true, level: 'debug' },
+}
+</code></pre>
+
+Supported levels (lowest to highest): <code>trace</code>, <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>, <code>fatal</code>. Setting <code>level: 'info'</code> captures <code>info</code>, <code>warn</code>, <code>error</code>, and <code>fatal</code> — not <code>trace</code> or <code>debug</code>.
+
+Tags: level name. Entries at <code>error</code> or <code>fatal</code> also get the <code>error</code> tag.
+
+<h3>Job</h3>
+
+Listens to <code>queue:dispatched</code>, <code>queue:processed</code>, and <code>queue:failed</code> Emitter events. Captures job name, queue, status, duration, and error message (for failures).
+
+Tags: job name, status (<code>dispatched</code>, <code>processed</code>, <code>failed</code>).
+
+<h2>Recorders</h2>
+
+<p>Recorders aggregate metrics into time buckets for the dashboard. They don't store individual entries — they update counters and extreme values.</p>
+
+<h3>Slow Requests</h3>
+
+Records requests exceeding the threshold. Aggregates: <code>count</code>, <code>max</code>.
+
+<pre><code class="language-typescript">recorders: {
+  slowRequests: { enabled: true, threshold: 1000, sampleRate: 1.0 },
+}
+</code></pre>
+
+<h3>Slow Queries</h3>
+
+Records queries exceeding the threshold. Normalizes SQL text (replaces string literals and <code>$N</code> parameters) for consistent grouping. Aggregates: <code>count</code>, <code>max</code>.
+
+<pre><code class="language-typescript">recorders: {
+  slowQueries: { enabled: true, threshold: 1000, sampleRate: 1.0 },
+}
+</code></pre>
+
+<h3>sampleRate</h3>
+
+Both recorders support a <code>sampleRate</code> option (0.0 to 1.0). At <code>1.0</code>, every event is recorded. At <code>0.5</code>, roughly half are sampled. Useful for high-traffic applications.
+
+<h2>Batch correlation</h2>
+
+Every request gets a unique <code>batchId</code>. All entries produced during that request — the request itself, its queries, log entries, and exceptions — share the same <code>batchId</code>. The dashboard detail view shows all related entries.
+
+<p>Downstream code can read the batch ID:</p>
+
+<pre><code class="language-typescript">const batchId = ctx.get<string>('_devtools_batch_id')
+</code></pre>
+
+<h2>devtools helper</h2>
+
+The <code>devtools</code> helper provides the primary convenience API:
+
+<pre><code class="language-typescript">import { devtools } from '@strav/devtools'
+</code></pre>
+
+<h3>Querying entries</h3>
+
+<pre><code class="language-typescript">// List recent entries (all types)
+const entries = await devtools.entries()
+
+// Filter by type
+const requests = await devtools.entries('request', 50)
+const queries = await devtools.entries('query', 100, 0)
+
+// Find by UUID
+const entry = await devtools.find('550e8400-e29b-41d4-a716-446655440000')
+
+// Find all entries in a batch
+const batch = await devtools.batch(entry.batchId)
+
+// Search by tag
+const slow = await devtools.byTag('slow')
+const user42 = await devtools.byTag('user:42')
+
+// Count
+const total = await devtools.count()
+const exceptions = await devtools.count('exception')
+</code></pre>
+
+<h3>Querying metrics</h3>
+
+<pre><code class="language-typescript">import { PERIODS } from '@strav/devtools'
+
+// Time-series data
+const hourly = await devtools.aggregates('slow_request', PERIODS.ONE_HOUR, 'count')
+const daily = await devtools.aggregates('slow_query', PERIODS.ONE_DAY, 'max')
+
+// Top offenders
+const topSlow = await devtools.topKeys('slow_request', PERIODS.ONE_HOUR, 'count', 10)
+</code></pre>
+
+<h3>Pruning</h3>
+
+<pre><code class="language-typescript">// Prune entries older than the configured pruneAfter value
+const { entries, aggregates } = await devtools.prune()
+
+// Or specify hours explicitly
+const result = await devtools.prune(48)
+</code></pre>
+
+<h2>Dashboard</h2>
+
+The built-in SPA dashboard is served at <code>/_devtools</code> and provides seven views:
+
+<strong>Inspector views:</strong>
+
+<p>| View | Shows |</p>
+<p>|------|-------|</p>
+<p>| Requests | Method, path, status, duration, time |</p>
+<p>| Queries | SQL preview, duration, slow flag |</p>
+<p>| Exceptions | Error class, message, request path |</p>
+<p>| Logs | Level, message, timestamp |</p>
+<p>| Jobs | Name, status, queue, duration |</p>
+
+<strong>Metrics views:</strong>
+
+<p>| View | Shows |</p>
+<p>|------|-------|</p>
+<p>| Slow Requests | Top endpoints by count and max duration |</p>
+<p>| Slow Queries | Top queries by count and max duration |</p>
+
+<p>Clicking any entry opens a detail view with full content and all related batch entries. The dashboard auto-refreshes every 5 seconds.</p>
+
+<h3>Dashboard auth</h3>
+
+By default, the dashboard is only accessible in <code>development</code> and <code>local</code> environments. In production, it returns 403.
+
+<p>To allow access in production, pass a custom guard:</p>
+
+<pre><code class="language-typescript">import { registerDashboard } from '@strav/devtools/dashboard/routes'
+
+registerDashboard(router, (ctx) => {
+  const user = ctx.get('user')
+  return user?.isAdmin === true
+})
+</code></pre>
+
+The guard receives the request context and returns <code>true</code> or <code>false</code> (or a Promise). It's called on every request to the <code>/_devtools</code> prefix.
+
+<p>You can also use the middleware directly:</p>
+
+<pre><code class="language-typescript">import { dashboardAuth } from '@strav/devtools/dashboard/middleware'
+
+router.group({
+  prefix: '/_devtools',
+  middleware: [dashboardAuth((ctx) => ctx.get('user')?.isAdmin)]
+}, (r) => {
+  // custom routes
+})
+</code></pre>
+
+<h2>CLI commands</h2>
+
+<h3>devtools:setup</h3>
+
+<p>Create the storage tables (idempotent):</p>
+
+<pre><code class="language-bash">bun strav devtools:setup
+</code></pre>
+
+<h3>devtools:prune</h3>
+
+<p>Delete old entries and aggregates:</p>
+
+<pre><code class="language-bash">bun strav devtools:prune
+bun strav devtools:prune --hours 48
+</code></pre>
+
+<strong>Options:</strong>
+<ul>
+<li><code>--hours <hours></code> — Delete data older than this many hours (default: <code>24</code>).</li>
+</ul>
+
+<h2>Dashboard routes and API</h2>
+
+<p>The dashboard includes both frontend routes and a REST API, organized with configurable route aliases for easy programmatic access.</p>
+
+<h3>Dashboard routes (<code>devtools.dashboard</code> alias)</h3>
+
+<p>| Path | Route Name | Description |</p>
+<p>|------|-----------|-------------|</p>
+| <code>/_devtools</code> | <code>devtools.dashboard.home</code> | Main dashboard SPA |
+
+<h3>API routes (<code>devtools.api</code> alias)</h3>
+
+The dashboard mounts a REST API under <code>/_devtools/api/</code>:
+
+<p>| Method | Path | Route Name | Description |</p>
+<p>|--------|------|-----------|-------------|</p>
+| GET | <code>/api/entries</code> | <code>devtools.api.entries</code> | List entries. Query: <code>type</code>, <code>limit</code>, <code>offset</code> |
+| GET | <code>/api/entries/:uuid</code> | <code>devtools.api.entry</code> | Single entry by UUID |
+| GET | <code>/api/entries/:uuid/batch</code> | <code>devtools.api.entry_batch</code> | All entries in the same batch |
+| GET | <code>/api/entries/tag/:tag</code> | <code>devtools.api.entries_by_tag</code> | Entries by tag. Query: <code>limit</code> |
+| GET | <code>/api/metrics/:type</code> | <code>devtools.api.metrics</code> | Time-series aggregates. Query: <code>period</code>, <code>aggregate</code>, <code>limit</code> |
+| GET | <code>/api/metrics/:type/top</code> | <code>devtools.api.metrics_top</code> | Top keys by value. Query: <code>period</code>, <code>aggregate</code>, <code>limit</code> |
+| GET | <code>/api/stats</code> | <code>devtools.api.stats</code> | Entry counts by type |
+| DELETE | <code>/api/entries</code> | <code>devtools.api.prune_entries</code> | Prune old data. Query: <code>hours</code> |
+
+<h3>Using named routes</h3>
+
+<p>With route aliases configured, you can access the devtools API programmatically:</p>
+
+<pre><code class="language-typescript">import { route, routeUrl } from '@strav/http'
+
+// Get recent entries
+const entries = await route('devtools.api.entries', {
+  params: { type: 'request', limit: 50 }
+})
+
+// Get a specific entry
+const entry = await route('devtools.api.entry', {
+  params: { uuid: '550e8400-e29b-41d4-a716-446655440000' }
+})
+
+// Get all entries in a batch
+const batchEntries = await route('devtools.api.entry_batch', {
+  params: { uuid: entry.uuid }
+})
+
+// Get entries by tag
+const slowEntries = await route('devtools.api.entries_by_tag', {
+  params: { tag: 'slow' }
+})
+
+// Get metrics data
+const metrics = await route('devtools.api.metrics', {
+  params: { type: 'slow_request' },
+  query: { period: '3600', aggregate: 'count', limit: '24' }
+})
+
+// Get top performers
+const topQueries = await route('devtools.api.metrics_top', {
+  params: { type: 'slow_query' },
+  query: { period: '3600', aggregate: 'count', limit: '10' }
+})
+
+// Get stats
+const stats = await route('devtools.api.stats')
+
+// Prune old data
+await route('devtools.api.prune_entries', {
+  method: 'DELETE',
+  query: { hours: '48' }
+})
+
+// Generate dashboard URL
+const dashboardUrl = routeUrl('devtools.dashboard.home')
+</code></pre>
+
+<h3>Custom route aliases</h3>
+
+<p>You can customize the route aliases in your devtools configuration:</p>
+
+<pre><code class="language-typescript">// config/devtools.ts
+export default {
+  routes: {
+    aliases: {
+      dashboard: 'debug.dashboard',  // Routes: debug.dashboard.home
+      api: 'debug.api'              // Routes: debug.api.entries, etc.
+    }
+  }
+}
+
+// Or mount on a subdomain
+export default {
+  routes: {
+    subdomain: 'devtools'  // Accessible at devtools.example.com
+  }
+}
+</code></pre>
+
+<h2>Entry types</h2>
+
+<pre><code class="language-typescript">type EntryType =
+  | 'request'
+  | 'query'
+  | 'exception'
+  | 'log'
+  | 'job'
+  | 'cache'     // reserved for future use
+  | 'mail'      // reserved for future use
+  | 'event'     // reserved for future use
+  | 'schedule'  // reserved for future use
+</code></pre>
+
+<h2>Aggregate functions</h2>
+
+<pre><code class="language-typescript">type AggregateFunction = 'count' | 'min' | 'max' | 'sum' | 'avg'
+</code></pre>
+
+<h2>Aggregate periods</h2>
+
+<pre><code class="language-typescript">import { PERIODS } from '@strav/devtools'
+
+PERIODS.ONE_HOUR    // 3600
+PERIODS.SIX_HOURS   // 21600
+PERIODS.ONE_DAY     // 86400
+PERIODS.SEVEN_DAYS  // 604800
+</code></pre>
+
+<h2>Database tables</h2>
+
+<h3>_strav_devtools_entries</h3>
+
+<p>| Column | Type | Description |</p>
+<p>|--------|------|-------------|</p>
+| <code>id</code> | <code>bigserial</code> | Primary key |
+| <code>uuid</code> | <code>uuid</code> | Unique entry identifier |
+| <code>batch_id</code> | <code>uuid</code> | Groups entries from the same request |
+| <code>type</code> | <code>varchar(30)</code> | Entry type (request, query, etc.) |
+| <code>family_hash</code> | <code>varchar(64)</code> | Groups similar entries (same error, same query) |
+| <code>content</code> | <code>jsonb</code> | Full entry payload |
+| <code>tags</code> | <code>text[]</code> | Searchable string tags |
+| <code>created_at</code> | <code>timestamptz</code> | When the entry was recorded |
+
+Indexes: <code>batch_id</code>, <code>(type, created_at DESC)</code>, <code>family_hash</code> (partial, where not null).
+
+<h3>_strav_devtools_aggregates</h3>
+
+<p>| Column | Type | Description |</p>
+<p>|--------|------|-------------|</p>
+| <code>id</code> | <code>bigserial</code> | Primary key |
+| <code>bucket</code> | <code>int</code> | Unix timestamp of the time bucket start |
+| <code>period</code> | <code>int</code> | Bucket size in seconds |
+| <code>type</code> | <code>varchar(30)</code> | Metric type (slow_request, slow_query) |
+| <code>key</code> | <code>text</code> | Grouping key (e.g. <code>GET /api/users</code>) |
+| <code>aggregate</code> | <code>varchar(10)</code> | Function (count, min, max, sum, avg) |
+| <code>value</code> | <code>numeric(20,2)</code> | Aggregated value |
+| <code>count</code> | <code>int</code> | Number of samples in this bucket |
+
+Unique constraint: <code>(bucket, period, type, aggregate, key)</code>.
+
+<h2>Zero-cost when disabled</h2>
+
+All core event emissions use a <code>listenerCount()</code> guard:
+
+<pre><code class="language-typescript">if (Emitter.listenerCount('log:entry') === 0) return
+</code></pre>
+
+When devtools is not installed or <code>enabled: false</code>, there are no listeners registered, so the guard short-circuits before allocating any event objects. The SQL proxy is also skipped entirely when disabled.
+
+<h2>Error handling</h2>
+
+<pre><code class="language-typescript">import { DevtoolsError } from '@strav/devtools'
+</code></pre>
+
+<code>DevtoolsError</code> extends <code>ConfigurationError</code> from core. It's thrown when DevtoolsManager is accessed before being resolved through the container.
+
+<h2>Testing</h2>
+
+<p>Disable devtools in tests to avoid recording test traffic:</p>
+
+<pre><code class="language-env"><h1>.env.test</h1>
+DEVTOOLS_ENABLED=false
+</code></pre>
+
+Or don't resolve <code>DevtoolsManager</code> in your test bootstrap — collectors and recorders simply won't activate, and the <code>listenerCount()</code> guards ensure zero overhead.
+
+<h2>Full setup example</h2>
+
+<pre><code class="language-typescript">import { app } from '@strav/kernel'
+import { DevtoolsProvider } from '@strav/devtools'
+
+app.use(new DevtoolsProvider({
+  guard: (ctx) => {
+    if (process.env.NODE_ENV === 'production') {
+      const user = ctx.get('user')
+      return user?.isAdmin === true
+    }
+    return true
+  },
+}))
+
+await app.start()
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

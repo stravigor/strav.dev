@@ -1,0 +1,18 @@
+<div class="navbar">
+  <div class="container">
+    <div class="logo">
+      <a href="/" >st/-</a>
+    </div>
+    <div class="spacer"></div>
+    <ul>
+      <li>
+        <a href="/docs" >Docs</a>
+      </li>
+      <li>
+        <a href="https://github.com/stravigor/strav" target="_blank" >
+          GITHUB
+        </a>
+      </li>
+    </ul>
+  </div>
+</div>

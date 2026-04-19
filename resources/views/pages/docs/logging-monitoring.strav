@@ -1,0 +1,102 @@
+@layout('layouts/docs')
+
+@set('title', 'Logger - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Logger</h1>
+
+Structured logging backed by <a href="https://getpino.io/">pino</a> with configurable sinks.
+
+<h2>Setup</h2>
+
+The Logger reads its configuration from <code>config/logging.ts</code>:
+
+<pre><code class="language-typescript">// config/logging.ts
+export default {
+  level: 'info',
+  sinks: {
+    console: { enabled: true, level: 'debug' },
+    file: { enabled: true, level: 'info', path: 'storage/logs/app.log' },
+  },
+}
+</code></pre>
+
+Each sink runs independently — it can have its own minimum log level. The global <code>level</code> sets the floor for the pino instance.
+
+<h2>Usage</h2>
+
+<p>The Logger is injectable and provides six log levels.</p>
+
+<h3>Using a service provider (recommended)</h3>
+
+<pre><code class="language-typescript">import { LoggerProvider } from '@strav/kernel'
+
+app.use(new LoggerProvider())
+</code></pre>
+
+The <code>LoggerProvider</code> registers <code>Logger</code> as a singleton. It depends on the <code>config</code> provider.
+
+<h3>Manual setup</h3>
+
+<pre><code class="language-typescript">import { Logger } from '@strav/kernel'
+
+app.singleton(Logger)
+const logger = app.resolve(Logger)
+</code></pre>
+
+<h3>Log methods</h3>
+<p>logger.trace('entering function', { fn: 'processOrder' })</p>
+<p>logger.debug('cache miss', { key: 'user:42' })</p>
+<p>logger.info('server started', { port: 3000 })</p>
+<p>logger.warn('rate limit approaching', { current: 95, max: 100 })</p>
+<p>logger.error('request failed', { statusCode: 500, path: '/api/users' })</p>
+<p>logger.fatal('database unreachable', { host: 'db.example.com' })</p>
+<p>``<code></p>
+
+<p>Every method accepts an optional context object that gets merged into the structured JSON output.</p>
+
+<h2>Sinks</h2>
+
+<h3>ConsoleSink</h3>
+
+Outputs to stdout using </code>pino-pretty<code> for human-readable development logs.
+
+<pre><code class="language-typescript">{ enabled: true, level: 'debug' }
+</code></pre>
+
+<h3>FileSink</h3>
+
+<p>Writes JSON-formatted log entries to a file. Automatically creates parent directories.</p>
+
+<pre><code class="language-typescript">{ enabled: true, level: 'info', path: 'storage/logs/app.log' }
+</code></pre>
+
+<h3>Custom sinks</h3>
+
+Extend the </code>LogSink<code> base class and register it in the sink registry inside </code>logger.ts`:
+
+<pre><code class="language-typescript">import { LogSink, type SinkConfig } from '@strav/kernel'
+
+class CustomSink extends LogSink {
+  createStream() {
+    // return a writable stream
+  }
+}
+</code></pre>
+
+<h2>Log output</h2>
+
+<p>Logs are JSON-formatted (pino default). Each entry includes a timestamp, level, message, and any context fields:</p>
+
+<pre><code class="language-json">{"level":30,"time":1707753600000,"msg":"server started","port":3000}
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

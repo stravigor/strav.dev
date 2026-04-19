@@ -1,0 +1,494 @@
+@layout('layouts/docs')
+
+@section('content')
+<article class="doc-content">
+<h1>Auth</h1>
+
+The auth module (<code>@strav/auth</code>) provides unopinionated, composable authentication primitives for building secure authentication systems. Unlike opinionated authentication frameworks, this package gives you the building blocks to implement any authentication pattern you need.
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/auth
+</code></pre>
+
+Requires <code>@strav/kernel</code> as a peer dependency for encryption utilities.
+
+<h2>Architecture</h2>
+
+<p>The auth package is organized into five main areas:</p>
+
+<h3>1. JWT Operations</h3>
+<p>Zero-dependency JWT implementation using built-in Node.js/Bun crypto APIs, providing secure and standards-compliant token operations.</p>
+
+<h3>2. Token Management</h3>
+<p>Various token types for different authentication scenarios - signed opaque tokens, magic links, and refresh tokens.</p>
+
+<h3>3. TOTP / Two-Factor Authentication</h3>
+<p>Complete TOTP implementation following RFC 6238, including QR code generation and recovery codes.</p>
+
+<h3>4. Password Validation</h3>
+<p>Comprehensive password strength checking and policy enforcement utilities.</p>
+
+<h3>5. OAuth Helpers</h3>
+<p>State management for OAuth flows with CSRF protection.</p>
+
+<h2>JWT Operations</h2>
+
+<h3>Basic JWT Operations</h3>
+
+<pre><code class="language-typescript">import { signJWT, verifyJWT } from '@strav/auth'
+
+// Sign a JWT with custom claims
+const token = await signJWT(
+  {
+    userId: 123,
+    role: 'admin',
+    permissions: ['read', 'write']
+  },
+  'your-secret-key',
+  {
+    expiresIn: '1h',
+    issuer: 'my-app',
+    audience: 'api.example.com'
+  }
+)
+
+// Verify and extract payload
+const payload = await verifyJWT(token, 'your-secret-key', {
+  issuer: 'my-app',
+  audience: 'api.example.com',
+  requiredClaims: ['userId', 'role']
+})
+</code></pre>
+
+<h3>Access and Refresh Tokens</h3>
+
+<pre><code class="language-typescript">import { createAccessToken, verifyAccessToken, createRefreshToken, verifyRefreshToken } from '@strav/auth'
+
+// Create token pair
+const accessToken = await createAccessToken(
+  userId,
+  secret,
+  { email: 'user@example.com', role: 'admin' }, // Additional claims
+  { expiresIn: '15m' }
+)
+
+const refreshToken = await createRefreshToken(
+  userId,
+  secret,
+  { expiresIn: '30d' }
+)
+
+// Verify tokens
+const userId = await verifyAccessToken(accessToken, secret)
+const refreshUserId = await verifyRefreshToken(refreshToken, secret)
+</code></pre>
+
+<h3>Decode Without Verification</h3>
+
+<pre><code class="language-typescript">import { decodeJWT } from '@strav/auth'
+
+// Decode for inspection (DO NOT use for authentication!)
+const payload = decodeJWT(token)
+console.log('Token expires at:', new Date(payload.exp! * 1000))
+</code></pre>
+
+<h2>TOTP / Two-Factor Authentication</h2>
+
+<h3>Generate TOTP Secret</h3>
+
+<pre><code class="language-typescript">import { generateSecret, totpUri } from '@strav/auth'
+
+// Generate a new secret for a user
+const { raw, base32 } = generateSecret()
+
+// Save raw to database (encrypted)
+await saveUserSecret(userId, raw)
+
+// Generate QR code URI for authenticator apps
+const uri = totpUri({
+  secret: base32,
+  issuer: 'MyApp',
+  account: user.email,
+  digits: 6,
+  period: 30
+})
+
+// Show QR code to user using the URI
+</code></pre>
+
+<h3>Verify TOTP Codes</h3>
+
+<pre><code class="language-typescript">import { verifyTotp } from '@strav/auth'
+
+// Get user's secret from database
+const secret = await getUserSecret(userId)
+
+// Verify the 6-digit code from user
+const isValid = await verifyTotp(
+  secret,
+  userInputCode,
+  {
+    window: 1, // Allow 1 time step before/after for clock drift
+    digits: 6,
+    period: 30
+  }
+)
+
+if (!isValid) {
+  throw new Error('Invalid 2FA code')
+}
+</code></pre>
+
+<h3>Recovery Codes</h3>
+
+<pre><code class="language-typescript">import { generateRecoveryCodes } from '@strav/auth'
+
+// Generate single-use recovery codes
+const codes = generateRecoveryCodes(8)
+
+// Hash and store these securely
+for (const code of codes) {
+  await storeRecoveryCode(userId, await encrypt.hash(code))
+}
+
+// Show codes to user ONCE
+return { recoveryCodes: codes }
+</code></pre>
+
+<h2>Password Validation</h2>
+
+<h3>Validate Against Policy</h3>
+
+<pre><code class="language-typescript">import { validatePassword, type PasswordPolicy } from '@strav/auth'
+
+const policy: PasswordPolicy = {
+  minLength: 12,
+  maxLength: 128,
+  requireUppercase: true,
+  requireLowercase: true,
+  requireNumbers: true,
+  requireSpecialChars: true,
+  blacklist: ['password', 'company', '12345'],
+  customValidator: (pwd) => {
+    // Custom business logic
+    if (pwd.includes(username)) {
+      return { valid: false, message: 'Password cannot contain username' }
+    }
+    return { valid: true }
+  }
+}
+
+const result = validatePassword(userInput, policy)
+
+if (!result.valid) {
+  // Show errors to user
+  return { errors: result.errors }
+}
+</code></pre>
+
+<h3>Calculate Password Strength</h3>
+
+<pre><code class="language-typescript">import { calculatePasswordStrength } from '@strav/auth'
+
+const strength = calculatePasswordStrength(password)
+
+// strength.score: 0-4 (Very Weak to Very Strong)
+// strength.label: Human-readable label
+// strength.issues: Specific problems found
+// strength.suggestions: How to improve
+
+if (strength.score < 3) {
+  return {
+    message: <code>Password is ${strength.label}</code>,
+    suggestions: strength.suggestions
+  }
+}
+</code></pre>
+
+<h3>Generate Secure Passwords</h3>
+
+<pre><code class="language-typescript">import { generatePassword } from '@strav/auth'
+
+// Generate a 16-character password with all character types
+const password = generatePassword(16)
+
+// Generate without symbols (for compatibility)
+const simplePassword = generatePassword(20, {
+  uppercase: true,
+  lowercase: true,
+  numbers: true,
+  symbols: false
+})
+</code></pre>
+
+<h2>Token Management</h2>
+
+<h3>Signed Opaque Tokens</h3>
+
+<p>These tokens are encrypted and tamper-proof, perfect for email verification, password reset, etc.</p>
+
+<pre><code class="language-typescript">import { createSignedToken, verifySignedToken } from '@strav/auth'
+
+// Create a password reset token
+const token = createSignedToken(
+  {
+    sub: userId,
+    typ: 'password-reset',
+    email: user.email
+  },
+  60 // Expires in 60 minutes
+)
+
+// Send token in email
+await sendEmail(user.email, <code>Reset your password: ${url}?token=${token}</code>)
+
+// Later, verify the token
+try {
+  const payload = verifySignedToken(token)
+
+  if (payload.typ !== 'password-reset') {
+    throw new Error('Invalid token type')
+  }
+
+  // Proceed with password reset for payload.sub
+} catch (error) {
+  // Token is invalid, expired, or tampered
+}
+</code></pre>
+
+<h3>Magic Link Tokens</h3>
+
+<p>Specialized tokens for passwordless authentication.</p>
+
+<pre><code class="language-typescript">import { createMagicLinkToken, verifyMagicLinkToken } from '@strav/auth'
+
+// Create magic link
+const token = createMagicLinkToken(userId, {
+  email: user.email,
+  redirect: '/dashboard',
+  expiresInMinutes: 15
+})
+
+const magicLink = <code>https://app.com/auth/magic?token=${token}</code>
+await sendEmail(user.email, <code>Click to login: ${magicLink}</code>)
+
+// Verify when user clicks link
+try {
+  const payload = verifyMagicLinkToken(token)
+
+  // Log user in as payload.sub
+  // Redirect to payload.redirect if provided
+} catch (error) {
+  // Token invalid or expired
+}
+</code></pre>
+
+<h3>Refresh Token Management</h3>
+
+<p>Build a token rotation strategy with storage.</p>
+
+<pre><code class="language-typescript">import { createTokenRotation, generateRefreshToken } from '@strav/auth'
+
+// Create rotation strategy with your storage backend
+const rotation = createTokenRotation({
+  async store(userId, token, expiresAt) {
+    await db.refreshTokens.create({
+      userId,
+      token,
+      expiresAt,
+      deviceId: getDeviceId()
+    })
+  },
+
+  async verify(token) {
+    const record = await db.refreshTokens.findByToken(token)
+
+    if (!record || record.expiresAt < new Date()) {
+      return null
+    }
+
+    return record.userId
+  },
+
+  async revoke(token) {
+    await db.refreshTokens.deleteByToken(token)
+  },
+
+  async revokeAll(userId) {
+    await db.refreshTokens.deleteByUserId(userId)
+  }
+})
+
+// Generate new refresh token
+const refreshToken = await rotation.generate(userId, 2592000) // 30 days
+
+// Verify and rotate
+const userId = await rotation.verify(refreshToken)
+if (userId) {
+  // Revoke old token
+  await rotation.revoke(refreshToken)
+
+  // Issue new token pair
+  const newRefresh = await rotation.generate(userId)
+  const newAccess = await createAccessToken(userId, secret)
+}
+</code></pre>
+
+<h2>OAuth State Management</h2>
+
+<p>Protect against CSRF attacks in OAuth flows.</p>
+
+<pre><code class="language-typescript">import { createOAuthStateStore } from '@strav/auth'
+
+// Create state store (use Redis/DB in production)
+const stateStore = createOAuthStateStore({
+  async store(state) {
+    await redis.setex(<code>oauth:${state.value}</code>, 600, JSON.stringify(state))
+  },
+
+  async retrieve(value) {
+    const data = await redis.get(<code>oauth:${value}</code>)
+    return data ? JSON.parse(data) : null
+  },
+
+  async delete(value) {
+    await redis.del(<code>oauth:${value}</code>)
+  },
+
+  ttl: 600 // 10 minutes
+})
+
+// Before redirecting to OAuth provider
+const stateValue = await stateStore.generate({
+  redirect: '/dashboard',
+  data: { provider: 'github' }
+})
+
+const authUrl = <code>https://github.com/login/oauth/authorize?state=${stateValue}&amp;...</code>
+
+// After OAuth callback
+const state = await stateStore.verify(req.query.state)
+
+if (!state) {
+  throw new Error('Invalid or expired state')
+}
+
+// Continue with OAuth flow
+// Use state.redirect and state.data as needed
+</code></pre>
+
+<h2>Integration Examples</h2>
+
+<h3>Complete Login Flow</h3>
+
+<pre><code class="language-typescript">import { verifyAccessToken, createAccessToken, createRefreshToken } from '@strav/auth'
+import { encrypt } from '@strav/kernel'
+
+async function login(email: string, password: string) {
+  // Find user
+  const user = await User.findByEmail(email)
+  if (!user) {
+    throw new Error('Invalid credentials')
+  }
+
+  // Verify password
+  const valid = await encrypt.verify(password, user.passwordHash)
+  if (!valid) {
+    throw new Error('Invalid credentials')
+  }
+
+  // Create tokens
+  const accessToken = await createAccessToken(user.id, JWT_SECRET)
+  const refreshToken = await createRefreshToken(user.id, JWT_SECRET)
+
+  // Store refresh token
+  await storeRefreshToken(user.id, refreshToken)
+
+  return { accessToken, refreshToken }
+}
+</code></pre>
+
+<h3>Protected Route Middleware</h3>
+
+<pre><code class="language-typescript">import { verifyAccessToken } from '@strav/auth'
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const token = req.headers.authorization?.replace('Bearer ', '')
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' })
+  }
+
+  try {
+    const userId = await verifyAccessToken(token, JWT_SECRET)
+    req.user = await User.findById(userId)
+    next()
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' })
+  }
+}
+</code></pre>
+
+<h3>Password Reset Flow</h3>
+
+<pre><code class="language-typescript">import { createSignedToken, verifySignedToken, validatePassword } from '@strav/auth'
+
+async function requestPasswordReset(email: string) {
+  const user = await User.findByEmail(email)
+  if (!user) {
+    // Don't reveal if email exists
+    return { message: 'If an account exists, you will receive an email' }
+  }
+
+  const token = createSignedToken(
+    { sub: user.id, typ: 'password-reset' },
+    60 // 1 hour
+  )
+
+  await sendResetEmail(email, token)
+}
+
+async function resetPassword(token: string, newPassword: string) {
+  // Verify token
+  const payload = verifySignedToken(token)
+  if (payload.typ !== 'password-reset') {
+    throw new Error('Invalid token')
+  }
+
+  // Validate new password
+  const validation = validatePassword(newPassword, passwordPolicy)
+  if (!validation.valid) {
+    return { errors: validation.errors }
+  }
+
+  // Update password
+  const user = await User.findById(payload.sub)
+  user.passwordHash = await encrypt.hash(newPassword)
+  await user.save()
+
+  // Invalidate all sessions
+  await revokeAllRefreshTokens(user.id)
+}
+</code></pre>
+
+<h2>Security Considerations</h2>
+
+<li><strong>Zero Dependencies</strong>: This package has no external dependencies, eliminating supply chain attack vectors that could compromise your authentication system</li>
+<li><strong>Secret Management</strong>: Store JWT secrets securely using environment variables and rotate them periodically</li>
+<li><strong>Token Storage</strong>: Never store tokens in localStorage for sensitive apps; use httpOnly cookies when possible</li>
+<li><strong>Password Policies</strong>: Enforce strong password requirements appropriate for your security needs</li>
+<li><strong>TOTP Secrets</strong>: Always encrypt TOTP secrets before storing in the database</li>
+<li><strong>Recovery Codes</strong>: Hash recovery codes before storage and mark as used after verification</li>
+<li><strong>Rate Limiting</strong>: Implement rate limiting on authentication endpoints</li>
+<li><strong>Token Rotation</strong>: Implement refresh token rotation to limit exposure window</li>
+
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

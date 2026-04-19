@@ -1,0 +1,393 @@
+@layout('layouts/docs')
+
+@set('title', 'Flag - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Flag</h1>
+
+Feature flags with a unified API, scoped per-user or per-team, and optional rich values for A/B testing. Built-in drivers for <strong>PostgreSQL</strong> (persistent) and <strong>in-memory</strong> (testing). Custom drivers can be added via <code>extend()</code>.
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/flag
+bun strav install flag
+</code></pre>
+
+The <code>install</code> command copies <code>config/flag.ts</code> into your project. The file is yours to edit.
+
+<h2>Setup</h2>
+
+<h3>1. Register FlagManager</h3>
+
+<h4>Using a service provider (recommended)</h4>
+
+<pre><code class="language-typescript">import { FlagProvider } from '@strav/flag'
+
+app.use(new FlagProvider())
+</code></pre>
+
+The <code>FlagProvider</code> registers <code>FlagManager</code> as a singleton. It depends on the <code>config</code> and <code>database</code> providers, and auto-creates the <code>_strav_features</code> table on boot.
+
+<p>To skip auto-creation (e.g. when using migrations):</p>
+
+<pre><code class="language-typescript">app.use(new FlagProvider({ ensureTables: false }))
+</code></pre>
+
+<h4>Manual setup</h4>
+
+<pre><code class="language-typescript">import FlagManager from '@strav/flag'
+
+app.singleton(FlagManager)
+app.resolve(FlagManager)
+await FlagManager.ensureTables()
+</code></pre>
+
+<h3>2. Configure drivers</h3>
+
+Edit <code>config/flag.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  default: env('FLAG_DRIVER', 'database'),
+
+  drivers: {
+    database: {
+      driver: 'database',
+    },
+
+    array: {
+      driver: 'array',
+    },
+  },
+}
+</code></pre>
+
+<h2>Defining features</h2>
+
+<p>Features must be defined before they can be checked. Define them during app bootstrap, after the provider boots.</p>
+
+<h3>Closure-based</h3>
+
+<pre><code class="language-typescript">import { flag } from '@strav/flag'
+
+// Boolean flag
+flag.define('new-checkout', true)
+
+// Dynamic — receives the serialized scope key (e.g. "User:42")
+flag.define('beta-ui', (scope) => {
+  if (scope === '__global__') return false
+  const id = parseInt(scope.split(':')[1])
+  return id % 10 === 0  // 10% rollout
+})
+
+// Rich value for A/B testing
+flag.define('checkout-variant', (scope) => {
+  const id = parseInt(scope.split(':')[1] ?? '0')
+  return id % 2 === 0 ? 'variant-a' : 'variant-b'
+})
+</code></pre>
+
+<h3>Class-based</h3>
+
+<pre><code class="language-typescript">import type { FeatureClass } from '@strav/flag'
+
+class NewBillingExperience implements FeatureClass {
+  static readonly key = 'new-billing'
+
+  resolve(scope: string) {
+    return scope !== '__global__'
+  }
+}
+
+flag.defineClass(NewBillingExperience)
+</code></pre>
+
+If <code>key</code> is not set, the class name is converted to kebab-case (<code>NewBillingExperience</code> → <code>new-billing-experience</code>).
+
+<h2>Checking features</h2>
+
+<pre><code class="language-typescript">import { flag } from '@strav/flag'
+
+if (await flag.active('new-checkout')) {
+  // feature is on
+}
+
+if (await flag.inactive('new-checkout')) {
+  // feature is off
+}
+
+// Rich value
+const variant = await flag.value('checkout-variant') as string
+</code></pre>
+
+<h3>Conditional execution</h3>
+
+<pre><code class="language-typescript">const html = await flag.when(
+  'new-checkout',
+  (value) => renderNewCheckout(value),
+  () => renderOldCheckout(),
+)
+</code></pre>
+
+The <code>onActive</code> callback receives the resolved value. The <code>onInactive</code> callback receives no arguments.
+
+<h3>Batch check</h3>
+
+<pre><code class="language-typescript">const values = await flag.values(['new-checkout', 'beta-ui', 'checkout-variant'])
+// Map { 'new-checkout' => true, 'beta-ui' => false, 'checkout-variant' => 'variant-a' }
+</code></pre>
+
+<h2>Scoping</h2>
+
+By default, features resolve at the global scope. Use <code>.for()</code> to scope to a specific entity:
+
+<pre><code class="language-typescript">const user = ctx.get<User>('user')
+
+await flag.for(user).active('beta-ui')
+await flag.for(user).value('checkout-variant')
+await flag.for(user).values(['feat-a', 'feat-b'])
+</code></pre>
+
+Any object with an <code>id</code> property works as a scope. The scope is serialized as <code>ClassName:id</code> (e.g. <code>User:42</code>, <code>Team:7</code>).
+
+To customize the type prefix, implement <code>featureScope()</code>:
+
+<pre><code class="language-typescript">class Workspace {
+  id = 5
+  featureScope() { return 'Workspace' }
+}
+// Serializes to "Workspace:5"
+</code></pre>
+
+<h3>Global scope</h3>
+
+When no scope is passed, features resolve against the <code>__global__</code> scope. This is useful for system-wide flags like maintenance mode.
+
+<h2>Manual activation</h2>
+
+<p>Override the resolver and store a specific value:</p>
+
+<pre><code class="language-typescript">// Activate for the global scope
+await flag.activate('maintenance-mode')
+
+// Activate for a specific user
+await flag.for(user).activate('beta-ui')
+
+// Activate with a rich value
+await flag.activate('checkout-variant', 'variant-c')
+
+// Deactivate
+await flag.deactivate('maintenance-mode')
+await flag.for(user).deactivate('beta-ui')
+</code></pre>
+
+<h3>Activate/deactivate for everyone</h3>
+
+<p>Shorthand for the global scope:</p>
+
+<pre><code class="language-typescript">await flag.activateForEveryone('maintenance-mode')
+await flag.deactivateForEveryone('maintenance-mode')
+
+// With a rich value
+await flag.activateForEveryone('checkout-variant', 'variant-b')
+</code></pre>
+
+<h2>Resolution flow</h2>
+
+When <code>flag.value('feature', scope)</code> is called:
+
+<li><strong>In-memory cache</strong> — return immediately if cached</li>
+<li><strong>Store lookup</strong> — check the database for a persisted value</li>
+<li><strong>Resolver</strong> — call the closure/class <code>resolve()</code> method</li>
+<li><strong>Persist</strong> — store the resolved value in the database</li>
+<li><strong>Cache</strong> — cache in memory for the rest of the request</li>
+
+The resolver only runs once per feature+scope. After that, the persisted value is returned directly. Use <code>forget()</code> to force re-resolution.
+
+<h2>Eager loading</h2>
+
+<p>When rendering a list where you check features per-item, eager-load to avoid N+1 queries:</p>
+
+<pre><code class="language-typescript">const users = await User.all()
+
+await flag.load(['beta-ui', 'checkout-variant'], users)
+
+for (const user of users) {
+  // These are now cached — no additional DB queries
+  if (await flag.for(user).active('beta-ui')) {
+    // ...
+  }
+}
+</code></pre>
+
+<h2>Cleanup</h2>
+
+<pre><code class="language-typescript">// Remove stored value for the current scope — forces re-resolution on next check
+await flag.forget('beta-ui')
+await flag.for(user).forget('beta-ui')
+
+// Remove all stored values for a feature (all scopes)
+await flag.purge('beta-ui')
+
+// Remove everything
+await flag.purgeAll()
+</code></pre>
+
+<h3>Cache flushing</h3>
+
+<p>The in-memory cache lives for the duration of the process. Flush it to force a re-read from the database:</p>
+
+<pre><code class="language-typescript">flag.flushCache()
+</code></pre>
+
+<h2>Middleware</h2>
+
+Gate routes behind a feature flag with <code>ensureFeature()</code>. Returns a <code>403</code> JSON response when the feature is not active.
+
+<pre><code class="language-typescript">import { ensureFeature } from '@strav/flag'
+
+router.group({ middleware: [auth(), ensureFeature('beta-ui')] }, (r) => {
+  r.get('/beta/dashboard', betaDashboard)
+})
+</code></pre>
+
+The middleware uses <code>ctx.get('user')</code> as the scope by default. Pass a custom scope extractor for other entities:
+
+<pre><code class="language-typescript">import { compose } from '@strav/http'
+
+r.get('/team/:id/analytics', compose(
+  [ensureFeature('team-analytics', (ctx) => ctx.get('team'))],
+  analyticsHandler,
+))
+</code></pre>
+
+<h2>Events</h2>
+
+Feature operations emit events through the <code>Emitter</code>:
+
+<p>| Event | Payload | When |</p>
+<p>|---|---|---|</p>
+| <code>flag:resolved</code> | <code>{ feature, scope, value }</code> | Value resolved for the first time |
+| <code>flag:updated</code> | <code>{ feature, scope, value }</code> | Value changed via activate/deactivate |
+| <code>flag:deleted</code> | <code>{ feature, scope }</code> | Value forgotten or purged |
+
+<pre><code class="language-typescript">import Emitter from '@strav/kernel'
+
+Emitter.on('flag:resolved', ({ feature, scope, value }) => {
+  console.log(<code>Feature "${feature}" resolved to ${value} for ${scope}</code>)
+})
+</code></pre>
+
+<h2>Custom driver</h2>
+
+Register a custom storage driver with <code>extend()</code>:
+
+<pre><code class="language-typescript">import { flag } from '@strav/flag'
+import type { FeatureStore } from '@strav/flag'
+
+flag.extend('redis', (config) => {
+  return new RedisFeatureStore(config)
+})
+</code></pre>
+
+The factory receives the driver's config object from <code>config/flag.ts</code>. The returned object must implement the <code>FeatureStore</code> interface.
+
+<p>Then set it as the driver in your config:</p>
+
+<pre><code class="language-typescript">export default {
+  default: 'redis',
+  drivers: {
+    redis: {
+      driver: 'redis',
+      url: env('REDIS_URL', 'redis://localhost:6379'),
+    },
+  },
+}
+</code></pre>
+
+<h2>CLI commands</h2>
+
+<p>The flag package provides three CLI commands (auto-discovered by the framework):</p>
+
+<h3>flag:setup</h3>
+
+Create the <code>_strav_features</code> table:
+
+<pre><code class="language-bash">bun strav flag:setup
+</code></pre>
+
+<h3>flag:list</h3>
+
+<p>List all stored feature flags with their scopes and values:</p>
+
+<pre><code class="language-bash">bun strav flag:list
+</code></pre>
+
+<h3>flag:purge</h3>
+
+<p>Purge stored values for a specific feature or all features:</p>
+
+<pre><code class="language-bash">bun strav flag:purge beta-ui
+bun strav flag:purge --all
+</code></pre>
+
+<h2>Testing</h2>
+
+Use the <code>array</code> driver in tests to avoid hitting the database:
+
+<pre><code class="language-env"><h1>.env.test</h1>
+FLAG_DRIVER=array
+</code></pre>
+
+Call <code>FlagManager.reset()</code> in test teardown to clear definitions and stored values:
+
+<pre><code class="language-typescript">import { beforeEach } from 'bun:test'
+import FlagManager from '@strav/flag'
+
+beforeEach(() => {
+  FlagManager.reset()
+})
+</code></pre>
+
+<h2>Controller example</h2>
+
+<pre><code class="language-typescript">import { flag } from '@strav/flag'
+
+export default class CheckoutController {
+  async show(ctx: Context) {
+    const user = ctx.get<User>('user')
+
+    const variant = await flag.for(user).value('checkout-variant') as string
+
+    return await flag.for(user).when(
+      'new-checkout',
+      () => ctx.json({ variant, layout: 'new' }),
+      () => ctx.json({ layout: 'classic' }),
+    )
+  }
+
+  async toggleBeta(ctx: Context) {
+    const user = ctx.get<User>('user')
+    const { enabled } = await ctx.body<{ enabled: boolean }>()
+
+    if (enabled) {
+      await flag.for(user).activate('beta-ui')
+    } else {
+      await flag.for(user).deactivate('beta-ui')
+    }
+
+    return ctx.json({ ok: true })
+  }
+}
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

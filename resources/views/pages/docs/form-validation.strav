@@ -1,0 +1,246 @@
+@layout('layouts/docs')
+
+@set('title', 'Validation - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Validation</h1>
+
+The validation module provides composable rule factories and a <code>validate()</code> function for checking input data against declarative rule sets.
+
+<h2>Quick start</h2>
+
+<pre><code class="language-typescript">import { validate, required, string, integer, min, max, email } from '@strav/http'
+
+const { data, errors } = validate(input, {
+  name:  [required(), string(), min(3), max(100)],
+  email: [required(), email()],
+  age:   [integer(), min(18)],
+})
+
+if (errors) {
+  return ctx.json({ errors }, 422)
+}
+
+// data is typed and contains only declared fields
+</code></pre>
+
+<h2>Rules</h2>
+
+Every rule is a factory function returning a <code>Rule</code> object:
+
+<pre><code class="language-typescript">interface Rule {
+  name: string
+  validate(value: unknown): string | null  // error message or null
+}
+</code></pre>
+
+All rules pass on <code>null</code>/<code>undefined</code> — use <code>required()</code> to enforce presence.
+
+<h3>Available rules</h3>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Rule</th>
+      <th>Description</th>
+      <th>Error message</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>required()</code></td>
+      <td>Value must not be null, undefined, or empty string</td>
+      <td><code>This field is required</code></td>
+    </tr>
+    <tr>
+      <td><code>string()</code></td>
+      <td>Must be a string</td>
+      <td><code>Must be a string</code></td>
+    </tr>
+    <tr>
+      <td><code>integer()</code></td>
+      <td>Must be an integer</td>
+      <td><code>Must be an integer</code></td>
+    </tr>
+    <tr>
+      <td><code>number()</code></td>
+      <td>Must be a number (not NaN)</td>
+      <td><code>Must be a number</code></td>
+    </tr>
+    <tr>
+      <td><code>boolean()</code></td>
+      <td>Must be a boolean</td>
+      <td><code>Must be a boolean</code></td>
+    </tr>
+    <tr>
+      <td><code>min(n)</code></td>
+      <td>Numbers: <code>>= n</code>. Strings: length <code>>= n</code></td>
+      <td><code>Must be at least {n}</code> / <code>Must be at least {n} characters</code></td>
+    </tr>
+    <tr>
+      <td><code>max(n)</code></td>
+      <td>Numbers: <code><= n</code>. Strings: length <code><= n</code></td>
+      <td><code>Must be at most {n}</code> / <code>Must be at most {n} characters</code></td>
+    </tr>
+    <tr>
+      <td><code>email()</code></td>
+      <td>Must be a valid email address</td>
+      <td><code>Must be a valid email address</code></td>
+    </tr>
+    <tr>
+      <td><code>url()</code></td>
+      <td>Must be a valid URL</td>
+      <td><code>Must be a valid URL</code></td>
+    </tr>
+    <tr>
+      <td><code>regex(pattern)</code></td>
+      <td>Must match a RegExp pattern</td>
+      <td><code>Must match pattern {pattern}</code></td>
+    </tr>
+    <tr>
+      <td><code>enumOf(enum)</code></td>
+      <td>Must be a value of the given TypeScript enum</td>
+      <td><code>Must be one of: {values}</code></td>
+    </tr>
+    <tr>
+      <td><code>oneOf(values)</code></td>
+      <td>Must be one of the given values</td>
+      <td><code>Must be one of: {values}</code></td>
+    </tr>
+    <tr>
+      <td><code>array()</code></td>
+      <td>Must be an array</td>
+      <td><code>Must be an array</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Examples</h3>
+
+<pre><code class="language-typescript">import { required, string, min, max, email, enumOf, oneOf, regex } from '@strav/http'
+import { UserRole } from '../enums/user'
+
+// Username: required string between 3 and 30 characters
+const usernameRules = [required(), string(), min(3), max(30)]
+
+// Role: must be a valid UserRole enum value
+const roleRules = [required(), enumOf(UserRole)]
+
+// Status: must be one of specific string values (no enum)
+const statusRules = [required(), oneOf(['active', 'inactive', 'suspended'])]
+
+// Phone: optional, but must match a pattern if provided
+const phoneRules = [string(), regex(/^\+\d{10,15}$/)]
+</code></pre>
+
+<h2>validate()</h2>
+
+<pre><code class="language-typescript">function validate<T>(input: unknown, rules: RuleSet): ValidationResult<T>
+</code></pre>
+
+<ul>
+<li>Synchronous — no async overhead.</li>
+<li>Runs rules per field, stopping at the first error for each field.</li>
+<li>Strips unknown fields from <code>data</code> — only declared fields are returned.</li>
+<li>Omits <code>undefined</code> values — fields not present in the input are excluded from <code>data</code>, making partial updates safe (only submitted fields are included).</li>
+<li>Returns <code>errors: null</code> when all rules pass.</li>
+</ul>
+
+<h3>Return type</h3>
+
+<pre><code class="language-typescript">interface ValidationResult<T = Record<string, unknown>> {
+  data: T                                   // only declared fields
+  errors: Record<string, string[]> | null   // null when valid
+}
+</code></pre>
+
+<h3>Typed results</h3>
+
+Use a generic to get typed <code>data</code>:
+
+<pre><code class="language-typescript">interface CreateUserInput {
+  name: string
+  email: string
+  role: string
+}
+
+const { data, errors } = validate<CreateUserInput>(body, {
+  name:  [required(), string()],
+  email: [required(), email()],
+  role:  [required(), oneOf(['admin', 'user'])],
+})
+
+if (!errors) {
+  data.name  // typed as string
+  data.email // typed as string
+}
+</code></pre>
+
+<h2>Usage in controllers</h2>
+
+<p>The typical pattern in a controller action:</p>
+
+<pre><code class="language-typescript">async store(ctx: Context) {
+  const body = await ctx.body()
+  const { data, errors } = validate(body, UserRules.store)
+  if (errors) return ctx.json({ errors }, 422)
+
+  const user = await service.create(data)
+  return ctx.json(user, 201)
+}
+</code></pre>
+
+<h2>Generated validators</h2>
+
+Running <code>bun strav generate:api</code> auto-generates validators from schema field definitions. Each validator has <code>store</code> (with <code>required()</code> on required fields) and <code>update</code> (without <code>required()</code>) rule sets:
+
+<pre><code class="language-typescript">// app/validators/user_validator.ts — Generated by Strav
+import { enumOf, string } from '@strav/http'
+import { UserRole } from '../enums/user'
+
+export const UserRules: Record<string, RuleSet> = {
+  store: {
+    username: [required(), string()],
+    role: [enumOf(UserRole)],
+  },
+  update: {
+    username: [string()],
+    role: [enumOf(UserRole)],
+  },
+}
+</code></pre>
+
+Enum fields use <code>enumOf(Enum)</code> referencing the generated TypeScript enum, so validators stay in sync when enum values change. Fields with inline <code>enumValues</code> (no custom type) still use <code>oneOf([...])</code>.
+
+System-managed fields (id, timestamps, parent FK) are excluded from generated validators. Reference FK fields (e.g., <code>authorPid</code> from <code>t.reference('user')</code>) are included using their FK column name and validated with the referenced PK's type.
+
+<h2>Writing custom rules</h2>
+
+A rule is just an object with <code>name</code> and <code>validate</code>:
+
+<pre><code class="language-typescript">import type { Rule } from '@strav/http'
+
+function slug(): Rule {
+  return {
+    name: 'slug',
+    validate(value) {
+      if (value === undefined || value === null) return null
+      if (typeof value !== 'string') return 'Must be a string'
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) return 'Must be a valid slug'
+      return null
+    },
+  }
+}
+</code></pre>
+
+Follow the convention: return <code>null</code> for undefined/null (let <code>required()</code> handle presence), return an error string on failure.
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

@@ -1,0 +1,317 @@
+@layout('layouts/docs')
+
+@set('title', 'Localization (i18n) - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Localization (i18n)</h1>
+
+<p>Strav provides a full localization module with per-request locale detection, translation key resolution with fallback chains, interpolation, pluralization, and integration with views and validation.</p>
+
+<h2>Setup</h2>
+
+<h3>1. Configuration</h3>
+
+Create <code>config/i18n.ts</code>:
+
+<pre><code class="language-typescript">export default {
+  default: 'en',
+  fallback: 'en',
+  supported: ['en', 'fr', 'es'],
+  directory: 'lang',
+  detect: ['query', 'cookie', 'header'],
+}
+</code></pre>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>default</code></td>
+      <td>Default locale when no detection matches</td>
+    </tr>
+    <tr>
+      <td><code>fallback</code></td>
+      <td>Fallback locale when a key is missing in the current locale</td>
+    </tr>
+    <tr>
+      <td><code>supported</code></td>
+      <td>List of supported locale codes</td>
+    </tr>
+    <tr>
+      <td><code>directory</code></td>
+      <td>Path to the <code>lang/</code> directory (relative to cwd)</td>
+    </tr>
+    <tr>
+      <td><code>detect</code></td>
+      <td>Detection strategies, tried in order: <code>query</code>, <code>cookie</code>, <code>header</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>2. Bootstrap</h3>
+
+<h4>Using a service provider (recommended)</h4>
+
+<pre><code class="language-typescript">import { I18nProvider } from '@strav/kernel'
+
+app.use(new I18nProvider())
+</code></pre>
+
+The <code>I18nProvider</code> registers <code>I18nManager</code> as a singleton and calls <code>load()</code> to read translation files. It depends on the <code>config</code> provider.
+
+<p>Then add the middleware and template globals:</p>
+
+<pre><code class="language-typescript">import { t, choice, locale } from '@strav/kernel'
+import { i18n } from '@strav/http'
+import { ViewEngine } from '@strav/view'
+
+ViewEngine.setGlobal('t', t)
+ViewEngine.setGlobal('choice', choice)
+ViewEngine.setGlobal('locale', locale)
+
+router.use(i18n())
+</code></pre>
+
+<h4>Manual setup</h4>
+
+<pre><code class="language-typescript">import { I18nManager, t, choice, locale } from '@strav/kernel'
+import { i18n } from '@strav/http'
+import { ViewEngine } from '@strav/view'
+
+app.singleton(I18nManager)
+app.resolve(I18nManager)
+await I18nManager.load()
+
+ViewEngine.setGlobal('t', t)
+ViewEngine.setGlobal('choice', choice)
+ViewEngine.setGlobal('locale', locale)
+
+router.use(i18n())
+</code></pre>
+
+<h3>3. Translation Files</h3>
+
+<p>Create JSON files organized by locale and namespace:</p>
+
+<pre><code>lang/
+├── en/
+│   ├── auth.json
+│   ├── messages.json
+│   └── validation.json
+└── fr/
+    ├── auth.json
+    ├── messages.json
+    └── validation.json
+</code></pre>
+
+Each JSON file becomes a namespace. For example, <code>lang/en/auth.json</code>:
+
+<pre><code class="language-json">{
+  "failed": "Invalid credentials.",
+  "throttle": "Too many login attempts. Please try again in :seconds seconds."
+}
+</code></pre>
+
+Access these keys with dot notation: <code>t('auth.failed')</code>, <code>t('auth.throttle', { seconds: 60 })</code>.
+
+<p>Nested keys are supported:</p>
+
+<pre><code class="language-json">{
+  "min": {
+    "number": "Must be at least :min",
+    "string": "Must be at least :min characters"
+  }
+}
+</code></pre>
+
+Access: <code>t('validation.min.number', { min: 5 })</code>.
+
+<h2>Usage</h2>
+
+<h3><code>t()</code> — Translate a Key</h3>
+
+<pre><code class="language-typescript">import { t } from '@strav/kernel'
+
+t('auth.failed')                           // "Invalid credentials."
+t('messages.welcome', { name: 'Alice' })   // "Welcome, Alice!"
+</code></pre>
+
+Works everywhere — controllers, services, middleware, validation — because it reads the locale from <code>AsyncLocalStorage</code>.
+
+<h3><code>choice()</code> — Pluralization</h3>
+
+Translation strings use <code>|</code> to separate plural forms:
+
+<pre><code class="language-json">{
+  "apple": "one apple|:count apples"
+}
+</code></pre>
+
+<pre><code class="language-typescript">import { choice } from '@strav/kernel'
+
+choice('messages.apple', 1)   // "one apple"
+choice('messages.apple', 5)   // "5 apples"
+choice('messages.apple', 0)   // "0 apples"
+</code></pre>
+
+Uses <code>Intl.PluralRules</code> for locale-aware pluralization. Languages with more than 2 forms (e.g., Arabic) can use up to 6 segments mapped to: <code>zero|one|two|few|many|other</code>.
+
+The <code>:count</code> replacement is injected automatically.
+
+<h3><code>locale()</code> — Current Locale</h3>
+
+<pre><code class="language-typescript">import { locale } from '@strav/kernel'
+
+locale()  // 'en' (or the detected request locale)
+</code></pre>
+
+<h2>Locale Detection</h2>
+
+The <code>i18n()</code> middleware detects the locale per-request using the strategies configured in <code>detect</code>, tried in order:
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Strategy</th>
+      <th>Source</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>query</code></td>
+      <td><code>?lang=fr</code> or <code>?locale=fr</code> query parameter</td>
+    </tr>
+    <tr>
+      <td><code>cookie</code></td>
+      <td><code>locale</code> cookie</td>
+    </tr>
+    <tr>
+      <td><code>header</code></td>
+      <td><code>Accept-Language</code> header (parsed, sorted by q-value, matched against <code>supported</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+If no strategy matches, falls back to <code>config.default</code>.
+
+<h2>View Templates</h2>
+
+<code>t()</code>, <code>choice()</code>, and <code>locale()</code> are automatically available as globals in <code>.strav</code> templates:
+
+<pre><code class="language-strav"><html lang="{{ locale() }}">
+<body>
+  <h1>{{ t('messages.welcome', { name: user.name }) }}</h1>
+  <p>{{ choice('messages.items', items.length) }}</p>
+</body>
+</html>
+</code></pre>
+
+<h3>Vue Islands</h3>
+
+<p>Pass translated strings as props:</p>
+
+<pre><code class="language-strav"><vue:counter :label="{{ t('components.counter_label') }}" />
+</code></pre>
+
+<p>For components that need many translations, pass a translations object:</p>
+
+<pre><code class="language-strav"><vue:form :translations="{{ JSON.stringify({
+  submit: t('form.submit'),
+  cancel: t('form.cancel'),
+}) }}" />
+</code></pre>
+
+<h2>Validation Integration</h2>
+
+All validation rules use <code>t()</code> internally. When i18n is configured, validation messages are translated to the current locale. Without i18n, they return hardcoded English defaults — no configuration required for English-only apps.
+
+To customize validation messages, create <code>lang/en/validation.json</code> (or any locale):
+
+<pre><code class="language-json">{
+  "required": "This field is required",
+  "string": "Must be a string",
+  "integer": "Must be an integer",
+  "number": "Must be a number",
+  "boolean": "Must be a boolean",
+  "min": {
+    "number": "Must be at least :min",
+    "string": "Must be at least :min characters"
+  },
+  "max": {
+    "number": "Must be at most :max",
+    "string": "Must be at most :max characters"
+  },
+  "email": "Must be a valid email address",
+  "url": "Must be a valid URL",
+  "regex": "Invalid format",
+  "enum": "Must be one of: :values",
+  "array": "Must be an array"
+}
+</code></pre>
+
+<h2>Interpolation</h2>
+
+Replacements use <code>:name</code> syntax:
+
+<pre><code class="language-json">{ "welcome": "Welcome, :name! You have :count new messages." }
+</code></pre>
+
+<pre><code class="language-typescript">t('messages.welcome', { name: 'Alice', count: 5 })
+// "Welcome, Alice! You have 5 new messages."
+</code></pre>
+
+<h2>Fallback Chain</h2>
+
+When a key is missing in the current locale, the system tries the <code>fallback</code> locale (typically <code>en</code>). If still missing, it returns the raw key.
+
+<pre><code>1. Try requested locale (e.g., 'fr')
+<li>Try fallback locale (e.g., 'en')</li>
+<li>Return the key itself (e.g., 'auth.failed')</li>
+</code></pre>
+
+<h2>Runtime Registration</h2>
+
+<p>For testing or dynamic loading:</p>
+
+<pre><code class="language-typescript">import { I18nManager } from '@strav/kernel'
+
+I18nManager.register('en', {
+  custom: { greeting: 'Hello from runtime!' },
+})
+
+t('custom.greeting')  // "Hello from runtime!"
+</code></pre>
+
+<h2>Testing</h2>
+
+The <code>t()</code> helper works without any setup — it falls back to English validation defaults for <code>validation.*</code> keys and returns the raw key for everything else. No need to configure i18n for tests unless you're testing localization itself.
+
+<p>To test locale-specific behavior:</p>
+
+<pre><code class="language-typescript">import { localeStorage, t, I18nManager } from '@strav/kernel'
+
+// Register translations
+I18nManager.register('fr', {
+  messages: { hello: 'Bonjour' },
+})
+
+// Run in a locale context
+await localeStorage.run('fr', async () => {
+  expect(t('messages.hello')).toBe('Bonjour')
+})
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

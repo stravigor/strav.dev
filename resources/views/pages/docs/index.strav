@@ -1,0 +1,86 @@
+@layout('layouts/app')
+
+@section('content')
+<div class="docs-hub">
+  <div class="docs-header">
+    <h1>Strav Documentation</h1>
+    <p class="lead">
+      Comprehensive guides and references for building modern applications with the Strav framework.
+      A modular, AI-first backend framework built for Bun runtime.
+    </p>
+
+    <div class="quick-links">
+      <a href="/docs/quick-start-guide" class="btn btn-primary">Get Started →</a>
+      <a href="/docs/dependency-injection-container" class="btn btn-outline">Core Concepts</a>
+      <a href="https://github.com/stravigor/strav" target="_blank" class="btn btn-outline">GitHub</a>
+    </div>
+  </div>
+
+  <div class="docs-categories">
+    <div class="category-card">
+      <h2>Getting Started</h2>
+      <p>Quick start guide, installation, and initial configuration.</p>
+      <ul>
+        <li><a href="/docs/quick-start-guide">Quick Start Guide</a></li>
+        <li><a href="/docs/installation-guide">Installation Guide</a></li>
+        <li><a href="/docs/configuration-guide">Configuration Guide</a></li>
+      </ul>
+    </div>
+
+    <div class="category-card">
+      <h2>Core Framework</h2>
+      <p>Foundation modules: DI container, HTTP routing, database, and views.</p>
+      <ul>
+        <li><a href="/docs/dependency-injection-container">Dependency Injection Container</a></li>
+        <li><a href="/docs/routing-middleware">Routing & Middleware</a></li>
+        <li><a href="/docs/database-connections">Database Connections</a></li>
+        <li><a href="/docs/state-machines">State Machines</a></li>
+      </ul>
+    </div>
+
+    <div class="category-card">
+      <h2>Developer Tools</h2>
+      <p>CLI commands, code generators, testing utilities, and Spring generator.</p>
+      <ul>
+        <li><a href="/docs/spring-code-generator">Spring Code Generator</a></li>
+        <li><a href="/docs/command-line-interface">Command Line Interface</a></li>
+        <li><a href="/docs/code-generators">Code Generators</a></li>
+        <li><a href="/docs/testing-framework">Testing Framework</a></li>
+      </ul>
+    </div>
+
+    <div class="category-card">
+      <h2>Features</h2>
+      <p>Authentication, queues, mail, search, workflows, and more.</p>
+      <ul>
+        <li><a href="/docs/user-authentication">User Authentication</a></li>
+        <li><a href="/docs/oauth2-server">OAuth2 Server</a></li>
+        <li><a href="/docs/job-queue-management">Job Queue Management</a></li>
+        <li><a href="/docs/full-text-search">Full-Text Search</a></li>
+      </ul>
+    </div>
+
+    <div class="category-card">
+      <h2>AI</h2>
+      <p>AI integration, model context protocol, and RAG capabilities.</p>
+      <ul>
+        <li><a href="/docs/ai-brain-core">AI Brain Core</a></li>
+        <li><a href="/docs/model-context-protocol">Model Context Protocol</a></li>
+        <li><a href="/docs/retrieval-augmented-generation">Retrieval Augmented Generation</a></li>
+      </ul>
+    </div>
+
+    <div class="category-card">
+      <h2>State Management</h2>
+      <p>State machines and workflow automation for managing complex business processes.</p>
+      <ul>
+        <li><a href="/docs/state-machines">State Machines</a></li>
+        <li><a href="/docs/workflow-automation">Workflow Automation</a></li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+
+@end

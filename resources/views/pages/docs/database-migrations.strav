@@ -1,0 +1,237 @@
+@layout('layouts/docs')
+
+@set('title', 'Schema - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Schema</h1>
+
+<p>The schema module lets you define your data models using a TypeScript DSL. Schemas are the single source of truth — they drive migrations, code generation, and database introspection.</p>
+
+<h2>Defining a schema</h2>
+
+<pre><code class="language-typescript">// database/schemas/user.ts
+import { defineSchema, t, Archetype } from '@strav/database'
+
+export default defineSchema('user', {
+  archetype: Archetype.Entity,
+  fields: {
+    id: t.uuid().primaryKey(),
+    username: t.string(),
+    role: t.enum(['user', 'admin', 'staff', 'visitor']).default('user'),
+  },
+})
+</code></pre>
+
+<p>Every schema has:</p>
+<ul>
+<li>A <strong>name</strong> (snake_case, becomes the table name).</li>
+<li>An <strong>archetype</strong> that determines behavior (timestamps, soft deletes, etc.).</li>
+<li>A <strong>fields</strong> object using the type builder <code>t</code>.</li>
+</ul>
+
+<h2>Archetypes</h2>
+
+<p>Strav defines 8 archetypes, each with specific timestamp rules:</p>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Archetype</th>
+      <th>Timestamps</th>
+      <th>Soft delete</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>entity</code></td>
+      <td>created_at, updated_at</td>
+      <td>yes (deleted_at)</td>
+      <td>Top-level domain objects</td>
+    </tr>
+    <tr>
+      <td><code>component</code></td>
+      <td>created_at, updated_at</td>
+      <td>yes</td>
+      <td>Belongs to a parent entity</td>
+    </tr>
+    <tr>
+      <td><code>attribute</code></td>
+      <td>created_at, updated_at</td>
+      <td>yes</td>
+      <td>Dependent data on an entity</td>
+    </tr>
+    <tr>
+      <td><code>association</code></td>
+      <td>created_at</td>
+      <td>no</td>
+      <td>Pivot table between entities</td>
+    </tr>
+    <tr>
+      <td><code>event</code></td>
+      <td>created_at</td>
+      <td>no</td>
+      <td>Immutable event records</td>
+    </tr>
+    <tr>
+      <td><code>reference</code></td>
+      <td>created_at, updated_at</td>
+      <td>no</td>
+      <td>Lookup/reference data</td>
+    </tr>
+    <tr>
+      <td><code>configuration</code></td>
+      <td>created_at, updated_at</td>
+      <td>no</td>
+      <td>System configuration</td>
+    </tr>
+    <tr>
+      <td><code>contribution</code></td>
+      <td>created_at, updated_at</td>
+      <td>yes</td>
+      <td>User-contributed content</td>
+    </tr>
+  </tbody>
+</table>
+
+Dependent archetypes (<code>component</code>, <code>attribute</code>, <code>event</code>, <code>configuration</code>, <code>contribution</code>) automatically receive foreign keys to their parents:
+
+<pre><code class="language-typescript">import { defineSchema, t, Archetype } from '@strav/database'
+
+export default defineSchema('profile', {
+  archetype: Archetype.Attribute,
+  parents: ['user'],           // adds user_pid FK automatically
+  fields: {
+    name: t.string(),
+    reviewer: t.reference('user'),
+  },
+})
+</code></pre>
+
+<h2>Type builder</h2>
+
+The <code>t</code> object provides fluent type definitions for all PostgreSQL types:
+
+<h3>Common types</h3>
+
+<pre><code class="language-typescript">t.string()           // varchar(255)
+t.text()             // text (unlimited)
+t.integer()          // 4-byte integer
+t.bigint()           // 8-byte integer
+t.serial()           // auto-incrementing integer
+t.boolean()          // true/false
+t.uuid()             // UUID
+t.ulid()             // ULID (stored as char(26))
+t.timestamp()        // timestamp without timezone
+t.timestamptz()      // timestamp with timezone
+t.date()             // calendar date
+t.json()             // JSON
+t.jsonb()            // binary JSON
+t.decimal(10, 2)     // exact numeric
+</code></pre>
+
+<h3>Modifiers</h3>
+
+<pre><code class="language-typescript">t.string()
+  .required()        // NOT NULL
+  .unique()          // UNIQUE constraint
+  .default('hello')  // DEFAULT value
+  .index()           // create an index
+  .primaryKey()      // mark as primary key
+  .nullable()        // explicitly nullable (default)
+</code></pre>
+
+<h3>Validation modifiers</h3>
+
+<pre><code class="language-typescript">t.string()
+  .email()           // email format
+  .url()             // URL format
+  .min(3)            // minimum length/value
+  .max(100)          // maximum length/value
+  .regex(/^[a-z]+$/) // pattern match
+  .length(10)        // exact length
+</code></pre>
+
+<h3>References</h3>
+
+<pre><code class="language-typescript">t.reference('user')  // creates a foreign key to the user table
+</code></pre>
+
+<h3>Enums</h3>
+
+<pre><code class="language-typescript">t.enum(['user', 'admin', 'staff'])  // PostgreSQL enum type
+</code></pre>
+
+<h2>Associations (many-to-many)</h2>
+
+Define a pivot table between two entities using <code>defineAssociation</code>:
+
+<pre><code class="language-typescript">// database/schemas/team_member.ts
+import { defineAssociation, t } from '@strav/database'
+
+export default defineAssociation(['team', 'user'], {
+  as: { team: 'members', user: 'teams' },  // relationship names
+  fields: {
+    name: t.string(),         // extra pivot columns
+    description: t.text(),
+  },
+})
+</code></pre>
+
+This creates a <code>team_user</code> pivot table with foreign keys to both entities, plus any extra fields you define. The <code>as</code> option names the relationship on each side (used by the model generator for <code>@associate</code> decorators).
+
+<h2>ULIDs (Universally Unique Lexicographically Sortable Identifiers)</h2>
+
+<p>ULIDs are a sortable alternative to UUIDs. They contain a timestamp component and are lexicographically sortable:</p>
+
+<pre><code class="language-typescript">// In schema definition
+export default defineSchema('user', {
+  archetype: Archetype.Entity,
+  fields: {
+    id: t.ulid().primaryKey(),  // ULID as primary key
+    email: t.varchar().email(),
+  },
+})
+</code></pre>
+
+<p>ULIDs are:</p>
+<ul>
+<li>26 characters long (stored as <code>char(26)</code>)</li>
+<li>Lexicographically sortable (time-ordered)</li>
+<li>Cryptographically secure</li>
+<li>Auto-generated on insert if not provided</li>
+</ul>
+
+<p>You can also generate ULIDs manually:</p>
+
+<pre><code class="language-typescript">import { ulid, isUlid } from '@strav/kernel'
+
+const id = ulid()  // e.g., "01HQVB2YKQF5JZRJ8E9QKQHQWR"
+console.log(isUlid(id))  // true
+</code></pre>
+
+<h2>Schema Registry</h2>
+
+The <code>SchemaRegistry</code> discovers, validates, and resolves schemas:
+
+<pre><code class="language-typescript">import { SchemaRegistry } from '@strav/database'
+
+const registry = new SchemaRegistry()
+await registry.discover('database/schemas')  // finds all schema files
+registry.validate()                          // checks for errors
+
+const schemas = registry.resolve()           // returns schemas in dependency order
+const representation = registry.buildRepresentation()  // full DB representation
+</code></pre>
+
+The registry handles dependency ordering — if <code>profile</code> depends on <code>user</code>, it ensures <code>user</code> is resolved first.
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

@@ -1,0 +1,435 @@
+@layout('layouts/docs')
+
+@set('title', 'HTTP Routing & Middleware - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+  <h1>HTTP Routing & Middleware</h1>
+
+  <p>The HTTP module provides routing, middleware, request/response helpers, and a Bun.serve() wrapper with WebSocket support.</p>
+
+  <h2>Quick Start</h2>
+
+  <pre><code class="language-typescript">import { router } from '@strav/http'
+
+router.get('/health', (ctx) => ctx.json({ status: 'ok' }))
+
+router.group({ prefix: '/api' }, (r) => {
+  r.get('/users', listUsers)
+  r.post('/users', createUser)
+  r.get('/users/:id', showUser)
+})</code></pre>
+
+  <p>The <code>router</code> is a singleton resolved from the DI container — import it directly from <code>'@strav/http'</code>.</p>
+
+  <h2>Context</h2>
+
+  <p>Every handler receives a <code>Context</code> — the single object you interact with for reading the request and building a response.</p>
+
+  <h3>Request Helpers</h3>
+
+  <pre><code class="language-typescript">router.get('/search', async (ctx) => {
+  ctx.method                    // 'GET'
+  ctx.path                      // '/search'
+  ctx.params.id                 // route params (from :id patterns)
+  ctx.query.get('q')            // query string params
+  ctx.header('Authorization')   // read a header
+  ctx.cookie('session_id')      // read a cookie by name
+  ctx.subdomain                 // extracted from Host header
+  ctx.request                   // the raw Bun Request (always accessible)
+
+  const data = await ctx.body<{ name: string }>()  // auto-parse JSON/form/text
+})</code></pre>
+
+  <p>Body parsing detects the content type automatically:</p>
+  <ul>
+    <li><code>application/json</code> — parsed as JSON.</li>
+    <li><code>multipart/form-data</code> / <code>application/x-www-form-urlencoded</code> — parsed as FormData.</li>
+    <li>Everything else — returned as text.</li>
+  </ul>
+
+  <p>The body is cached, so calling <code>ctx.body()</code> multiple times is safe.</p>
+
+  <h3>Query String</h3>
+
+  <p>Read query parameters with typed defaults:</p>
+
+  <pre><code class="language-typescript">ctx.qs('page')          // string | null
+ctx.qs('page', 1)       // number (parsed, falls back to default if invalid/missing)
+ctx.qs('search', '')    // string</code></pre>
+
+  <h3>Form Inputs</h3>
+
+  <p>Extract string fields from a form body. Avoids repetitive <code>form.get('x') as string ?? ''</code> casting:</p>
+
+  <pre><code class="language-typescript">const { name, email, password } = await ctx.inputs('name', 'email', 'password')
+// All values are strings, '' if missing</code></pre>
+
+  <p>With no arguments, returns all non-file fields:</p>
+
+  <pre><code class="language-typescript">const allFields = await ctx.inputs()</code></pre>
+
+  <h3>File Uploads</h3>
+
+  <p>Extract file fields from a form body:</p>
+
+  <pre><code class="language-typescript">const { avatar } = await ctx.files('avatar')
+// avatar is File | null</code></pre>
+
+  <p>With no arguments, returns all file fields:</p>
+
+  <pre><code class="language-typescript">const allFiles = await ctx.files()</code></pre>
+
+  <p>For validated uploads with size/type checks, see the <a href="/docs/core/kernel/storage">Storage</a> guide.</p>
+
+  <h3>Response Helpers</h3>
+
+  <p>Every method returns a standard <code>Response</code>:</p>
+
+  <pre><code class="language-typescript">ctx.json({ users: [] })              // 200 JSON
+ctx.json({ error: 'nope' }, 404)     // custom status
+ctx.text('hello')                    // 200 plain text
+ctx.html('<h1>Hi</h1>')             // 200 HTML
+ctx.redirect('/login')               // 302 redirect
+ctx.redirect('/login', 301)          // custom status
+
+ctx.setHeader('X-Custom', 'value')   // set response header
+ctx.setCookie('token', value, { httpOnly: true, maxAge: 3600 })
+
+ctx.stream(readableStream)           // stream response
+ctx.file('./public/image.png')       // serve static file
+ctx.download('./report.pdf', 'report-2024.pdf')  // force download
+
+ctx.view('users/index', { users })   // render template</code></pre>
+
+  <h2>Route Definition</h2>
+
+  <h3>Basic Routes</h3>
+
+  <pre><code class="language-typescript">router.get('/users', handler)
+router.post('/users', handler)
+router.put('/users/:id', handler)
+router.patch('/users/:id', handler)
+router.delete('/users/:id', handler)
+router.head('/resource', handler)
+router.options('/resource', handler)</code></pre>
+
+  <h3>Route Parameters</h3>
+
+  <p>Dynamic segments are captured as params:</p>
+
+  <pre><code class="language-typescript">router.get('/users/:id', (ctx) => {
+  const userId = ctx.params.id
+})
+
+// Optional parameters
+router.get('/posts/:slug?', (ctx) => {
+  const slug = ctx.params.slug || 'index'
+})
+
+// Wildcard (captures rest of path)
+router.get('/files/*', (ctx) => {
+  const filepath = ctx.params['*']
+})</code></pre>
+
+  <h3>Route Groups</h3>
+
+  <p>Group routes with shared prefix and middleware:</p>
+
+  <pre><code class="language-typescript">router.group({ prefix: '/api/v1', middleware: [auth()] }, (r) => {
+  r.get('/profile', getProfile)
+  r.put('/profile', updateProfile)
+
+  r.group({ prefix: '/admin', middleware: [admin()] }, (r) => {
+    r.get('/users', listUsers)
+    r.delete('/users/:id', deleteUser)
+  })
+})</code></pre>
+
+  <h3>Controller Routes</h3>
+
+  <p>Use controller classes with automatic DI resolution:</p>
+
+  <pre><code class="language-typescript">// Tuple syntax: [Controller, method]
+router.get('/users', [UserController, 'index'])
+router.post('/users', [UserController, 'store'])
+router.get('/users/:id', [UserController, 'show'])
+router.put('/users/:id', [UserController, 'update'])
+router.delete('/users/:id', [UserController, 'destroy'])
+
+// Resource shorthand (generates all RESTful routes)
+router.resource('/posts', PostController)
+// Generates:
+// GET    /posts           → index
+// GET    /posts/create    → create
+// POST   /posts           → store
+// GET    /posts/:id       → show
+// GET    /posts/:id/edit  → edit
+// PUT    /posts/:id       → update
+// DELETE /posts/:id       → destroy</code></pre>
+
+  <h2>Middleware</h2>
+
+  <p>Middleware are functions that run before your handler. They can modify the context, perform authentication, log requests, etc.</p>
+
+  <h3>Writing Middleware</h3>
+
+  <pre><code class="language-typescript">import type { Context, Next } from '@strav/http'
+
+async function logger(ctx: Context, next: Next) {
+  const start = Date.now()
+
+  await next()  // Call next middleware/handler
+
+  const ms = Date.now() - start
+  console.log(`${ctx.method} ${ctx.path} - ${ms}ms`)
+}
+
+async function requireAuth(ctx: Context, next: Next) {
+  if (!ctx.user) {
+    return ctx.json({ error: 'Unauthorized' }, 401)
+  }
+
+  await next()
+}</code></pre>
+
+  <h3>Applying Middleware</h3>
+
+  <pre><code class="language-typescript">// Global middleware (all routes)
+router.use(logger)
+router.use(cors())
+
+// Route-specific middleware
+router.get('/profile', [auth()], getProfile)
+router.post('/admin', [auth(), admin()], adminAction)
+
+// Group middleware
+router.group({ middleware: [auth()] }, (r) => {
+  r.get('/dashboard', getDashboard)
+  r.get('/settings', getSettings)
+})</code></pre>
+
+  <h3>Built-in Middleware</h3>
+
+  <pre><code class="language-typescript">import {
+  session,
+  auth,
+  csrf,
+  cors,
+  throttle,
+  validateRequest
+} from '@strav/http'
+
+// Session management
+router.use(session({
+  secret: 'your-secret-key',
+  maxAge: 86400, // 24 hours
+}))
+
+// Authentication (requires session)
+router.use(auth())
+
+// CSRF protection
+router.use(csrf())
+
+// CORS
+router.use(cors({
+  origin: 'https://app.example.com',
+  credentials: true,
+}))
+
+// Rate limiting
+router.post('/api/login', [throttle(5, 60)], login) // 5 attempts per minute
+
+// Request validation
+const createUserSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  age: z.number().min(18),
+})
+
+router.post('/users', [validateRequest(createUserSchema)], createUser)</code></pre>
+
+  <h2>Error Handling</h2>
+
+  <h3>Throwing Errors</h3>
+
+  <pre><code class="language-typescript">import { HttpException, NotFoundException, ValidationException } from '@strav/http'
+
+router.get('/users/:id', async (ctx) => {
+  const user = await findUser(ctx.params.id)
+
+  if (!user) {
+    throw new NotFoundException('User not found')
+  }
+
+  return ctx.json(user)
+})
+
+// Custom status code
+throw new HttpException('Payment required', 402)
+
+// Validation errors with details
+throw new ValidationException({
+  email: 'Email is required',
+  age: 'Must be 18 or older',
+})</code></pre>
+
+  <h3>Global Error Handler</h3>
+
+  <pre><code class="language-typescript">router.onError((error, ctx) => {
+  console.error(`Error handling ${ctx.method} ${ctx.path}:`, error)
+
+  if (error instanceof ValidationException) {
+    return ctx.json({
+      error: 'Validation failed',
+      details: error.errors
+    }, 422)
+  }
+
+  if (error instanceof HttpException) {
+    return ctx.json({ error: error.message }, error.status)
+  }
+
+  // Unexpected errors
+  return ctx.json({ error: 'Internal server error' }, 500)
+})</code></pre>
+
+  <h2>WebSocket Support</h2>
+
+  <pre><code class="language-typescript">router.ws('/chat', {
+  open(ws) {
+    console.log('Client connected')
+    ws.send('Welcome!')
+  },
+
+  message(ws, message) {
+    console.log('Received:', message)
+
+    // Broadcast to all clients
+    ws.publish('chat', message)
+  },
+
+  close(ws) {
+    console.log('Client disconnected')
+  }
+})
+
+// Client-side
+const ws = new WebSocket('ws://localhost:3000/chat')
+ws.onmessage = (event) => console.log(event.data)</code></pre>
+
+  <h2>Static Files</h2>
+
+  <pre><code class="language-typescript">// Serve static files from public directory
+router.static('/', './public')
+
+// With custom path prefix
+router.static('/assets', './public/assets')
+
+// With options
+router.static('/downloads', './files', {
+  maxAge: 3600,           // Cache for 1 hour
+  index: 'index.html',    // Default file
+  dotfiles: 'ignore',     // Hide dotfiles
+})</code></pre>
+
+  <h2>Advanced Patterns</h2>
+
+  <h3>Subdomain Routing</h3>
+
+  <pre><code class="language-typescript">router.get('/', (ctx) => {
+  switch (ctx.subdomain) {
+    case 'api':
+      return ctx.json({ version: '1.0' })
+    case 'admin':
+      return ctx.view('admin/dashboard')
+    default:
+      return ctx.view('home')
+  }
+})</code></pre>
+
+  <h3>Content Negotiation</h3>
+
+  <pre><code class="language-typescript">router.get('/users', async (ctx) => {
+  const users = await getUsers()
+
+  // Check Accept header
+  if (ctx.accepts('json')) {
+    return ctx.json(users)
+  }
+
+  if (ctx.accepts('html')) {
+    return ctx.view('users/index', { users })
+  }
+
+  if (ctx.accepts('xml')) {
+    return ctx.xml(usersToXml(users))
+  }
+
+  return ctx.text('Not Acceptable', 406)
+})</code></pre>
+
+  <h3>Streaming Responses</h3>
+
+  <pre><code class="language-typescript">router.get('/download/large-file', async (ctx) => {
+  const stream = new ReadableStream({
+    async start(controller) {
+      for (let i = 0; i < 1000000; i++) {
+        controller.enqueue(`Line ${i}\n`)
+
+        // Yield to prevent blocking
+        if (i % 1000 === 0) {
+          await Bun.sleep(0)
+        }
+      }
+      controller.close()
+    }
+  })
+
+  return ctx.stream(stream, {
+    headers: {
+      'Content-Type': 'text/plain',
+      'Content-Disposition': 'attachment; filename="data.txt"'
+    }
+  })
+})</code></pre>
+
+  <h2>Testing Routes</h2>
+
+  <pre><code class="language-typescript">import { test, expect } from 'bun:test'
+import { router } from '@strav/http'
+
+test('GET /health returns ok', async () => {
+  const response = await router.handle(
+    new Request('http://localhost/health')
+  )
+
+  expect(response.status).toBe(200)
+
+  const data = await response.json()
+  expect(data).toEqual({ status: 'ok' })
+})
+
+test('POST /users creates user', async () => {
+  const response = await router.handle(
+    new Request('http://localhost/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'John Doe',
+        email: 'john@example.com'
+      })
+    })
+  )
+
+  expect(response.status).toBe(201)
+})</code></pre>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <a href="/docs/core/kernel/core" class="prev">← Application & DI</a>
+    <a href="/docs/core/http/auth" class="next">Authentication →</a>
+  </div>
+</article>
+@end

@@ -1,0 +1,294 @@
+@layout('layouts/docs')
+
+@set('title', 'Session - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Session</h1>
+
+The session module provides a unified server-side session backed by a PostgreSQL database row and an HTTP-only cookie. A single <code>Session</code> class handles both anonymous visitors and authenticated users.
+
+<h2>Setup</h2>
+
+<h3>Using a service provider (recommended)</h3>
+
+<pre><code class="language-typescript">import { SessionProvider } from '@strav/http'
+
+app.use(new SessionProvider())
+</code></pre>
+
+The <code>SessionProvider</code> registers <code>SessionManager</code> as a singleton and creates the <code>_stravigor_sessions</code> table automatically. It depends on the <code>database</code> provider.
+
+<p>Options:</p>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ensureTable</code></td>
+      <td><code>true</code></td>
+      <td>Auto-create the sessions table</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Manual setup</h3>
+
+<pre><code class="language-typescript">import { SessionManager } from '@strav/http'
+
+app.singleton(SessionManager)
+app.resolve(SessionManager)
+await SessionManager.ensureTable()
+</code></pre>
+
+<h2>Configuration</h2>
+
+<pre><code class="language-typescript">// config/session.ts
+import { env } from '@strav/kernel'
+
+export default {
+  cookie: 'stravigor_session', // cookie name
+  lifetime: 120,               // minutes
+  httpOnly: true,
+  secure: env.bool('APP_SECURE', true),
+  sameSite: 'lax' as const,
+}
+</code></pre>
+
+<h2>session() middleware</h2>
+
+The <code>session()</code> middleware runs on every request and handles the full lifecycle:
+
+<li>Reads the session cookie and loads the session from the database.</li>
+<li>Creates a new anonymous session if absent or expired.</li>
+<li>Ages flash data so previous-request flash values are readable.</li>
+<li>Sets <code>ctx.get('session')</code> and <code>ctx.get('csrfToken')</code> for downstream handlers.</li>
+<li>After the handler: saves dirty data to DB and refreshes the cookie (sliding expiration).</li>
+
+<pre><code class="language-typescript">import { router } from '@strav/http'
+import { session } from '@strav/http'
+
+// Apply globally
+router.use(session())
+
+// Or per group
+router.group({ middleware: [session()] }, (r) => {
+  r.get('/cart', showCart)
+})
+</code></pre>
+
+<h2>Data bag</h2>
+
+<p>Store arbitrary key-value data in the session's JSONB column:</p>
+
+<pre><code class="language-typescript">import type { Session } from '@strav/http'
+
+router.post('/cart/add', async (ctx) => {
+  const s = ctx.get<Session>('session')
+  const { itemId } = await ctx.body<{ itemId: string }>()
+
+  const cart = s.get<string[]>('cart', [])
+  cart.push(itemId)
+  s.set('cart', cart)
+
+  return ctx.redirect('/cart')
+})
+</code></pre>
+
+<h3>Methods</h3>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>get<T>(key, default?)</code></td>
+      <td>Read a value (returns default if absent)</td>
+    </tr>
+    <tr>
+      <td><code>set(key, value)</code></td>
+      <td>Write a value (marks session dirty)</td>
+    </tr>
+    <tr>
+      <td><code>has(key)</code></td>
+      <td>Check if a key exists</td>
+    </tr>
+    <tr>
+      <td><code>forget(key)</code></td>
+      <td>Delete a key</td>
+    </tr>
+    <tr>
+      <td><code>flush()</code></td>
+      <td>Clear all data</td>
+    </tr>
+    <tr>
+      <td><code>all()</code></td>
+      <td>Return all user-facing data (excludes flash internals)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Data is only persisted to the database when the session is dirty (something was modified). Read-only requests incur no DB writes.</p>
+
+<h2>Flash data</h2>
+
+Flash data is available only on the <strong>next</strong> request — useful for success messages, error messages, and form validation feedback.
+
+<pre><code class="language-typescript">// Request 1: set flash
+s.flash('success', 'Item added to cart!')
+s.flash('errors', { email: 'Invalid email address' })
+
+// Request 2: read flash
+s.getFlash('success')    // 'Item added to cart!'
+s.hasFlash('success')    // true
+
+// Request 3: gone
+s.getFlash('success')    // undefined
+</code></pre>
+
+<h3>How it works</h3>
+
+Flash uses a two-bucket system (<code>_flash</code> and <code>_flash_old</code>). At the start of each request, the middleware calls <code>ageFlash()</code> which moves current flash to "old" (readable this request) and clears the current bucket. The old bucket is stripped before saving to the database, so stale flash data doesn't persist.
+
+<h2>Authentication</h2>
+
+The session supports optional user association. See the <a href="./auth.md">auth guide</a> for the full authentication flow.
+
+<pre><code class="language-typescript">// Login — associate a user with the session
+s.authenticate(user)      // accepts BaseModel instance or raw ID
+await s.regenerate()      // new session ID (prevents fixation attacks)
+
+// Check auth status
+s.isAuthenticated         // true if userId is set
+s.userId                  // string | null
+
+// Logout — clear user association
+s.clearUser()
+// Or destroy the session entirely:
+Session.destroy(ctx, ctx.redirect('/login'))
+</code></pre>
+
+<h2>Session lifecycle</h2>
+
+<h3>regenerate()</h3>
+
+<p>Creates a new session ID and CSRF token while preserving all data. Use after login to prevent session fixation attacks.</p>
+
+<pre><code class="language-typescript">await s.regenerate()
+</code></pre>
+
+<h3>save()</h3>
+
+Persists session data to the database using an upsert. No-op if the session hasn't been modified. Called automatically by the <code>session()</code> middleware after each request.
+
+<h3>touch()</h3>
+
+Updates only the <code>last_activity</code> timestamp without saving data. Called by the <code>auth()</code> middleware after authenticated requests.
+
+<h3>isExpired()</h3>
+
+Checks whether the session has exceeded the configured lifetime based on <code>last_activity</code>.
+
+<h3>destroy()</h3>
+
+<p>Deletes the session row from the database and clears the cookie:</p>
+
+<pre><code class="language-typescript">const response = ctx.redirect('/login')
+return Session.destroy(ctx, response)
+</code></pre>
+
+<h2>Garbage collection</h2>
+
+<p>Expired sessions remain in the database until cleaned up:</p>
+
+<pre><code class="language-typescript">import { SessionManager } from '@strav/http'
+
+const deleted = await SessionManager.gc()
+console.log(<code>Cleaned up ${deleted} expired sessions</code>)
+</code></pre>
+
+<p>Call this periodically via a cron job, CLI command, or timer.</p>
+
+<h2>Middleware stacks</h2>
+
+<pre><code>Anonymous:     session() → handler
+Auth:          session() → auth() → handler
+Auth + CSRF:   session() → auth() → csrf() → handler
+Login page:    session() → guest('/dashboard') → handler
+Login POST:    session() → csrf() → handler          (anonymous CSRF works!)
+</code></pre>
+
+<h2>Database table</h2>
+
+<strong>_stravigor_sessions</strong>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>id</td>
+      <td>UUID</td>
+      <td>Primary key</td>
+    </tr>
+    <tr>
+      <td>user_id</td>
+      <td>VARCHAR</td>
+      <td>Nullable — null for anonymous visitors</td>
+    </tr>
+    <tr>
+      <td>csrf_token</td>
+      <td>VARCHAR(64)</td>
+      <td>Random hex, one per session</td>
+    </tr>
+    <tr>
+      <td>data</td>
+      <td>JSONB</td>
+      <td>Arbitrary key-value data</td>
+    </tr>
+    <tr>
+      <td>ip_address</td>
+      <td>VARCHAR(45)</td>
+      <td>From X-Forwarded-For</td>
+    </tr>
+    <tr>
+      <td>user_agent</td>
+      <td>TEXT</td>
+      <td>From User-Agent header</td>
+    </tr>
+    <tr>
+      <td>last_activity</td>
+      <td>TIMESTAMPTZ</td>
+      <td>Updated on each request</td>
+    </tr>
+    <tr>
+      <td>created_at</td>
+      <td>TIMESTAMPTZ</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

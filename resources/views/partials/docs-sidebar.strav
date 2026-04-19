@@ -1,0 +1,132 @@
+<nav class="docs-sidebar">
+  <div class="sidebar-header">
+    <h3>Documentation</h3>
+    <a href="/docs" class="home-link">← Back to Docs Home</a>
+  </div>
+
+  <div class="sidebar-section">
+    <h4 class="section-title">Getting Started</h4>
+    <ul class="sidebar-links">
+      <li><a href="/docs/quick-start-guide">Quick Start Guide</a></li>
+      <li><a href="/docs/installation-guide">Installation Guide</a></li>
+      <li><a href="/docs/configuration-guide">Configuration Guide</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <h4 class="section-title">Core Framework</h4>
+
+    <div class="subsection">
+      <h5>Kernel</h5>
+      <ul class="sidebar-links">
+        <li><a href="/docs/dependency-injection-container">Dependency Injection Container</a></li>
+        <li><a href="/docs/application-configuration">Application Configuration</a></li>
+        <li><a href="/docs/caching-system">Caching System</a></li>
+        <li><a href="/docs/data-encryption">Data Encryption</a></li>
+        <li><a href="/docs/event-dispatcher">Event Dispatcher</a></li>
+        <li><a href="/docs/exception-handling">Exception Handling</a></li>
+        <li><a href="/docs/helper-functions">Helper Functions</a></li>
+        <li><a href="/docs/internationalization-localization">Internationalization & Localization</a></li>
+        <li><a href="/docs/logging-monitoring">Logging & Monitoring</a></li>
+        <li><a href="/docs/file-storage">File Storage</a></li>
+      </ul>
+    </div>
+
+    <div class="subsection">
+      <h5>HTTP</h5>
+      <ul class="sidebar-links">
+        <li><a href="/docs/routing-middleware">Routing & Middleware</a></li>
+        <li><a href="/docs/authentication-system">Authentication System</a></li>
+        <li><a href="/docs/session-management">Session Management</a></li>
+        <li><a href="/docs/form-validation">Form Validation</a></li>
+        <li><a href="/docs/authorization-policies">Authorization Policies</a></li>
+        <li><a href="/docs/view-rendering">View Rendering</a></li>
+      </ul>
+    </div>
+
+    <div class="subsection">
+      <h5>Database</h5>
+      <ul class="sidebar-links">
+        <li><a href="/docs/database-connections">Database Connections</a></li>
+        <li><a href="/docs/object-relational-mapping">Object Relational Mapping</a></li>
+        <li><a href="/docs/query-builder">Query Builder</a></li>
+        <li><a href="/docs/database-migrations">Database Migrations</a></li>
+        <li><a href="/docs/multi-domain-database">Multi-Domain Database</a></li>
+      </ul>
+    </div>
+
+    <div class="subsection">
+      <h5>View</h5>
+      <ul class="sidebar-links">
+        <li><a href="/docs/template-engine">Template Engine</a></li>
+        <li><a href="/docs/page-builder">Page Builder</a></li>
+      </ul>
+    </div>
+
+    <div class="subsection">
+      <h5>State Management</h5>
+      <ul class="sidebar-links">
+        <li><a href="/docs/state-machines">State Machines</a></li>
+        <li><a href="/docs/workflow-automation">Workflow Automation</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <h4 class="section-title">Features</h4>
+    <ul class="sidebar-links">
+      <li><a href="/docs/user-authentication">User Authentication</a></li>
+      <li><a href="/docs/oauth2-server">OAuth2 Server</a></li>
+      <li><a href="/docs/social-login-integration">Social Login Integration</a></li>
+      <li><a href="/docs/email-sending">Email Sending</a></li>
+      <li><a href="/docs/real-time-notifications">Real-Time Notifications</a></li>
+      <li><a href="/docs/websocket-broadcasting">WebSocket Broadcasting</a></li>
+      <li><a href="/docs/job-queue-management">Job Queue Management</a></li>
+      <li><a href="/docs/task-scheduling">Task Scheduling</a></li>
+      <li><a href="/docs/full-text-search">Full-Text Search</a></li>
+      <li><a href="/docs/feature-flags">Feature Flags</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <h4 class="section-title">Developer Tools</h4>
+    <ul class="sidebar-links">
+      <li><a href="/docs/spring-code-generator">Spring Code Generator</a></li>
+      <li><a href="/docs/command-line-interface">Command Line Interface</a></li>
+      <li><a href="/docs/code-generators">Code Generators</a></li>
+      <li><a href="/docs/testing-framework">Testing Framework</a></li>
+      <li><a href="/docs/faker-data-generation">Faker Data Generation</a></li>
+      <li><a href="/docs/developer-tools">Developer Tools</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <h4 class="section-title">AI & Machine Learning</h4>
+    <ul class="sidebar-links">
+      <li><a href="/docs/ai-brain-core">AI Brain Core</a></li>
+      <li><a href="/docs/model-context-protocol">Model Context Protocol</a></li>
+      <li><a href="/docs/retrieval-augmented-generation">Retrieval Augmented Generation</a></li>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <h4 class="section-title">Integrations</h4>
+    <ul class="sidebar-links">
+      <li><a href="/docs/stripe-payment-integration">Stripe Payment Integration</a></li>
+    </ul>
+  </div>
+</nav>
+
+<script>
+// Highlight active link in sidebar
+document.addEventListener('DOMContentLoaded', function() {
+  const currentPath = window.location.pathname;
+  const sidebarLinks = document.querySelectorAll('.sidebar-links a');
+
+  sidebarLinks.forEach(link => {
+    if (link.getAttribute('href') === currentPath) {
+      link.classList.add('active');
+    }
+  });
+});
+</script>

@@ -1,0 +1,160 @@
+@layout('layouts/docs')
+
+@set('title', 'Helpers - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Helpers</h1>
+
+<p>Utility functions used throughout the framework and available to application code.</p>
+
+<h2>env() — Environment variables</h2>
+
+Read environment variables with type safety. Bun automatically loads <code>.env</code> files, so all variables are available without any setup.
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+</code></pre>
+
+<h3>String values</h3>
+
+<pre><code class="language-typescript">env('APP_NAME')                // returns string, throws if not set
+env('APP_NAME', 'stravigor')   // returns string, falls back to default
+</code></pre>
+
+<h3>Nullable default</h3>
+
+Use <code>null</code> to get <code>string | null</code> instead of throwing when the variable is unset:
+
+<pre><code class="language-typescript">env('S3_ENDPOINT', null)   // string | null — returns null if unset
+</code></pre>
+
+<h3>Typed values</h3>
+
+<pre><code class="language-typescript">env.int('DB_PORT', 5432)       // parsed as integer
+env.float('TAX_RATE', 0.2)    // parsed as float
+env.bool('APP_DEBUG', false)   // true for 'true', '1', 'yes'
+</code></pre>
+
+All typed accessors throw if the variable is not set and no default is provided. If the variable exists but cannot be parsed (e.g., <code>env.int('NOT_A_NUMBER')</code>), the default is returned.
+
+<h2>config() — Configuration access</h2>
+
+<p>Access configuration values without manually resolving from the container. The helper lazily resolves and caches the Configuration instance.</p>
+
+<pre><code class="language-typescript">import { config } from '@strav/kernel'
+</code></pre>
+
+<h3>Basic usage</h3>
+
+<pre><code class="language-typescript">config('database.host')                  // returns value, uses Configuration.get()
+config('database.port', 5432)            // with default fallback
+config('app.name', 'My App')             // 'My App' if not set
+</code></pre>
+
+<h3>Typed values</h3>
+
+<pre><code class="language-typescript">config.int('app.port', 3000)            // parsed as integer
+config.float('cache.ratio', 0.75)       // parsed as float
+config.bool('app.debug', false)         // boolean conversion
+config.array('app.tags', [])            // ensures array type
+</code></pre>
+
+<h3>Additional methods</h3>
+
+<pre><code class="language-typescript">config.has('database.host')             // check if key exists
+config.set('app.debug', true)           // set value at runtime
+config.all()                            // get entire config tree
+</code></pre>
+
+The config helper provides the same simple access pattern as <code>env()</code> but for configuration values loaded from the <code>config/</code> directory. It requires the ConfigProvider to be registered with the app.
+
+<h2>String helpers</h2>
+
+<p>Case conversion functions for transforming between naming conventions.</p>
+
+<pre><code class="language-typescript">import { toSnakeCase, toCamelCase, toPascalCase } from '@strav/kernel'
+</code></pre>
+
+<h3>toSnakeCase</h3>
+
+<p>Converts camelCase or PascalCase to snake_case:</p>
+
+<pre><code class="language-typescript">toSnakeCase('firstName')    // 'first_name'
+toSnakeCase('OrderItem')    // 'order_item'
+toSnakeCase('HTMLParser')   // 'html_parser'
+toSnakeCase('already_snake') // 'already_snake' (no-op)
+</code></pre>
+
+<h3>toCamelCase</h3>
+
+<p>Converts snake_case to camelCase:</p>
+
+<pre><code class="language-typescript">toCamelCase('first_name')      // 'firstName'
+toCamelCase('created_at')      // 'createdAt'
+toCamelCase('order_event_type') // 'orderEventType'
+</code></pre>
+
+<h3>toPascalCase</h3>
+
+<p>Converts snake_case to PascalCase:</p>
+
+<pre><code class="language-typescript">toPascalCase('user_role')   // 'UserRole'
+toPascalCase('order_item')  // 'OrderItem'
+toPascalCase('user')        // 'User'
+</code></pre>
+
+<h3>pluralize</h3>
+
+<p>Naively pluralize an English word. Handles common suffixes:</p>
+
+<pre><code class="language-typescript">import { pluralize } from '@strav/kernel'
+
+pluralize('user')      // 'users'
+pluralize('category')  // 'categories'
+pluralize('status')    // 'statuses'
+pluralize('match')     // 'matches'
+</code></pre>
+
+<p>Used internally by the route generator to build URL paths from schema names.</p>
+
+<p>These helpers are used internally by the ORM (table names, column mapping) and the code generators.</p>
+
+<h2>Crypto</h2>
+
+<pre><code class="language-typescript">import { randomHex } from '@strav/kernel'
+</code></pre>
+
+<h3>randomHex</h3>
+
+<p>Generate a cryptographically random hex string of the given byte length:</p>
+
+<pre><code class="language-typescript">randomHex(16)   // 32-char hex string (16 bytes)
+randomHex(32)   // 64-char hex string (32 bytes)
+</code></pre>
+
+<p>Used internally for CSRF tokens and session IDs.</p>
+
+<h2>Identity</h2>
+
+<pre><code class="language-typescript">import { extractUserId } from '@strav/database'
+</code></pre>
+
+<h3>extractUserId</h3>
+
+<p>Extract a user ID from a BaseModel instance or a raw string/number:</p>
+
+<pre><code class="language-typescript">extractUserId(user)       // reads the primary key from a BaseModel instance
+extractUserId('abc-123')  // returns 'abc-123'
+extractUserId(42)         // returns '42'
+</code></pre>
+
+<p>Throws if the value is not a BaseModel, string, or number. Used internally by the session and auth modules.</p>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

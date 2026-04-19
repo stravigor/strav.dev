@@ -1,0 +1,765 @@
+@layout('layouts/docs')
+
+@set('title', 'OAuth2 - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>OAuth2</h1>
+
+The OAuth2 module (<code>@strav/oauth2</code>) turns your Strav application into a full OAuth2 authorization server. Third-party (and first-party) applications can obtain scoped access tokens via standard OAuth2 grants, and your users can issue personal access tokens for API usage.
+
+Supports <strong>Authorization Code + PKCE</strong> (RFC 7636), <strong>Client Credentials</strong>, <strong>Refresh Token rotation</strong>, <strong>Token Revocation</strong> (RFC 7009), and <strong>Token Introspection</strong> (RFC 7662).
+
+Built on top of the <a href="./auth.md">auth</a> and <a href="./session.md">session</a> modules from <code>@strav/http</code>.
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/oauth2
+bun strav install oauth2
+</code></pre>
+
+The <code>install</code> command copies four things into your project:
+
+<ul>
+<li><code>config/oauth2.ts</code> — token lifetimes, scopes, rate limits.</li>
+<li><code>database/schemas/oauth_client.ts</code>, <code>oauth_token.ts</code>, <code>oauth_auth_code.ts</code> — the three database schemas.</li>
+<li><code>actions/oauth2.ts</code> — the actions contract (how your User model works).</li>
+</ul>
+
+All files are yours to edit. If a file already exists, the command skips it (use <code>--force</code> to overwrite).
+
+<h2>Setup</h2>
+
+<h3>1. Implement the actions contract</h3>
+
+Edit <code>actions/oauth2.ts</code> and fill in the two required functions:
+
+<pre><code class="language-typescript">// actions/oauth2.ts
+import { defineActions } from '@strav/oauth2'
+import User from '../models/user'
+
+export default defineActions<User>({
+  async findById(id) {
+    return await User.find(id)
+  },
+
+  identifierOf(user) {
+    return user.email
+  },
+})
+</code></pre>
+
+The <code>defineActions<TUser>()</code> helper is a typed identity function — it provides full autocompletion and type safety.
+
+<p>Only two methods are required:</p>
+
+<p>| Method | Signature | Description |</p>
+<p>|--------|-----------|-------------|</p>
+| <code>findById</code> | <code>(id: string \| number) => Promise<TUser \| null></code> | Look up a user by primary key. Used to load the resource owner for token-protected routes. |
+| <code>identifierOf</code> | <code>(user: TUser) => string</code> | Return the user's display identifier. Shown on the consent screen for third-party clients. |
+
+<p>One method is optional:</p>
+
+<p>| Method | Signature | Description |</p>
+<p>|--------|-----------|-------------|</p>
+| <code>renderAuthorization</code> | <code>(ctx, client, scopes) => Promise<Response></code> | Render a custom consent screen for third-party clients. When omitted, the handler returns a JSON payload for SPA-based consent. |
+
+<h3>2. Register the provider</h3>
+
+<pre><code class="language-typescript">import { OAuth2Provider } from '@strav/oauth2'
+import actions from './actions/oauth2'
+
+app.use(new OAuth2Provider(actions))
+</code></pre>
+
+The <code>OAuth2Provider</code> depends on: <code>auth</code>, <code>session</code>, <code>encryption</code>, <code>database</code>. It registers <code>OAuth2Manager</code> as a singleton, creates the database tables, and registers all routes automatically.
+
+<h3>3. Run initial setup</h3>
+
+<pre><code class="language-bash">bun strav oauth2:setup
+</code></pre>
+
+This creates the OAuth2 tables and a default personal access client. Copy the printed client ID into <code>config/oauth2.ts</code>:
+
+<pre><code class="language-typescript">personalAccessClient: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+</code></pre>
+
+<h3>4. Create your first client</h3>
+
+<pre><code class="language-bash">bun strav oauth2:client --name "Mobile App" --redirect "myapp://callback" --public
+</code></pre>
+
+<p>Store the client secret securely — it is shown only once.</p>
+
+<h2>Configuration</h2>
+
+Edit <code>config/oauth2.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  // Token lifetimes (in minutes)
+  accessTokenLifetime: 60,            // 1 hour
+  refreshTokenLifetime: 43_200,       // 30 days
+  authCodeLifetime: 10,               // 10 minutes
+  personalAccessTokenLifetime: 525_600, // 1 year
+
+  // Route prefix for all OAuth2 endpoints
+  prefix: '/oauth',
+
+  // Available scopes
+  scopes: {
+    'read': 'Read access to your data',
+    'write': 'Write access to your data',
+    'repos:read': 'Read your repositories',
+    'repos:write': 'Create and update repositories',
+  },
+
+  // Scopes granted when none are explicitly requested
+  defaultScopes: [] as string[],
+
+  // Client ID for personal access tokens (created by oauth2:setup)
+  personalAccessClient: env('OAUTH2_PERSONAL_CLIENT') ?? null,
+
+  // Rate limiting
+  rateLimit: {
+    authorize: { max: 30, window: 60 },
+    token: { max: 20, window: 60 },
+  },
+
+  // Cleanup: delete revoked tokens older than this many days
+  pruneRevokedAfterDays: 7,
+}
+</code></pre>
+
+<h3>Configuration reference</h3>
+
+<p>| Key | Default | Description |</p>
+<p>|-----|---------|-------------|</p>
+| <code>accessTokenLifetime</code> | <code>60</code> | Access token lifetime in minutes. |
+| <code>refreshTokenLifetime</code> | <code>43200</code> | Refresh token lifetime in minutes (30 days). |
+| <code>authCodeLifetime</code> | <code>10</code> | Authorization code lifetime in minutes. |
+| <code>personalAccessTokenLifetime</code> | <code>525600</code> | Personal access token lifetime in minutes (1 year). |
+| <code>prefix</code> | <code>'/oauth'</code> | Route prefix for all OAuth2 endpoints. |
+| <code>routes.aliases.api</code> | <code>'oauth2.api'</code> | Route alias prefix for OAuth2 API endpoints. |
+| <code>routes.aliases.admin</code> | <code>'oauth2.admin'</code> | Route alias prefix for client management endpoints. |
+| <code>routes.subdomain</code> | <code>undefined</code> | Optional subdomain for routing (e.g., <code>'oauth'</code> for oauth.example.com). |
+| <code>scopes</code> | <code>{}</code> | Available scopes as <code>{ name: description }</code> pairs. |
+| <code>defaultScopes</code> | <code>[]</code> | Scopes granted when the client requests none. |
+| <code>personalAccessClient</code> | <code>null</code> | Client ID for personal access tokens. Created by <code>oauth2:setup</code>. |
+| <code>rateLimit.authorize</code> | <code>{ max: 30, window: 60 }</code> | Rate limit for the authorize endpoint. <code>window</code> is in seconds. |
+| <code>rateLimit.token</code> | <code>{ max: 20, window: 60 }</code> | Rate limit for the token endpoint. |
+| <code>pruneRevokedAfterDays</code> | <code>7</code> | Delete revoked tokens older than this many days during purge. |
+
+<h2>Routes</h2>
+
+All routes are registered automatically by <code>OAuth2Provider</code>. They are prefixed with <code>config.prefix</code> (<code>/oauth</code> by default) and organized into two groups with configurable aliases for easy route invocation.
+
+<h3>OAuth2 API routes (<code>oauth2.api</code> alias)</h3>
+
+<p>| Method | Path | Middleware | Route Name | Description |</p>
+<p>|--------|------|-----------|-----------|-------------|</p>
+| GET | <code>/oauth/authorize</code> | <code>auth()</code>, rate limit | <code>{api}.authorize</code> | Start authorization code flow |
+| POST | <code>/oauth/approve</code> | <code>auth()</code>, <code>csrf()</code> | <code>{api}.approve</code> | Approve or deny authorization |
+| POST | <code>/oauth/token</code> | rate limit | <code>{api}.token</code> | Exchange grant for tokens |
+| POST | <code>/oauth/revoke</code> | — | <code>{api}.revoke</code> | Revoke a token (RFC 7009) |
+| POST | <code>/oauth/introspect</code> | — | <code>{api}.introspect</code> | Introspect a token (RFC 7662) |
+
+<h3>Client management routes (<code>oauth2.admin</code> alias)</h3>
+
+<p>| Method | Path | Middleware | Route Name | Description |</p>
+<p>|--------|------|-----------|-----------|-------------|</p>
+| GET | <code>/oauth/clients</code> | <code>auth()</code> | <code>{admin}.clients</code> | List clients |
+| POST | <code>/oauth/clients</code> | <code>auth()</code> | <code>{admin}.create_client</code> | Create a client |
+| DELETE | <code>/oauth/clients/:id</code> | <code>auth()</code> | <code>{admin}.delete_client</code> | Delete a client |
+| POST | <code>/oauth/personal-tokens</code> | <code>auth()</code> | <code>{admin}.create_personal_token</code> | Create a personal access token |
+| GET | <code>/oauth/personal-tokens</code> | <code>auth()</code> | <code>{admin}.personal_tokens</code> | List personal access tokens |
+| DELETE | <code>/oauth/personal-tokens/:id</code> | <code>auth()</code> | <code>{admin}.revoke_personal_token</code> | Revoke a personal access token |
+
+Where <code>{api}</code> defaults to <code>oauth2.api</code> and <code>{admin}</code> defaults to <code>oauth2.admin</code>, but both can be customized in the configuration.
+
+<h3>Route configuration</h3>
+
+<p>Configure route prefixes, aliases, and subdomains in your OAuth2 config:</p>
+
+<pre><code class="language-typescript">// config/oauth2.ts
+export default {
+  prefix: '/oauth',
+  routes: {
+    aliases: {
+      api: 'oauth2.api',     // OAuth2 API endpoints
+      admin: 'oauth2.admin'  // Client management endpoints
+    },
+    subdomain: 'oauth'       // Optional: mount on oauth.example.com
+  }
+}
+</code></pre>
+
+<h4>Custom route aliases</h4>
+
+<p>Customize the route aliases to match your application's naming:</p>
+
+<pre><code class="language-typescript">// config/oauth2.ts
+export default {
+  routes: {
+    aliases: {
+      api: 'oauth',          // Routes named: oauth.authorize, oauth.token, etc.
+      admin: 'oauth.admin'   // Routes named: oauth.admin.clients, etc.
+    }
+  }
+}
+
+// Or for a multi-tenant app
+export default {
+  routes: {
+    aliases: {
+      api: 'api.oauth',      // Routes named: api.oauth.authorize, etc.
+      admin: 'admin.oauth'   // Routes named: admin.oauth.clients, etc.
+    }
+  }
+}
+</code></pre>
+
+<h3>Using named routes</h3>
+
+<p>With route aliases configured, you can use OAuth2 endpoints with the route helpers:</p>
+
+<pre><code class="language-typescript">import { route, routeUrl } from '@strav/http'
+
+// OAuth2 API calls
+const tokenResponse = await route('oauth2.api.token', {
+  grant_type: 'authorization_code',
+  code: 'auth_code_here',
+  redirect_uri: 'https://app.com/callback',
+  client_id: 'client_id',
+  client_secret: 'client_secret'
+})
+
+// Revoke a token
+await route('oauth2.api.revoke', { token: 'token_to_revoke' })
+
+// Introspect a token
+const introspection = await route('oauth2.api.introspect', {
+  token: 'token_to_check'
+})
+
+// Client management
+const clients = await route('oauth2.admin.clients')
+
+const newClient = await route('oauth2.admin.create_client', {
+  name: 'My Application',
+  redirect_uris: ['https://app.com/callback'],
+  scopes: ['read', 'write']
+})
+
+await route('oauth2.admin.delete_client', {
+  params: { id: 'client_id' }
+})
+
+// Personal access tokens
+const pat = await route('oauth2.admin.create_personal_token', {
+  name: 'CLI Tool',
+  scopes: ['read']
+})
+
+await route('oauth2.admin.revoke_personal_token', {
+  params: { id: 'token_id' }
+})
+
+// Generate URLs for OAuth2 flows
+const authUrl = routeUrl('oauth2.api.authorize', {
+  client_id: 'client123',
+  redirect_uri: 'https://app.com/callback',
+  scope: 'read write',
+  state: 'csrf_token',
+  code_challenge: 'challenge',
+  code_challenge_method: 'S256'
+})
+</code></pre>
+
+<p>This eliminates hardcoded URLs and provides type-safe, refactorable route references throughout your OAuth2 integrations.</p>
+
+<h2>Grant flows</h2>
+
+<h3>Authorization Code + PKCE</h3>
+
+<p>The standard flow for web and mobile apps. PKCE is required for public clients.</p>
+
+<h4>Step 1: Redirect the user</h4>
+
+<pre><code>GET /oauth/authorize?response_type=code
+  &amp;client_id=CLIENT_ID
+  &amp;redirect_uri=https://example.com/callback
+  &amp;scope=read write
+  &amp;state=random-csrf-string
+  &amp;code_challenge=BASE64URL_SHA256_HASH
+  &amp;code_challenge_method=S256
+</code></pre>
+
+For <strong>first-party clients</strong> (<code>firstParty: true</code>), consent is auto-approved and the user is redirected immediately with an authorization code.
+
+For <strong>third-party clients</strong>, the handler returns a JSON payload for SPA-based consent (or calls <code>renderAuthorization</code> if you provided one):
+
+<pre><code class="language-json">{
+  "authorization_required": true,
+  "client": { "id": "...", "name": "Third Party App" },
+  "scopes": [
+    { "name": "read", "description": "Read access to your data" },
+    { "name": "write", "description": "Write access to your data" }
+  ],
+  "state": "random-csrf-string"
+}
+</code></pre>
+
+<h4>Step 2: User approves</h4>
+
+<pre><code>POST /oauth/authorize
+Content-Type: application/json
+
+{ "approved": true }
+</code></pre>
+
+Redirects the user to <code>redirect_uri?code=AUTH_CODE&state=random-csrf-string</code>.
+
+<h4>Step 3: Exchange the code for tokens</h4>
+
+<pre><code>POST /oauth/token
+Content-Type: application/json
+
+{
+  "grant_type": "authorization_code",
+  "code": "AUTH_CODE",
+  "redirect_uri": "https://example.com/callback",
+  "client_id": "CLIENT_ID",
+  "client_secret": "CLIENT_SECRET",
+  "code_verifier": "ORIGINAL_RANDOM_STRING"
+}
+</code></pre>
+
+Confidential clients authenticate with <code>client_secret</code>. Public clients authenticate with <code>code_verifier</code> (PKCE).
+
+<p>Response:</p>
+
+<pre><code class="language-json">{
+  "access_token": "a1b2c3d4...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "e5f6g7h8...",
+  "scope": "read write"
+}
+</code></pre>
+
+<h3>Client Credentials</h3>
+
+<p>Machine-to-machine authentication with no user context.</p>
+
+<pre><code>POST /oauth/token
+Content-Type: application/json
+
+{
+  "grant_type": "client_credentials",
+  "client_id": "CLIENT_ID",
+  "client_secret": "CLIENT_SECRET",
+  "scope": "read"
+}
+</code></pre>
+
+<p>Requirements:</p>
+<ul>
+<li>Client must be confidential (has a secret).</li>
+<li><code>client_credentials</code> must be in the client's allowed <code>grantTypes</code>.</li>
+</ul>
+
+Response includes an access token but <strong>no refresh token</strong> and no user association.
+
+<h3>Refresh Token</h3>
+
+<p>Exchange a refresh token for a new access + refresh token pair. The old pair is revoked (rotation).</p>
+
+<pre><code>POST /oauth/token
+Content-Type: application/json
+
+{
+  "grant_type": "refresh_token",
+  "refresh_token": "e5f6g7h8...",
+  "client_id": "CLIENT_ID",
+  "client_secret": "CLIENT_SECRET",
+  "scope": "read"
+}
+</code></pre>
+
+<p>Scopes can be narrowed on refresh but not widened beyond the original grant.</p>
+
+<h3>Token Revocation (RFC 7009)</h3>
+
+<pre><code>POST /oauth/revoke
+Content-Type: application/json
+
+{ "token": "a1b2c3d4..." }
+</code></pre>
+
+Always returns <code>200</code> regardless of whether the token was found (per RFC 7009). Works with both access tokens and refresh tokens.
+
+<h3>Token Introspection (RFC 7662)</h3>
+
+<pre><code>POST /oauth/introspect
+Content-Type: application/json
+
+{ "token": "a1b2c3d4..." }
+</code></pre>
+
+<p>Response for a valid token:</p>
+
+<pre><code class="language-json">{
+  "active": true,
+  "scope": "read write",
+  "client_id": "CLIENT_ID",
+  "sub": "USER_ID",
+  "exp": 1700000000,
+  "iat": 1699996400
+}
+</code></pre>
+
+Returns <code>{ "active": false }</code> for invalid, expired, or revoked tokens.
+
+<h2>Personal access tokens</h2>
+
+<p>Users can create long-lived tokens for API access (like GitHub PATs).</p>
+
+<h3>Create</h3>
+
+<pre><code>POST /oauth/personal-tokens
+Authorization: Bearer <session-token>
+Content-Type: application/json
+
+{
+  "name": "CLI Tool",
+  "scopes": ["read", "write"]
+}
+</code></pre>
+
+<p>Response:</p>
+
+<pre><code class="language-json">{
+  "token": "a1b2c3d4...",
+  "accessToken": {
+    "id": "...",
+    "name": "CLI Tool",
+    "scopes": ["read", "write"],
+    "expires_at": "...",
+    "created_at": "..."
+  }
+}
+</code></pre>
+
+<p>> The plain-text token is shown only once. Store it securely.</p>
+
+<h3>List</h3>
+
+<pre><code>GET /oauth/personal-tokens
+</code></pre>
+
+<p>Returns all active personal access tokens for the authenticated user. Token hashes are never exposed.</p>
+
+<h3>Revoke</h3>
+
+<pre><code>DELETE /oauth/personal-tokens/:id
+</code></pre>
+
+<h2>Middleware</h2>
+
+<h3>oauth()</h3>
+
+Validate the <code>Authorization: Bearer <token></code> header, load the associated user, and set <code>oauth_token</code> and <code>oauth_client</code> on the context.
+
+<pre><code class="language-typescript">import { router } from '@strav/http'
+import { oauth } from '@strav/oauth2'
+
+router.group({ prefix: '/api', middleware: [oauth()] }, r => {
+  r.get('/me', ctx => {
+    const user = ctx.get('user')
+    return ctx.json({ user })
+  })
+})
+</code></pre>
+
+After <code>oauth()</code> runs, three values are available on the context:
+
+<p>| Key | Type | Description |</p>
+<p>|-----|------|-------------|</p>
+| <code>user</code> | <code>TUser</code> | The resource owner. Not set for <code>client_credentials</code> tokens. |
+| <code>oauth_token</code> | <code>OAuthTokenData</code> | The validated token metadata (scopes, expiry, etc.). |
+| <code>oauth_client</code> | <code>OAuthClientData</code> | The client that issued the token. |
+
+Returns <code>401</code> with <code>{ error: 'unauthenticated' }</code> if the header is missing, or <code>{ error: 'invalid_token' }</code> if the token is invalid, expired, or revoked.
+
+<h3>scopes(...required)</h3>
+
+Enforce that the token has specific scopes. Must be used after <code>oauth()</code>.
+
+<pre><code class="language-typescript">import { oauth, scopes } from '@strav/oauth2'
+import { compose } from '@strav/http'
+
+router.group({ prefix: '/api', middleware: [oauth()] }, r => {
+  r.get('/repos', compose([scopes('repos:read')], listRepos))
+  r.post('/repos', compose([scopes('repos:write')], createRepo))
+  r.delete('/repos/:id', compose([scopes('repos:read', 'repos:write')], deleteRepo))
+})
+</code></pre>
+
+Returns <code>403</code> with <code>{ error: 'insufficient_scope' }</code> and lists the missing scopes.
+
+<h2>Events</h2>
+
+Every significant action emits an event via the core <code>Emitter</code>:
+
+<pre><code class="language-typescript">import Emitter from '@strav/kernel'
+import { OAuth2Events } from '@strav/oauth2'
+
+Emitter.on(OAuth2Events.TOKEN_ISSUED, async ({ ctx, userId, clientId, grantType }) => {
+  console.log(<code>Token issued for user ${userId} via ${grantType}</code>)
+})
+
+Emitter.on(OAuth2Events.ACCESS_DENIED, async ({ ctx, clientId }) => {
+  console.log(<code>User denied access to client ${clientId}</code>)
+})
+</code></pre>
+
+<p>| Constant | Event string | Emitted when |</p>
+<p>|----------|-------------|--------------|</p>
+| <code>TOKEN_ISSUED</code> | <code>oauth2:token-issued</code> | An access token is issued (any grant) |
+| <code>TOKEN_REVOKED</code> | <code>oauth2:token-revoked</code> | A token is revoked |
+| <code>TOKEN_REFRESHED</code> | <code>oauth2:token-refreshed</code> | A token is refreshed (rotation) |
+| <code>CODE_ISSUED</code> | <code>oauth2:code-issued</code> | An authorization code is issued |
+| <code>CLIENT_CREATED</code> | <code>oauth2:client-created</code> | A new client is created |
+| <code>CLIENT_REVOKED</code> | <code>oauth2:client-revoked</code> | A client is soft-revoked |
+| <code>ACCESS_DENIED</code> | <code>oauth2:access-denied</code> | The user denies consent |
+
+<h2>oauth2 helper</h2>
+
+The <code>oauth2</code> helper provides a convenience API for common operations:
+
+<pre><code class="language-typescript">import { oauth2 } from '@strav/oauth2'
+
+// Client management
+const { client, plainSecret } = await oauth2.createClient({
+  name: 'My App',
+  redirectUris: ['https://example.com/callback'],
+})
+const clients = await oauth2.listClients()
+await oauth2.revokeClient(client.id)
+
+// Personal access tokens
+const { token, tokenData } = await oauth2.createPersonalToken(user, 'CLI Tool', ['read'])
+
+// Token operations
+await oauth2.revokeToken(tokenData.id)
+await oauth2.revokeAllFor(user)
+const data = await oauth2.validateToken(plainToken)
+
+// Scopes
+oauth2.defineScopes({ admin: 'Full admin access' })
+const descriptions = oauth2.scopeDescriptions(['read', 'write'])
+</code></pre>
+
+<p>| Method | Description |</p>
+<p>|--------|-------------|</p>
+| <code>createClient(data)</code> | Create a new OAuth client. Returns the client and plain-text secret. |
+| <code>findClient(id)</code> | Find a client by ID. |
+| <code>listClients()</code> | List all non-revoked clients. |
+| <code>revokeClient(id)</code> | Soft-revoke a client. |
+| <code>createPersonalToken(user, name, scopes?)</code> | Issue a personal access token. Token is shown once. |
+| <code>revokeToken(tokenId)</code> | Revoke a specific token by ID. |
+| <code>revokeAllFor(user)</code> | Revoke all tokens for a user. |
+| <code>defineScopes(scopes)</code> | Register additional scopes at runtime. |
+| <code>scopeDescriptions(names?)</code> | Get descriptions for scopes. Returns all if no names given. |
+| <code>validateToken(plainToken)</code> | Validate a plain-text token and return its data, or null. |
+
+<h2>CLI commands</h2>
+
+<h3>oauth2:setup</h3>
+
+<p>Create the OAuth2 tables and a default personal access client:</p>
+
+<pre><code class="language-bash">bun strav oauth2:setup
+</code></pre>
+
+<h3>oauth2:client</h3>
+
+<p>Create a new OAuth2 client:</p>
+
+<pre><code class="language-bash"><h1>Confidential client (default)</h1>
+bun strav oauth2:client --name "Web App" --redirect "https://app.com/callback"
+
+<h1>Public client (SPA / mobile)</h1>
+bun strav oauth2:client --name "Mobile App" --redirect "myapp://callback" --public
+
+<h1>First-party (skip consent)</h1>
+bun strav oauth2:client --name "Admin Dashboard" --redirect "https://admin.com/callback" --first-party
+
+<h1>Machine-to-machine</h1>
+bun strav oauth2:client --name "Worker Service" --credentials
+</code></pre>
+
+<p>| Flag | Description |</p>
+<p>|------|-------------|</p>
+| <code>--name <name></code> | Client name (required). |
+| <code>--redirect <uris...></code> | Redirect URIs. |
+| <code>--public</code> | Create a public (non-confidential) client. |
+| <code>--first-party</code> | Mark as a first-party client (skip consent screen). |
+| <code>--credentials</code> | Enable the <code>client_credentials</code> grant type. |
+
+<h3>oauth2:purge</h3>
+
+<p>Delete expired tokens and used authorization codes:</p>
+
+<pre><code class="language-bash">bun strav oauth2:purge
+bun strav oauth2:purge --days 30
+</code></pre>
+
+<h2>Clients</h2>
+
+<h3>Confidential vs. public</h3>
+
+<strong>Confidential clients</strong> have a secret and can authenticate with <code>client_id</code> + <code>client_secret</code>. Use for server-side apps.
+
+<strong>Public clients</strong> have no secret and must use PKCE for the authorization code flow. Use for SPAs and mobile apps.
+
+<h3>First-party vs. third-party</h3>
+
+<strong>First-party clients</strong> (<code>firstParty: true</code>) skip the consent screen — the authorization is auto-approved. Use for your own frontends and internal tools.
+
+<strong>Third-party clients</strong> show a consent screen where the user approves or denies the requested scopes.
+
+<h3>Scopes per client</h3>
+
+<p>Restrict a client to specific scopes:</p>
+
+<pre><code class="language-typescript">const { client } = await oauth2.createClient({
+  name: 'Limited App',
+  redirectUris: ['https://example.com/callback'],
+  scopes: ['read'],  // can only request 'read' scope
+})
+</code></pre>
+
+When <code>scopes</code> is <code>null</code> (default), the client can request any registered scope.
+
+<h2>Database tables</h2>
+
+<p>The package creates three tables:</p>
+
+<p>| Table | Archetype | Description |</p>
+<p>|-------|-----------|-------------|</p>
+| <code>_strav_oauth_clients</code> | Entity | OAuth clients (apps) |
+| <code>_strav_oauth_tokens</code> | Component | Access + refresh tokens |
+| <code>_strav_oauth_auth_codes</code> | Event | Authorization codes (single-use) |
+
+Tables are created automatically by <code>OAuth2Provider</code> on boot or by <code>strav oauth2:setup</code>.
+
+<h2>Error handling</h2>
+
+<p>All errors follow the RFC 6749 error format:</p>
+
+<pre><code class="language-json">{
+  "error": "invalid_grant",
+  "error_description": "The provided authorization grant is invalid, expired, or revoked."
+}
+</code></pre>
+
+<p>Error classes:</p>
+
+<p>| Class | Error code | Status | Description |</p>
+<p>|-------|-----------|--------|-------------|</p>
+| <code>OAuth2Error</code> | <code>server_error</code> | 400 | Base error |
+| <code>InvalidRequestError</code> | <code>invalid_request</code> | 400 | Missing or malformed parameter |
+| <code>InvalidClientError</code> | <code>invalid_client</code> | 401 | Client authentication failed |
+| <code>InvalidGrantError</code> | <code>invalid_grant</code> | 400 | Grant is invalid, expired, or revoked |
+| <code>InvalidScopeError</code> | <code>invalid_scope</code> | 400 | Unknown or disallowed scope |
+| <code>UnsupportedGrantError</code> | <code>unsupported_grant_type</code> | 400 | Grant type not supported |
+| <code>AccessDeniedError</code> | <code>access_denied</code> | 403 | User denied the authorization request |
+
+<pre><code class="language-typescript">import { OAuth2Error, InvalidGrantError } from '@strav/oauth2'
+
+// Errors expose .toJSON() for RFC-compliant responses
+const error = new InvalidGrantError('Authorization code expired.')
+console.log(error.toJSON())
+// { error: 'invalid_grant', error_description: 'Authorization code expired.' }
+</code></pre>
+
+<h2>Security</h2>
+
+<ul>
+<li><strong>Token hashing</strong>: All tokens (access, refresh, authorization codes) are stored as SHA-256 hashes. Plain-text tokens are returned only once at creation time.</li>
+<li><strong>Timing-safe comparison</strong>: Token lookups use <code>crypto.timingSafeEqual</code> to prevent timing attacks.</li>
+<li><strong>PKCE (RFC 7636)</strong>: Public clients must use PKCE with <code>S256</code> or <code>plain</code> code challenge methods. The code verifier is validated against the stored challenge before issuing tokens.</li>
+<li><strong>Code replay prevention</strong>: Authorization codes are single-use. Once consumed, the <code>used_at</code> timestamp prevents reuse.</li>
+<li><strong>Refresh token rotation</strong>: On refresh, the old token pair is revoked and a new pair is issued. Compromised refresh tokens cannot be reused.</li>
+<li><strong>Scope narrowing only</strong>: Refreshed tokens can narrow scopes but never widen them beyond the original grant.</li>
+<li><strong>Redirect URI validation</strong>: The <code>redirect_uri</code> must exactly match one of the client's registered URIs.</li>
+<li><strong>CSRF protection</strong>: The authorize POST endpoint uses <code>csrf()</code> middleware. The authorization code flow supports the <code>state</code> parameter.</li>
+<li><strong>Rate limiting</strong>: Both the authorize and token endpoints are rate-limited by default.</li>
+<li><strong>Client secret hashing</strong>: Client secrets are stored as bcrypt hashes via <code>Bun.password.hash</code>.</li>
+</ul>
+
+<h2>Integration with existing auth</h2>
+
+<ul>
+<li><strong>Works alongside Jina</strong>: The authorize endpoint uses <code>auth()</code> middleware from <code>@strav/http</code>. Jina handles the login flow — OAuth2 picks up from the authenticated session.</li>
+<li><strong>Separate from AccessToken</strong>: OAuth2 tokens are stored in <code>_strav_oauth_tokens</code>, not <code>_strav_access_tokens</code>. They are a different system with scopes, clients, and refresh tokens.</li>
+<li><strong>Coexistence</strong>: Use <code>oauth()</code> for OAuth2-protected API routes and <code>auth()</code> for session-based routes. They can coexist on different route groups.</li>
+<li><strong>Session-aware</strong>: The authorize flow uses sessions (CSRF, consent state). Token endpoints are stateless.</li>
+</ul>
+
+<h2>Full example</h2>
+
+<pre><code class="language-typescript">import { router } from '@strav/http'
+import { session } from '@strav/http'
+import { auth } from '@strav/http'
+import { compose } from '@strav/http'
+import { OAuth2Provider, oauth, scopes, oauth2 } from '@strav/oauth2'
+import actions from './actions/oauth2'
+
+// Register the provider
+app.use(new OAuth2Provider(actions))
+
+// Define scopes (also configurable in config/oauth2.ts)
+oauth2.defineScopes({
+  'repos:read': 'Read your repositories',
+  'repos:write': 'Create and update repositories',
+  'user:email': 'Read your email address',
+})
+
+// Session-based routes (your web app)
+router.group({ middleware: [session(), auth()] }, r => {
+  r.get('/dashboard', dashboardHandler)
+})
+
+// OAuth2-protected API routes
+router.group({ prefix: '/api/v1', middleware: [oauth()] }, r => {
+  // Any valid token can access
+  r.get('/user', ctx => {
+    return ctx.json({ user: ctx.get('user') })
+  })
+
+  // Requires specific scopes
+  r.get('/repos', compose([scopes('repos:read')], async ctx => {
+    const repos = await Repo.query().where('user_id', ctx.get('user').id).get()
+    return ctx.json({ repos })
+  }))
+
+  r.post('/repos', compose([scopes('repos:write')], async ctx => {
+    const data = await ctx.body()
+    const repo = await Repo.create({ ...data, userId: ctx.get('user').id })
+    return ctx.json({ repo }, 201)
+  }))
+})
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

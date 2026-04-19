@@ -1,0 +1,457 @@
+@layout('layouts/docs')
+
+@set('title', 'Auth - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Auth</h1>
+
+The HTTP auth module provides database-backed authentication (sessions and access tokens), CSRF protection, and middleware for protecting routes. It integrates with <code>@strav/auth</code> for low-level authentication primitives like JWTs, TOTP, and tokens.
+
+All session-based auth requires the <code>session()</code> middleware from the <a href="./session.md">session module</a> to run first.
+
+<h2>Integration with @strav/auth</h2>
+
+The HTTP auth module re-exports all <code>@strav/auth</code> primitives for convenience:
+
+<pre><code class="language-typescript">import {
+  // Database-backed auth (HTTP-specific)
+  Auth, AccessToken, auth, csrf, guest,
+
+  // Low-level primitives from @strav/auth
+  signJWT, verifyJWT, createAccessToken as createJWTAccessToken,
+  createSignedToken, createMagicLinkToken, generateSecret, verifyTotp,
+
+  // HTTP bridge utilities
+  createJWTCookie, verifyJWTCookie, createMagicLinkURL
+} from '@strav/http/auth'
+</code></pre>
+
+<p>You can choose between:</p>
+<ul>
+<li><strong>Database-backed tokens</strong>: AccessToken class for persistent authentication with revocation</li>
+<li><strong>Stateless JWT/signed tokens</strong>: For distributed systems or temporary authentication</li>
+</ul>
+
+See the <a href="../auth/auth.md">Auth primitives guide</a> for detailed usage of JWT, TOTP, tokens, and other low-level utilities.
+
+<h2>Setup</h2>
+
+<h3>Using a service provider (recommended)</h3>
+
+<pre><code class="language-typescript">import { AuthProvider } from '@strav/http'
+import User from './app/models/user'
+
+app.use(new AuthProvider({ resolver: (id) => User.find(id) }))
+</code></pre>
+
+The <code>AuthProvider</code> registers <code>Auth</code> as a singleton, sets the user resolver, and creates the <code>_stravigor_access_tokens</code> table automatically. It depends on the <code>database</code> provider.
+
+<p>Options:</p>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>resolver</code></td>
+      <td>—</td>
+      <td>Function to load a user by ID</td>
+    </tr>
+    <tr>
+      <td><code>ensureTables</code></td>
+      <td><code>true</code></td>
+      <td>Auto-create the access_tokens table</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Manual setup</h3>
+
+<pre><code class="language-typescript">import { Auth } from '@strav/http'
+import User from './app/models/user'
+
+app.singleton(Auth)
+app.resolve(Auth)
+Auth.useResolver((id) => User.find(id))
+await Auth.ensureTables()
+</code></pre>
+
+> The sessions table is managed by the <a href="./session.md">session module</a> via <code>SessionManager.ensureTable()</code>.
+
+<h2>Configuration</h2>
+
+<pre><code class="language-typescript">// config/auth.ts
+export default {
+  default: 'session',            // default guard
+
+  token: {
+    expiration: null,            // minutes, null = never expires
+  },
+}
+</code></pre>
+
+Session configuration (cookie name, lifetime, etc.) lives in <code>config/session.ts</code> — see the <a href="./session.md">session guide</a>.
+
+<h2>Protecting routes</h2>
+
+<h3>auth() — require authentication</h3>
+
+<pre><code class="language-typescript">import { session } from '@strav/http'
+import { auth } from '@strav/http'
+
+// Session auth (default guard) — requires session() upstream
+router.group({ middleware: [session(), auth()] }, (r) => {
+  r.get('/dashboard', (ctx) => {
+    const user = ctx.get('user')    // loaded by the middleware
+    return ctx.json(user)
+  })
+})
+
+// Token auth (API) — no session needed
+router.group({ prefix: '/api', middleware: [auth('token')] }, (r) => {
+  r.get('/me', (ctx) => {
+    const user = ctx.get('user')
+    return ctx.json(user)
+  })
+})
+</code></pre>
+
+The <code>auth()</code> middleware:
+<ul>
+<li>For session guard: reads <code>ctx.get('session')</code> (set by upstream <code>session()</code> middleware), checks <code>session.isAuthenticated</code> and <code>session.isExpired()</code>.</li>
+<li>For token guard: reads the <code>Authorization: Bearer <token></code> header and validates against the database.</li>
+<li>Loads the user via the registered resolver.</li>
+<li>Sets <code>ctx.get('user')</code> for downstream handlers.</li>
+<li>Returns <code>401</code> if authentication fails.</li>
+</ul>
+
+For token auth, it also sets <code>ctx.get('accessToken')</code> (the AccessTokenData record).
+
+<h3>csrf() — CSRF protection</h3>
+
+<pre><code class="language-typescript">import { session } from '@strav/http'
+import { csrf } from '@strav/http'
+
+// Works with both anonymous and authenticated sessions
+router.group({ middleware: [session(), csrf()] }, (r) => {
+  r.get('/form', (ctx) => {
+    const csrfToken = ctx.get('csrfToken')
+    return ctx.html(<code>
+      <form method="POST" action="/submit">
+        <input type="hidden" name="_token" value="${csrfToken}">
+        <button type="submit">Submit</button>
+      </form>
+    </code>)
+  })
+
+  r.post('/submit', (ctx) => {
+    return ctx.json({ success: true })
+  })
+})
+</code></pre>
+
+The <code>csrf()</code> middleware must be placed <strong>after</strong> <code>session()</code> (it needs the session).
+
+On <strong>GET/HEAD/OPTIONS</strong> requests, it makes the CSRF token available via <code>ctx.get('csrfToken')</code>.
+
+On <strong>state-changing</strong> requests (POST, PUT, PATCH, DELETE), it checks for a valid token in:
+<li><code>X-CSRF-Token</code> header</li>
+<li><code>X-XSRF-Token</code> header</li>
+<li><code>_token</code> field in a JSON or form body</li>
+
+Returns <code>403</code> if the token is missing or doesn't match.
+
+> Note: The <code>session()</code> middleware already sets <code>ctx.get('csrfToken')</code> on every request, so <code>csrf()</code> is only needed for the server-side validation on state-changing requests.
+
+<h3>guest() — reject authenticated users</h3>
+
+<pre><code class="language-typescript">import { session } from '@strav/http'
+import { guest } from '@strav/http'
+
+// Redirect authenticated users to the dashboard
+router.group({ middleware: [session(), guest('/dashboard')] }, (r) => {
+  r.get('/login', showLoginPage)
+})
+
+// Or return 403 without redirect
+router.group({ middleware: [session(), guest()] }, (r) => {
+  r.get('/register', showRegisterPage)
+})
+</code></pre>
+
+<h2>Sessions & Authentication</h2>
+
+Sessions are managed by the <a href="./session.md">session module</a>. The auth module builds on top of it.
+
+<h3>Login</h3>
+
+<pre><code class="language-typescript">import { Session } from '@strav/http'
+
+router.post('/login', async (ctx) => {
+  const { email, password } = await ctx.body<{ email: string; password: string }>()
+  const user = await verifyCredentials(email, password) // your logic
+
+  const s = ctx.get<Session>('session')
+  s.authenticate(user)     // sets userId on the session
+  await s.regenerate()     // new session ID (prevents fixation attacks)
+
+  return ctx.redirect('/dashboard')
+})
+</code></pre>
+
+<code>session.authenticate()</code> accepts either a BaseModel instance or a raw user ID:
+
+<pre><code class="language-typescript">s.authenticate(user)       // extracts PK from the model
+s.authenticate(user.pid)   // raw string/number ID
+</code></pre>
+
+<h3>Logout</h3>
+
+<pre><code class="language-typescript">import { Session } from '@strav/http'
+
+router.post('/logout', async (ctx) => {
+  const response = ctx.redirect('/login')
+  return Session.destroy(ctx, response)
+  // Deletes the DB row, clears the cookie
+})
+</code></pre>
+
+<h3>Session garbage collection</h3>
+
+Expired sessions remain in the database until cleaned up. Call <code>SessionManager.gc()</code> periodically (e.g., in a cron job or on a timer):
+
+<pre><code class="language-typescript">import { SessionManager } from '@strav/http'
+
+const deleted = await SessionManager.gc()
+console.log(<code>Cleaned up ${deleted} expired sessions</code>)
+</code></pre>
+
+<h2>Access tokens (Database-backed)</h2>
+
+<p>HTTP access tokens are opaque random strings stored in the database. The plain token is returned once at creation and never stored — the database holds a SHA-256 hash. Even if the database is compromised, tokens cannot be recovered.</p>
+
+This is different from JWT access tokens (<code>@strav/auth</code>) which are stateless and self-contained.
+
+<h3>Creating a token</h3>
+
+<pre><code class="language-typescript">import { AccessToken } from '@strav/http'
+
+router.post('/api/tokens', auth(), async (ctx) => {
+  const { name } = await ctx.body<{ name: string }>()
+  const user = ctx.get('user')
+
+  const { token, accessToken } = await AccessToken.create(user, name)
+  // token        = 'a1b2c3d4...' (64-char hex, give to the client)
+  // accessToken  = { id, userId, name, createdAt, ... }
+
+  return ctx.json({ token, name: accessToken.name }, 201)
+})
+</code></pre>
+
+<h3>Using a token</h3>
+
+Clients send the token in the <code>Authorization</code> header:
+
+<pre><code>Authorization: Bearer a1b2c3d4...
+</code></pre>
+
+The <code>auth('token')</code> middleware handles validation automatically.
+
+<h3>Revoking tokens</h3>
+
+<pre><code class="language-typescript">// Revoke a specific token
+await AccessToken.revoke(tokenId)
+
+// Revoke all tokens for a user
+await AccessToken.revokeAllFor(user)
+</code></pre>
+
+<h2>Database tables</h2>
+
+<strong>_stravigor_sessions</strong> — managed by the <a href="./session.md">session module</a>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>id</td>
+      <td>UUID</td>
+      <td>Primary key (the session ID)</td>
+    </tr>
+    <tr>
+      <td>user_id</td>
+      <td>VARCHAR</td>
+      <td>Nullable — null for anonymous visitors</td>
+    </tr>
+    <tr>
+      <td>csrf_token</td>
+      <td>VARCHAR(64)</td>
+      <td>Random hex, one per session</td>
+    </tr>
+    <tr>
+      <td>data</td>
+      <td>JSONB</td>
+      <td>Arbitrary key-value data</td>
+    </tr>
+    <tr>
+      <td>ip_address</td>
+      <td>VARCHAR(45)</td>
+      <td>From X-Forwarded-For</td>
+    </tr>
+    <tr>
+      <td>user_agent</td>
+      <td>TEXT</td>
+      <td>From User-Agent header</td>
+    </tr>
+    <tr>
+      <td>last_activity</td>
+      <td>TIMESTAMPTZ</td>
+      <td>Updated on each request</td>
+    </tr>
+    <tr>
+      <td>created_at</td>
+      <td>TIMESTAMPTZ</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+<strong>_stravigor_access_tokens</strong> — managed by <code>Auth.ensureTables()</code>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>id</td>
+      <td>SERIAL</td>
+      <td>Primary key</td>
+    </tr>
+    <tr>
+      <td>user_id</td>
+      <td>VARCHAR</td>
+      <td>References the user's PK</td>
+    </tr>
+    <tr>
+      <td>name</td>
+      <td>VARCHAR</td>
+      <td>Human label ("mobile app", "CI")</td>
+    </tr>
+    <tr>
+      <td>token</td>
+      <td>VARCHAR(64)</td>
+      <td>SHA-256 hash, UNIQUE</td>
+    </tr>
+    <tr>
+      <td>last_used_at</td>
+      <td>TIMESTAMPTZ</td>
+      <td>Updated on each use</td>
+    </tr>
+    <tr>
+      <td>expires_at</td>
+      <td>TIMESTAMPTZ</td>
+      <td>Null = never expires</td>
+    </tr>
+    <tr>
+      <td>created_at</td>
+      <td>TIMESTAMPTZ</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>HTTP Bridge Utilities</h2>
+
+The <code>@strav/http/auth/bridge</code> module provides helpers for using <code>@strav/auth</code> primitives in HTTP contexts:
+
+<pre><code class="language-typescript">import {
+  createJWTCookie,
+  verifyJWTCookie,
+  createMagicLinkURL,
+  extractBearerToken
+} from '@strav/http/auth/bridge'
+
+// Create JWT token and cookie header
+const { token, cookieHeader } = await createJWTCookie(
+  { userId: 123, role: 'admin' },
+  'jwt-secret',
+  {
+    cookieName: 'auth-token',
+    cookieOptions: { maxAge: 3600 }
+  }
+)
+
+// Generate magic link for passwordless auth
+const magicLink = createMagicLinkURL(
+  'https://app.com/auth/magic',
+  userId,
+  { email: 'user@example.com', expiresInMinutes: 15 }
+)
+
+// Extract Bearer token from request
+router.get('/protected', (ctx) => {
+  const token = extractBearerToken(ctx)
+  // Validate token...
+})
+</code></pre>
+
+<h2>Full example</h2>
+
+<pre><code class="language-typescript">import { router } from '@strav/http'
+import { session, Session } from '@strav/http'
+import { auth, csrf, guest, AccessToken } from '@strav/http'
+
+// Global session middleware — every visitor gets a session
+router.use(session())
+
+// Public — only for guests
+router.group({ middleware: [guest('/dashboard')] }, (r) => {
+  r.get('/login', showLoginPage)
+  r.post('/login', async (ctx) => {
+    const user = await verifyCredentials(await ctx.body())
+    const s = ctx.get<Session>('session')
+    s.authenticate(user)
+    await s.regenerate()
+    return ctx.redirect('/dashboard')
+  })
+})
+
+// Session-protected web routes
+router.group({ middleware: [auth(), csrf()] }, (r) => {
+  r.get('/dashboard', showDashboard)
+  r.post('/logout', async (ctx) => {
+    return Session.destroy(ctx, ctx.redirect('/login'))
+  })
+})
+
+// Token-protected API routes (database-backed tokens)
+router.group({ prefix: '/api', middleware: [auth('token')] }, (r) => {
+  r.get('/me', (ctx) => ctx.json(ctx.get('user')))
+})
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

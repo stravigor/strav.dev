@@ -1,0 +1,882 @@
+@layout('layouts/docs')
+
+@set('title', 'AI - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>AI</h1>
+
+Multi-provider AI with agents, tool use, structured output, multi-turn threads, and workflow orchestration. Supports Anthropic, OpenAI, Google Gemini, and DeepSeek out of the box. Zero SDK dependencies — all provider communication uses raw <code>fetch()</code>.
+
+<h2>Quick start</h2>
+
+<pre><code class="language-typescript">import { brain } from '@strav/brain'
+
+// One-shot chat
+const answer = await brain.chat('What is the capital of France?')
+
+// Structured output
+const { data } = await brain.generate({
+  prompt: 'Extract: "Alice is 30 years old"',
+  schema: z.object({ name: z.string(), age: z.number() }),
+})
+// data.name === 'Alice', data.age === 30
+
+// Streaming
+for await (const chunk of brain.stream('Write a haiku about code')) {
+  if (chunk.type === 'text') process.stdout.write(chunk.text!)
+}
+</code></pre>
+
+<h2>Setup</h2>
+
+<h3>Using a service provider (recommended)</h3>
+
+<pre><code class="language-typescript">import { BrainProvider } from '@strav/brain'
+
+app.use(new BrainProvider())
+</code></pre>
+
+The <code>BrainProvider</code> registers <code>BrainManager</code> as a singleton. It depends on the <code>config</code> provider.
+
+<h3>Manual setup</h3>
+
+<pre><code class="language-typescript">import BrainManager from '@strav/brain/brain_manager'
+
+app.singleton(BrainManager)
+app.resolve(BrainManager)
+</code></pre>
+
+Create <code>config/ai.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  default: env('AI_PROVIDER', 'anthropic'),
+
+  providers: {
+    anthropic: {
+      driver: 'anthropic',
+      apiKey: env('ANTHROPIC_API_KEY', ''),
+      model: env('ANTHROPIC_MODEL', 'claude-sonnet-4-5-20250929'),
+    },
+    openai: {
+      driver: 'openai',
+      apiKey: env('OPENAI_API_KEY', ''),
+      model: env('OPENAI_MODEL', 'gpt-4o'),
+    },
+    google: {
+      driver: 'google',
+      apiKey: env('GOOGLE_AI_API_KEY', ''),
+      model: env('GOOGLE_MODEL', 'gemini-2.0-flash'),
+    },
+    deepseek: {
+      driver: 'openai',
+      apiKey: env('DEEPSEEK_API_KEY', ''),
+      model: env('DEEPSEEK_MODEL', 'deepseek-chat'),
+      baseUrl: 'https://api.deepseek.com',
+    },
+  },
+
+  maxTokens: env.int('AI_MAX_TOKENS', 4096),
+  temperature: env.float('AI_TEMPERATURE', 0.7),
+  maxIterations: env.int('AI_MAX_ITERATIONS', 10),
+}
+</code></pre>
+
+DeepSeek uses the OpenAI-compatible API — set <code>driver: 'openai'</code> with a custom <code>baseUrl</code>. Google uses the native Gemini API — set <code>driver: 'google'</code>.
+
+<h2>brain helper</h2>
+
+The <code>brain</code> object is the primary API. All methods respect provider configuration and support per-call overrides.
+
+<pre><code class="language-typescript">import { brain } from '@strav/brain'
+</code></pre>
+
+<h3>chat</h3>
+
+<p>One-shot completion, returns a string:</p>
+
+<pre><code class="language-typescript">const answer = await brain.chat('Summarize this article: ...')
+
+// With options
+const answer = await brain.chat('Translate to French: Hello', {
+  provider: 'google',
+  model: 'gemini-2.0-flash',
+  temperature: 0.3,
+  system: 'You are a professional translator.',
+})
+</code></pre>
+
+<h3>generate</h3>
+
+<p>Structured output with Zod or raw JSON Schema:</p>
+
+<pre><code class="language-typescript">import { z } from 'zod'
+
+const { data, text, usage } = await brain.generate({
+  prompt: 'Extract entities: "John works at Acme Corp in Paris"',
+  schema: z.object({
+    name: z.string(),
+    company: z.string(),
+    city: z.string(),
+  }),
+})
+// data.name === 'John', data.company === 'Acme Corp', data.city === 'Paris'
+
+// Raw JSON Schema also works
+const { data } = await brain.generate({
+  prompt: 'Classify sentiment: "I love this product"',
+  schema: {
+    type: 'object',
+    properties: {
+      sentiment: { type: 'string', enum: ['positive', 'negative', 'neutral'] },
+      confidence: { type: 'number' },
+    },
+    required: ['sentiment', 'confidence'],
+  },
+})
+</code></pre>
+
+<h3>stream</h3>
+
+<p>Streaming completion, returns an async iterable:</p>
+
+<pre><code class="language-typescript">for await (const chunk of brain.stream('Write a poem about TypeScript')) {
+  if (chunk.type === 'text') process.stdout.write(chunk.text!)
+}
+</code></pre>
+
+<h3>embed</h3>
+
+<p>Generate embeddings (OpenAI and Google providers):</p>
+
+<pre><code class="language-typescript">const vectors = await brain.embed('Hello world', { provider: 'openai' })
+// vectors: number[][] — one embedding per input
+
+const batch = await brain.embed(['Hello', 'World'], { provider: 'openai' })
+
+// Google Gemini embeddings
+const geminiVectors = await brain.embed('Hello world', { provider: 'google' })
+</code></pre>
+
+<h2>Agents</h2>
+
+<p>Agents encapsulate instructions, tools, output format, and lifecycle hooks into reusable classes. They are the building blocks for complex AI interactions.</p>
+
+<h3>Defining an agent</h3>
+
+<pre><code class="language-typescript">import { Agent } from '@strav/brain'
+import { defineTool } from '@strav/brain'
+import { z } from 'zod'
+
+class SupportAgent extends Agent {
+  provider = 'anthropic'
+  model = 'claude-sonnet-4-5-20250929'
+  instructions = 'You are a customer support agent for {{companyName}}. Help the user with their issue.'
+
+  tools = [
+    defineTool({
+      name: 'lookup_order',
+      description: 'Look up an order by ID',
+      parameters: z.object({ orderId: z.string() }),
+      execute: async ({ orderId }) => {
+        const order = await Order.find(orderId)
+        return { status: order.status, items: order.items }
+      },
+    }),
+  ]
+
+  output = z.object({
+    reply: z.string(),
+    category: z.enum(['billing', 'shipping', 'product', 'other']),
+  })
+}
+</code></pre>
+
+<h3>Agent properties</h3>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Property</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>provider</code></td>
+      <td>Provider name (<code>'anthropic'</code>, <code>'openai'</code>, <code>'google'</code>, etc.)</td>
+      <td>Config default</td>
+    </tr>
+    <tr>
+      <td><code>model</code></td>
+      <td>Model identifier</td>
+      <td>Provider default</td>
+    </tr>
+    <tr>
+      <td><code>instructions</code></td>
+      <td>System prompt. Supports <code>{{key}}</code> interpolation</td>
+      <td><code>''</code></td>
+    </tr>
+    <tr>
+      <td><code>tools</code></td>
+      <td>Array of <code>ToolDefinition</code> objects</td>
+      <td><code>undefined</code></td>
+    </tr>
+    <tr>
+      <td><code>output</code></td>
+      <td>Zod schema or JSON Schema for structured output</td>
+      <td><code>undefined</code></td>
+    </tr>
+    <tr>
+      <td><code>maxIterations</code></td>
+      <td>Max tool-use loop iterations</td>
+      <td>Config default (10)</td>
+    </tr>
+    <tr>
+      <td><code>maxTokens</code></td>
+      <td>Max tokens per request</td>
+      <td>Config default (4096)</td>
+    </tr>
+    <tr>
+      <td><code>temperature</code></td>
+      <td>Temperature</td>
+      <td>Config default (0.7)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Running an agent</h3>
+
+Use the fluent <code>AgentRunner</code> via <code>brain.agent()</code>:
+
+<pre><code class="language-typescript">const result = await brain.agent(SupportAgent)
+  .input('Where is my order #12345?')
+  .with({ companyName: 'Acme Corp' })     // context for {{key}} interpolation
+  .run()
+
+result.text       // raw response text
+result.data       // parsed structured output (if agent has <code>output</code> schema)
+result.toolCalls  // array of tool calls with results and durations
+result.usage      // { inputTokens, outputTokens, totalTokens }
+result.iterations // number of completion rounds (1 if no tool use)
+</code></pre>
+
+The runner handles the tool-use loop automatically: when the model calls a tool, the runner executes it, feeds the result back, and re-requests until the model stops or hits <code>maxIterations</code>.
+
+<h3>Provider override</h3>
+
+<p>Override the provider for a specific run without changing the agent class:</p>
+
+<pre><code class="language-typescript">const result = await brain.agent(SupportAgent)
+  .input('Help me')
+  .using('openai', 'gpt-4o')
+  .run()
+</code></pre>
+
+<h3>Streaming agents</h3>
+
+<pre><code class="language-typescript">for await (const event of brain.agent(SupportAgent).input('Help me').stream()) {
+  switch (event.type) {
+    case 'text':
+      process.stdout.write(event.text!)
+      break
+    case 'tool_result':
+      console.log('Tool:', event.toolCall!.name, '→', event.toolCall!.result)
+      break
+    case 'done':
+      console.log('Final result:', event.result!.data)
+      break
+  }
+}
+</code></pre>
+
+<h3>Lifecycle hooks</h3>
+
+<p>Override methods on the agent class to hook into the execution lifecycle:</p>
+
+<pre><code class="language-typescript">class LoggingAgent extends Agent {
+  instructions = 'You are a helpful assistant.'
+
+  async onStart(input: string, context: Record<string, unknown>) {
+    console.log('Agent started with:', input)
+  }
+
+  async onToolCall(call: ToolCall) {
+    console.log(<code>Calling tool: ${call.name}</code>)
+  }
+
+  async onToolResult(record: ToolCallRecord) {
+    console.log(<code>Tool ${record.name} took ${record.duration}ms</code>)
+  }
+
+  async onComplete(result: AgentResult) {
+    console.log('Agent completed:', result.text)
+  }
+
+  async onError(error: Error) {
+    console.error('Agent failed:', error.message)
+  }
+}
+</code></pre>
+
+<h2>Tools</h2>
+
+Tools give agents the ability to call functions. Define them with <code>defineTool()</code>:
+
+<pre><code class="language-typescript">import { defineTool, defineToolbox } from '@strav/brain'
+
+const searchTool = defineTool({
+  name: 'search',
+  description: 'Search the knowledge base',
+  parameters: z.object({
+    query: z.string().describe('Search query'),
+    limit: z.number().optional(),
+  }),
+  execute: async ({ query, limit }) => {
+    return await KnowledgeBase.search(query, limit ?? 10)
+  },
+})
+</code></pre>
+
+<p>Parameters accept either a Zod schema (automatically converted to JSON Schema) or a raw JSON Schema object.</p>
+
+<h3>Toolboxes</h3>
+
+<p>Group related tools for organization:</p>
+
+<pre><code class="language-typescript">const dbTools = defineToolbox('database', [
+  searchTool,
+  insertTool,
+  updateTool,
+])
+
+class MyAgent extends Agent {
+  tools = [...dbTools, weatherTool]
+}
+</code></pre>
+
+<h3>Error handling</h3>
+
+<p>Tool errors are caught automatically and fed back to the model as error strings. The model can then decide how to proceed:</p>
+
+<pre><code class="language-typescript">const riskyTool = defineTool({
+  name: 'external_api',
+  description: 'Call an external API',
+  parameters: z.object({ url: z.string() }),
+  execute: async ({ url }) => {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(<code>API returned ${res.status}</code>)
+    return await res.json()
+  },
+})
+// If fetch fails, the model receives: "Error: API returned 500"
+</code></pre>
+
+<h2>Threads</h2>
+
+<p>Threads manage multi-turn conversations with automatic history tracking:</p>
+
+<pre><code class="language-typescript">const thread = brain.thread()
+thread.system('You are a helpful math tutor.')
+
+const r1 = await thread.send('What is 2 + 2?')    // "4"
+const r2 = await thread.send('Multiply that by 3') // "12" — remembers context
+</code></pre>
+
+<h3>Thread with agent</h3>
+
+<p>Inherit provider, model, system prompt, and tools from an agent:</p>
+
+<pre><code class="language-typescript">const thread = brain.thread(SupportAgent)
+const reply = await thread.send('I need help with my order')
+</code></pre>
+
+<h3>Basic persistence</h3>
+
+<p>Serialize a thread for storage (database, session, cache) and restore later:</p>
+
+<pre><code class="language-typescript">// Save
+const snapshot = thread.serialize()
+await cache.set(<code>thread:${userId}</code>, snapshot, 3600)
+
+// Restore
+const saved = await cache.get<SerializedThread>(<code>thread:${userId}</code>)
+const thread = brain.thread().restore(saved)
+const reply = await thread.send('Continue our conversation')
+</code></pre>
+
+<h3>Streaming threads</h3>
+
+<code>thread.stream()</code> works like <code>thread.send()</code> but yields chunks as they arrive. Tool calls are handled automatically in a loop, just like <code>send()</code>:
+
+<pre><code class="language-typescript">for await (const chunk of thread.stream('What tools do you have?')) {
+  if (chunk.type === 'text') process.stdout.write(chunk.text!)
+}
+// Messages (user, assistant, tool results) are appended to the thread history automatically.
+</code></pre>
+
+<h3>Thread API</h3>
+
+<pre><code class="language-typescript">thread.system('prompt')           // set/override system prompt
+thread.using('openai', 'gpt-4o') // override provider
+thread.tools([searchTool])        // set available tools
+thread.memory()                   // enable memory management (see below)
+thread.memory({ strategy: 'summarize', maxContextTokens: 180000 })
+thread.id('thread-123')           // set thread ID for persistence
+thread.persist()                  // enable auto-persistence to ThreadStore
+thread.send('message')            // send and get response (handles tool calls)
+thread.stream('message')          // stream response (handles tool calls)
+thread.getMessages()              // get copy of message history
+thread.facts                      // access semantic memory (if memory enabled)
+thread.episodicSummary            // current conversation summary (if memory enabled)
+thread.serializeMemory()          // serialize with memory state
+thread.restoreMemory(data)        // restore with memory state
+thread.clear()                    // reset conversation
+</code></pre>
+
+<h2>Memory management</h2>
+
+<p>Long-running conversations will eventually exceed the model's context window. The memory system solves this with a three-tier architecture:</p>
+
+<ul>
+<li><strong>Working memory</strong> — recent messages that fit within the context budget</li>
+<li><strong>Episodic memory</strong> — LLM-generated summaries of compacted older messages</li>
+<li><strong>Semantic memory</strong> — structured facts extracted from conversation</li>
+</ul>
+
+Memory is <strong>opt-in</strong> — without calling <code>.memory()</code>, threads behave exactly as before.
+
+<h3>Enabling memory</h3>
+
+<pre><code class="language-typescript">const thread = brain.thread(OrchestratorAgent)
+  .memory()  // enable with defaults from config
+
+// Or with per-thread overrides
+const thread = brain.thread()
+  .system('You are an entrepreneurship advisor.')
+  .memory({
+    maxContextTokens: 180000,  // budget (default: auto-detect from model)
+    strategy: 'summarize',     // 'summarize' or 'sliding_window'
+    responseReserve: 0.20,     // fraction reserved for model response
+    minWorkingMessages: 4,     // never compact below this many messages
+    compactionBatchSize: 10,   // oldest messages to compact per cycle
+    extractFacts: true,        // extract structured facts during compaction
+  })
+</code></pre>
+
+When memory is enabled, <code>thread.send()</code> and <code>thread.stream()</code> automatically:
+
+<li>Check if the current messages fit within the token budget</li>
+<li>If over budget, compact the oldest messages using the configured strategy</li>
+<li>Inject the episodic summary and semantic facts into the system prompt</li>
+<li>Send only the trimmed working messages to the model</li>
+
+<h3>Compaction strategies</h3>
+
+<strong>Summarize</strong> (default) — Uses the thread's own LLM to generate a natural-language summary of compacted messages. When an existing summary is present, it merges rather than creating a chain of summaries. Optionally extracts structured facts.
+
+<strong>Sliding window</strong> — Drops oldest messages without summarization. No LLM call required. Use when you want fast, predictable compaction and don't need continuity from older messages.
+
+<pre><code class="language-typescript">// Use sliding window for speed
+thread.memory({ strategy: 'sliding_window' })
+</code></pre>
+
+<h3>Semantic memory (facts)</h3>
+
+Facts are key-value pairs representing stable knowledge about the user and their situation. They are injected into the system prompt as a <code><known_facts></code> block so the model always has access to critical context regardless of compaction.
+
+<pre><code class="language-typescript">const thread = brain.thread().memory()
+
+// Set facts explicitly
+thread.facts!.set('venture_type', 'SaaS logistics platform')
+thread.facts!.set('current_stage', 'Validation')
+
+// Facts are also extracted automatically during compaction (when extractFacts: true)
+
+// Read facts
+thread.facts!.get('venture_type')  // { key, value, source, confidence, createdAt, updatedAt }
+thread.facts!.all()                // all facts as array
+thread.facts!.remove('old_fact')   // remove a fact
+</code></pre>
+
+<p>The model sees:</p>
+
+<pre><code><known_facts>
+<ul>
+<li>venture_type: SaaS logistics platform</li>
+<li>current_stage: Validation</li>
+</ul>
+</known_facts>
+</code></pre>
+
+<h3>Thread persistence</h3>
+
+For long-running conversations that span multiple sessions, use the <code>ThreadStore</code> interface with <code>serializeMemory()</code> / <code>restoreMemory()</code>:
+
+<pre><code class="language-typescript">import { InMemoryThreadStore } from '@strav/brain'
+import BrainManager from '@strav/brain'
+
+// Register a thread store (use InMemoryThreadStore for dev, DatabaseThreadStore for production)
+BrainManager.useThreadStore(new InMemoryThreadStore())
+
+// Create a persistent thread
+const thread = brain.thread(OrchestratorAgent)
+  .id('user-123-thread')
+  .memory({ strategy: 'summarize', extractFacts: true })
+  .persist()  // auto-save after each send()
+
+await thread.send('I have an idea for a logistics SaaS')
+// Thread is automatically saved to the store
+
+// On next session — restore
+const saved = await BrainManager.threadStore!.load('user-123-thread')
+if (saved) {
+  const thread = brain.thread(OrchestratorAgent)
+    .memory()
+    .restoreMemory(saved)
+
+  await thread.send('What were we discussing?')
+  // Model has access to summary + facts from previous sessions
+}
+</code></pre>
+
+<code>serializeMemory()</code> captures messages, system prompt, episodic summary, and semantic facts. <code>restoreMemory()</code> restores all of it.
+
+<h3>Custom thread store</h3>
+
+Implement the <code>ThreadStore</code> interface for database-backed persistence:
+
+<pre><code class="language-typescript">import type { ThreadStore, SerializedMemoryThread } from '@strav/brain'
+
+class DatabaseThreadStore implements ThreadStore {
+  async save(thread: SerializedMemoryThread): Promise<void> {
+    await db.query(<code>
+      INSERT INTO threads (id, data, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()
+    </code>, [thread.id, JSON.stringify(thread)])
+  }
+
+  async load(id: string): Promise<SerializedMemoryThread | null> {
+    const row = await db.query('SELECT data FROM threads WHERE id = $1', [id])
+    return row ? JSON.parse(row.data) : null
+  }
+
+  async delete(id: string): Promise<void> {
+    await db.query('DELETE FROM threads WHERE id = $1', [id])
+  }
+
+  async list(options?: { limit?: number; offset?: number }): Promise<SerializedMemoryThread[]> {
+    const rows = await db.query(
+      'SELECT data FROM threads ORDER BY updated_at DESC LIMIT $1 OFFSET $2',
+      [options?.limit ?? 50, options?.offset ?? 0]
+    )
+    return rows.map((r: any) => JSON.parse(r.data))
+  }
+}
+
+BrainManager.useThreadStore(new DatabaseThreadStore())
+</code></pre>
+
+<h3>Custom compaction strategy</h3>
+
+Implement the <code>CompactionStrategy</code> interface:
+
+<pre><code class="language-typescript">import type { CompactionStrategy } from '@strav/brain'
+
+const customStrategy: CompactionStrategy = {
+  name: 'custom',
+  async compact(messages, options) {
+    // Your custom logic here
+    return {
+      summary: 'Custom summary of the conversation...',
+      facts: [{ key: 'topic', value: 'logistics', source: 'extracted', confidence: 0.9, createdAt: '', updatedAt: '' }],
+      summaryTokens: 10,
+    }
+  },
+}
+</code></pre>
+
+<h3>Memory configuration</h3>
+
+Add to <code>config/ai.ts</code>:
+
+<pre><code class="language-typescript">export default {
+  default: 'anthropic',
+  providers: { /<em> ... </em>/ },
+  maxTokens: 4096,
+  temperature: 0.7,
+  maxIterations: 10,
+
+  memory: {
+    maxContextTokens: 180000,   // leave headroom from 200k window
+    strategy: 'summarize',      // 'summarize' | 'sliding_window'
+    responseReserve: 0.20,      // 20% reserved for model response
+    minWorkingMessages: 4,      // always keep at least 4 recent messages
+    compactionBatchSize: 10,    // compact 10 oldest messages per cycle
+    extractFacts: true,         // extract structured facts during compaction
+  },
+}
+</code></pre>
+
+<h3>Token counting</h3>
+
+The <code>TokenCounter</code> utility provides approximate token estimation (~4 chars/token) without external dependencies:
+
+<pre><code class="language-typescript">import { TokenCounter } from '@strav/brain'
+
+TokenCounter.estimate('Hello, world!')                      // ~4 tokens
+TokenCounter.estimateMessages(thread.getMessages())          // total for message array
+TokenCounter.contextWindow('claude-sonnet-4-20250514')       // 200000
+</code></pre>
+
+<h2>Workflows</h2>
+
+<p>Workflows orchestrate multiple agents in sequence, parallel, routing, or loop patterns:</p>
+
+<pre><code class="language-typescript">const result = await brain.workflow('content-pipeline')
+  .step('research', ResearchAgent)
+  .step('write', WriterAgent, (ctx) => ({
+    prompt: <code>Write about: ${ctx.results.research.text}</code>,
+  }))
+  .step('review', ReviewerAgent)
+  .run({ topic: 'AI in healthcare' })
+
+result.results.research.text  // research output
+result.results.write.text     // written article
+result.results.review.text    // review feedback
+result.usage                  // aggregated token usage
+result.duration               // total wall-clock time (ms)
+</code></pre>
+
+<h3>Sequential steps</h3>
+
+Steps run in order. Each step receives the full workflow context (input + all previous results). Use <code>mapInput</code> to transform context into the agent's input:
+
+<pre><code class="language-typescript">brain.workflow('pipeline')
+  .step('analyze', AnalyzerAgent)
+  .step('summarize', SummaryAgent, (ctx) => ({
+    text: ctx.results.analyze.text,
+  }))
+  .run({ document: '...' })
+</code></pre>
+
+<h3>Parallel steps</h3>
+
+<p>Run multiple agents concurrently:</p>
+
+<pre><code class="language-typescript">brain.workflow('analysis')
+  .parallel('analyze', [
+    { name: 'sentiment', agent: SentimentAgent },
+    { name: 'summary', agent: SummaryAgent },
+    { name: 'keywords', agent: KeywordAgent },
+  ])
+  .run({ text: 'Some article...' })
+</code></pre>
+
+<h3>Routing</h3>
+
+<p>A router agent decides which specialist to dispatch to:</p>
+
+<pre><code class="language-typescript">class TriageAgent extends Agent {
+  instructions = 'Classify the support request. Return the category.'
+  output = z.object({ route: z.string() })
+}
+
+brain.workflow('support')
+  .route('triage', TriageAgent, {
+    billing: BillingAgent,
+    shipping: ShippingAgent,
+    technical: TechnicalAgent,
+  })
+  .run({ message: 'I need a refund' })
+</code></pre>
+
+The router's output must contain a <code>route</code> field matching one of the branch keys.
+
+<h3>Loops</h3>
+
+<p>Iterate an agent until a condition is met:</p>
+
+<pre><code class="language-typescript">brain.workflow('refinement')
+  .loop('improve', WriterAgent, {
+    maxIterations: 5,
+    until: (result) => {
+      const score = JSON.parse(result.text).quality
+      return score >= 8
+    },
+    feedback: (result) => <code>Previous attempt scored ${JSON.parse(result.text).quality}/10. Improve.</code>,
+  })
+  .run({ task: 'Write a product description' })
+</code></pre>
+
+<h2>Hooks</h2>
+
+Register global before/after hooks on <code>BrainManager</code> for logging, cost tracking, or rate limiting:
+
+<pre><code class="language-typescript">import BrainManager from '@strav/brain/brain_manager'
+
+// Log all completions
+BrainManager.before((request) => {
+  console.log(<code>AI request: ${request.model}, ${request.messages.length} messages</code>)
+})
+
+BrainManager.after((request, response) => {
+  console.log(<code>AI response: ${response.usage.totalTokens} tokens</code>)
+})
+</code></pre>
+
+<h2>Custom provider</h2>
+
+Implement the <code>AIProvider</code> interface to add any provider:
+
+<pre><code class="language-typescript">import type { AIProvider, CompletionRequest, CompletionResponse, StreamChunk } from '@strav/brain'
+import BrainManager from '@strav/brain/brain_manager'
+
+class OllamaProvider implements AIProvider {
+  readonly name = 'ollama'
+
+  async complete(request: CompletionRequest): Promise<CompletionResponse> {
+    const response = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        model: request.model,
+        messages: request.messages.map(m => ({ role: m.role, content: m.content })),
+        stream: false,
+      }),
+    })
+
+    const data = await response.json() as any
+    return {
+      id: crypto.randomUUID(),
+      content: data.message.content,
+      toolCalls: [],
+      stopReason: 'end',
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      raw: data,
+    }
+  }
+
+  async *stream(request: CompletionRequest): AsyncIterable<StreamChunk> {
+    // streaming implementation...
+    yield { type: 'done' }
+  }
+}
+
+// In bootstrap
+BrainManager.useProvider(new OllamaProvider())
+</code></pre>
+
+<h2>Testing</h2>
+
+Swap in a mock provider with <code>BrainManager.useProvider()</code>:
+
+<pre><code class="language-typescript">import { test, expect, beforeEach } from 'bun:test'
+import BrainManager from '@strav/brain/brain_manager'
+import { brain } from '@strav/brain'
+import type { AIProvider, CompletionRequest, CompletionResponse, StreamChunk } from '@strav/brain'
+
+class MockProvider implements AIProvider {
+  readonly name = 'mock'
+  responses: CompletionResponse[] = []
+  requests: CompletionRequest[] = []
+  private callIndex = 0
+
+  queueResponse(response: Partial<CompletionResponse>) {
+    this.responses.push({
+      id: <code>mock-${this.responses.length}</code>,
+      content: '',
+      toolCalls: [],
+      stopReason: 'end',
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      raw: {},
+      ...response,
+    })
+  }
+
+  async complete(request: CompletionRequest): Promise<CompletionResponse> {
+    this.requests.push(request)
+    return this.responses[this.callIndex++]!
+  }
+
+  async *stream(): AsyncIterable<StreamChunk> {
+    yield { type: 'done' }
+  }
+}
+
+let mock: MockProvider
+
+beforeEach(() => {
+  mock = new MockProvider()
+  BrainManager.reset()
+  BrainManager.useProvider(mock)
+  ;(BrainManager as any)._config = {
+    default: 'mock',
+    providers: { mock: { driver: 'openai', apiKey: 'k', model: 'mock-model' } },
+    maxTokens: 4096,
+    temperature: 0.7,
+    maxIterations: 10,
+  }
+})
+
+test('one-shot chat', async () => {
+  mock.queueResponse({ content: 'Hello!' })
+  const answer = await brain.chat('Hi')
+  expect(answer).toBe('Hello!')
+})
+</code></pre>
+
+<h2>Controller example</h2>
+
+<pre><code class="language-typescript">import { brain } from '@strav/brain'
+import { Agent } from '@strav/brain'
+import { defineTool } from '@strav/brain'
+import { z } from 'zod'
+
+class AssistantAgent extends Agent {
+  provider = 'anthropic'
+  instructions = 'You are a project management assistant for {{orgName}}.'
+
+  tools = [
+    defineTool({
+      name: 'list_projects',
+      description: 'List active projects for the organization',
+      parameters: z.object({ orgId: z.string() }),
+      execute: async ({ orgId }) => {
+        return await Project.where('organization_id', orgId)
+          .where('status', 'active')
+          .all()
+      },
+    }),
+  ]
+}
+
+export default class AiAssistantController {
+  async chat(ctx: Context) {
+    const [user, org] = ctx.get<User, Organization>('user', 'organization')
+    const { message } = await ctx.body<{ message: string }>()
+
+    const result = await brain.agent(AssistantAgent)
+      .input(message)
+      .with({ orgName: org.name })
+      .run()
+
+    return ctx.json({
+      reply: result.text,
+      usage: result.usage,
+    })
+  }
+}
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

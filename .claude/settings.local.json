@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/liva/Projects/Strav.dev/sources/strav/**)",
+      "WebSearch",
+      "Bash(comm -13 /tmp/sidebar-links.txt /tmp/existing-files.txt)",
+      "Bash(for link in quick-start-guide installation-guide configuration-guide dependency-injection-container application-configuration)",
+      "Bash(do if [ -f \"$link.strav\" ])",
+      "Bash(then echo \"✓ $link.strav exists\")",
+      "Bash(else echo \"✗ $link.strav MISSING\")",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(while read link)",
+      "Bash(then echo \"✓ $link\")",
+      "Bash(else echo \"✗ $link - FILE MISSING!\")",
+      "Bash(while read -r link)",
+      "Bash(then echo \"✓ /docs/$link → $link.strav\")",
+      "Bash(else echo \"✗ /docs/$link → $link.strav MISSING\")",
+      "Bash(tee /tmp/link-check.txt)",
+      "Read(//tmp/**)",
+      "Bash(do [ -f \"$link.strav\" ])",
+      "Bash(echo \"✓ $link\")",
+      "Bash(echo \"✗ $link\")",
+      "Bash(for dir in \"core/kernel\" \"core/http\" \"core/database\" \"core/view\" \"features\" \"tools\" \"ai\" \"integrations\")",
+      "Bash(do if [ -d \"$dir\" ])",
+      "Bash(then echo \"Directory $dir exists:\")",
+      "Bash(ls \"$dir\"/*.strav)",
+      "Bash(test -f \"quick-start-guide.strav\")",
+      "Read(//Users/liva/Desktop/Screenshots/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,457 @@
+@layout('layouts/docs')
+
+@set('title', 'State Machines - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>State Machines</h1>
+
+<p>Declarative state machines for domain models. Define states, transitions, guards, side effects, and events in a single definition. Use standalone on plain objects or as an ORM mixin with auto-persistence.</p>
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/machine
+</code></pre>
+
+No service provider or configuration needed — <code>defineMachine()</code> returns a standalone utility object.
+
+<h2>Defining a machine</h2>
+
+<pre><code class="language-typescript">import { defineMachine } from '@strav/machine'
+
+const orderMachine = defineMachine({
+  field: 'status',
+  initial: 'pending',
+
+  states: ['pending', 'processing', 'shipped', 'delivered', 'canceled', 'refunded'],
+
+  transitions: {
+    process: { from: 'pending', to: 'processing' },
+    ship:    { from: 'processing', to: 'shipped' },
+    deliver: { from: 'shipped', to: 'delivered' },
+    cancel:  { from: ['pending', 'processing'], to: 'canceled' },
+    refund:  { from: ['delivered', 'canceled'], to: 'refunded' },
+  },
+})
+</code></pre>
+
+<h3>Options</h3>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Property</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>field</code></td>
+      <td><code>string</code></td>
+      <td>The property on the entity that holds the state</td>
+    </tr>
+    <tr>
+      <td><code>initial</code></td>
+      <td><code>string</code></td>
+      <td>The initial state for new entities</td>
+    </tr>
+    <tr>
+      <td><code>states</code></td>
+      <td><code>string[]</code></td>
+      <td>All valid states</td>
+    </tr>
+    <tr>
+      <td><code>transitions</code></td>
+      <td><code>Record<string, { from, to }></code></td>
+      <td>Named transitions with source and target states</td>
+    </tr>
+    <tr>
+      <td><code>guards</code></td>
+      <td><code>Record<string, (entity) => boolean></code></td>
+      <td>Functions that must return <code>true</code> for the transition</td>
+    </tr>
+    <tr>
+      <td><code>effects</code></td>
+      <td><code>Record<string, (entity, meta) => void></code></td>
+      <td>Side effects to run after mutating the field</td>
+    </tr>
+    <tr>
+      <td><code>events</code></td>
+      <td><code>Record<string, string></code></td>
+      <td>Event names to emit via <code>Emitter</code> after a transition</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Standalone usage</h2>
+
+<p>The machine works on any object with the configured field.</p>
+
+<h3>Query state</h3>
+
+<pre><code class="language-typescript">const order = { status: 'pending', id: 1 }
+
+orderMachine.state(order)                 // 'pending'
+orderMachine.is(order, 'pending')         // true
+orderMachine.is(order, 'shipped')         // false
+orderMachine.can(order, 'process')        // true
+orderMachine.can(order, 'ship')           // false
+orderMachine.availableTransitions(order)  // ['process', 'cancel']
+</code></pre>
+
+<h3>Apply transitions</h3>
+
+<pre><code class="language-typescript">const meta = await orderMachine.apply(order, 'process')
+// meta = { from: 'pending', to: 'processing', transition: 'process' }
+// order.status === 'processing'
+</code></pre>
+
+<code>apply()</code> mutates the field directly. In standalone mode, it does <strong>not</strong> persist — the caller is responsible for saving.
+
+<h3>Invalid transitions</h3>
+
+<pre><code class="language-typescript">import { TransitionError } from '@strav/machine'
+
+const order = { status: 'shipped' }
+
+try {
+  await orderMachine.apply(order, 'process')
+} catch (err) {
+  // TransitionError: Cannot apply transition "process" from state "shipped".
+  //   Allowed from: [pending]
+  err.transition    // 'process'
+  err.currentState  // 'shipped'
+  err.allowedFrom   // ['pending']
+}
+</code></pre>
+
+<p>If the transition name doesn't exist in the machine definition at all:</p>
+
+<pre><code class="language-typescript">try {
+  await orderMachine.apply(order, 'teleport')
+} catch (err) {
+  // TransitionError: Transition "teleport" is not defined.
+  err.allowedFrom   // undefined
+}
+</code></pre>
+
+<h2>Guards</h2>
+
+Guards are functions that must return <code>true</code> for a transition to proceed. They run after validating the from-state.
+
+<pre><code class="language-typescript">const orderMachine = defineMachine({
+  field: 'status',
+  initial: 'pending',
+  states: ['pending', 'processing', 'shipped', 'delivered', 'canceled', 'refunded'],
+  transitions: {
+    process: { from: 'pending', to: 'processing' },
+    cancel:  { from: ['pending', 'processing'], to: 'canceled' },
+    refund:  { from: ['delivered', 'canceled'], to: 'refunded' },
+  },
+  guards: {
+    cancel: (order) => !order.locked,
+    refund: (order) => {
+      const thirtyDays = 30 <em> 24 </em> 60 <em> 60 </em> 1000
+      return Date.now() - order.deliveredAt.getTime() < thirtyDays
+    },
+  },
+})
+</code></pre>
+
+<h3>Async guards</h3>
+
+<p>Guards can be async — useful for checking external state or database conditions:</p>
+
+<pre><code class="language-typescript">guards: {
+  publish: async (article) => {
+    const reviews = await Review.where('articleId', article.id).count()
+    return reviews >= 2
+  },
+}
+</code></pre>
+
+<h3>Guard errors</h3>
+
+<pre><code class="language-typescript">import { GuardError } from '@strav/machine'
+
+try {
+  await orderMachine.apply(order, 'cancel')
+} catch (err) {
+  // GuardError: Guard rejected transition "cancel" from state "pending".
+  err.transition    // 'cancel'
+  err.currentState  // 'pending'
+}
+</code></pre>
+
+The entity is <strong>not mutated</strong> when a guard rejects.
+
+<h3>Guards and <code>can()</code></h3>
+
+The <code>can()</code> method also evaluates the guard:
+
+<pre><code class="language-typescript">order.locked = true
+orderMachine.can(order, 'cancel')  // false (guard blocks it)
+</code></pre>
+
+<h2>Effects</h2>
+
+Side effects run <strong>after</strong> the field is mutated but <strong>before</strong> persistence (in the ORM mixin). Use them for sending notifications, logging, or updating related data.
+
+<pre><code class="language-typescript">const orderMachine = defineMachine({
+  // ...states, transitions...
+  effects: {
+    ship: async (order, meta) => {
+      await sendShippingEmail(order.email)
+      await Slack.notify(<code>Order #${order.id} shipped</code>)
+    },
+    cancel: async (order, meta) => {
+      await refundPayment(order.paymentId)
+    },
+  },
+})
+</code></pre>
+
+The <code>meta</code> parameter contains transition details:
+
+<pre><code class="language-typescript">interface TransitionMeta {
+  from: string       // Previous state
+  to: string         // New state
+  transition: string // Transition name
+}
+</code></pre>
+
+<h2>Events</h2>
+
+Map transitions to event names. Events are emitted via <code>Emitter</code> after the transition completes (after effects run).
+
+<pre><code class="language-typescript">import Emitter from '@strav/kernel'
+
+const orderMachine = defineMachine({
+  // ...states, transitions...
+  events: {
+    ship:    'order:shipped',
+    deliver: 'order:delivered',
+    cancel:  'order:canceled',
+  },
+})
+
+Emitter.on('order:shipped', ({ entity, from, to, transition }) => {
+  console.log(<code>Order ${entity.id} shipped</code>)
+})
+</code></pre>
+
+<p>Events are fire-and-forget — errors in listeners don't affect the transition.</p>
+
+<h2>ORM mixin</h2>
+
+The <code>stateful()</code> mixin adds state machine methods directly to a <code>BaseModel</code> subclass, with automatic persistence via <code>.save()</code>.
+
+<pre><code class="language-typescript">import { BaseModel } from '@strav/database'
+import { stateful } from '@strav/machine'
+
+class Order extends stateful(BaseModel, orderMachine) {
+  declare id: number
+  declare status: string
+  declare locked: boolean
+}
+</code></pre>
+
+<h3>Instance methods</h3>
+
+<pre><code class="language-typescript">const order = await Order.find(1)
+
+order.is('pending')            // boolean
+order.can('process')           // boolean | Promise<boolean>
+order.availableTransitions()   // string[]
+
+await order.transition('process')
+// 1. Validates from-state
+// 2. Runs guard
+// 3. Mutates order.status = 'processing'
+// 4. Runs effect
+// 5. Calls order.save()
+// 6. Emits event
+</code></pre>
+
+<h3>Query scope</h3>
+
+<p>Filter records by state:</p>
+
+<pre><code class="language-typescript">const pending = await Order.inState('pending').get()
+const active = await Order.inState(['processing', 'shipped']).get()
+</code></pre>
+
+<h3>Composing with other mixins</h3>
+
+Use <code>compose()</code> to combine <code>stateful()</code> with other mixins:
+
+<pre><code class="language-typescript">import { compose } from '@strav/kernel'
+import { searchable } from '@strav/search'
+
+class Order extends compose(
+  BaseModel,
+  searchable,
+  (m) => stateful(m, orderMachine),
+) {
+  // Has both search and state machine methods
+}
+</code></pre>
+
+<h2>Execution order</h2>
+
+When <code>apply()</code> or <code>transition()</code> is called:
+
+<li><strong>Validate from-state</strong> — check that the current state is in the transition's <code>from</code> list</li>
+<li><strong>Run guard</strong> — if defined, must return <code>true</code> (sync or async)</li>
+<li><strong>Mutate field</strong> — <code>entity[field] = to</code></li>
+<li><strong>Run effect</strong> — if defined, execute the side effect</li>
+<li><strong>Save</strong> — (mixin only) call <code>entity.save()</code></li>
+<li><strong>Emit event</strong> — if configured, fire via <code>Emitter</code></li>
+
+<p>If any step fails, subsequent steps don't run. The field is only mutated if both validation and guard pass.</p>
+
+<h2>Practical examples</h2>
+
+<h3>Content publishing</h3>
+
+<pre><code class="language-typescript">const articleMachine = defineMachine({
+  field: 'status',
+  initial: 'draft',
+  states: ['draft', 'review', 'published', 'archived'],
+  transitions: {
+    submit:  { from: 'draft', to: 'review' },
+    approve: { from: 'review', to: 'published' },
+    reject:  { from: 'review', to: 'draft' },
+    archive: { from: 'published', to: 'archived' },
+    restore: { from: 'archived', to: 'draft' },
+  },
+  guards: {
+    submit: (article) => article.title.length > 0 &amp;&amp; article.body.length > 100,
+  },
+  events: {
+    approve: 'article:published',
+    archive: 'article:archived',
+  },
+})
+</code></pre>
+
+<h3>Support tickets</h3>
+
+<pre><code class="language-typescript">const ticketMachine = defineMachine({
+  field: 'state',
+  initial: 'open',
+  states: ['open', 'in_progress', 'waiting', 'resolved', 'closed'],
+  transitions: {
+    assign:   { from: 'open', to: 'in_progress' },
+    wait:     { from: 'in_progress', to: 'waiting' },
+    resume:   { from: 'waiting', to: 'in_progress' },
+    resolve:  { from: ['in_progress', 'waiting'], to: 'resolved' },
+    close:    { from: 'resolved', to: 'closed' },
+    reopen:   { from: ['resolved', 'closed'], to: 'open' },
+  },
+  effects: {
+    assign: async (ticket) => {
+      await notifyAgent(ticket.assigneeId)
+    },
+    resolve: async (ticket) => {
+      await notifyCustomer(ticket.reporterId)
+    },
+  },
+})
+</code></pre>
+
+<h3>Invoice lifecycle</h3>
+
+<pre><code class="language-typescript">const invoiceMachine = defineMachine({
+  field: 'status',
+  initial: 'draft',
+  states: ['draft', 'sent', 'paid', 'overdue', 'void'],
+  transitions: {
+    send:    { from: 'draft', to: 'sent' },
+    pay:     { from: ['sent', 'overdue'], to: 'paid' },
+    overdue: { from: 'sent', to: 'overdue' },
+    void:    { from: ['draft', 'sent', 'overdue'], to: 'void' },
+  },
+  guards: {
+    void: (invoice) => invoice.status !== 'paid',
+  },
+  events: {
+    send: 'invoice:sent',
+    pay:  'invoice:paid',
+    void: 'invoice:voided',
+  },
+})
+</code></pre>
+
+<h2>API reference</h2>
+
+<h3><code>defineMachine(definition)</code></h3>
+
+Create a <code>Machine</code> object from a definition. Returns:
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Signature</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>state(entity)</code></td>
+      <td><code>→ TState</code></td>
+      <td>Get current state</td>
+    </tr>
+    <tr>
+      <td><code>is(entity, state)</code></td>
+      <td><code>→ boolean</code></td>
+      <td>Check if in a specific state</td>
+    </tr>
+    <tr>
+      <td><code>can(entity, transition)</code></td>
+      <td><code>→ boolean | Promise<boolean></code></td>
+      <td>Check if transition is valid + guard passes</td>
+    </tr>
+    <tr>
+      <td><code>availableTransitions(entity)</code></td>
+      <td><code>→ TTransition[]</code></td>
+      <td>List valid transitions from current state</td>
+    </tr>
+    <tr>
+      <td><code>apply(entity, transition)</code></td>
+      <td><code>→ Promise<TransitionMeta></code></td>
+      <td>Apply transition (mutate, effect, emit)</td>
+    </tr>
+    <tr>
+      <td><code>definition</code></td>
+      <td><code>MachineDefinition</code></td>
+      <td>Access the original definition</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3><code>stateful(Base, machine)</code></h3>
+
+Mixin that adds state machine methods to a <code>BaseModel</code> subclass.
+
+<strong>Instance methods:</strong> <code>is()</code>, <code>can()</code>, <code>availableTransitions()</code>, <code>transition()</code>
+
+<strong>Static methods:</strong> <code>inState(state)</code>
+
+<h3>Error classes</h3>
+
+<ul>
+<li><code>TransitionError</code> — transition not valid from current state</li>
+<li><code>GuardError</code> — guard rejected the transition</li>
+</ul>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

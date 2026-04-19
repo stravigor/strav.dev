@@ -1,0 +1,24 @@
+@layout('layouts/app', { title: 'About - Strav Framework' })
+
+@section('content')
+  <section class="about-section">
+    <div class="container">
+      <h1 class="section-title">About Strav Framework</h1>
+      <p class="section-description">
+        The Modern, AI-First Backend Framework built specifically for the Bun runtime
+      </p>
+
+      <div class="about-content">
+        <p>
+          Strav is a comprehensive, modular framework designed for modern applications that need
+          enterprise-grade features, AI capabilities, and exceptional developer experience.
+        </p>
+        <p>
+          Built from the ground up for Bun's speed and efficiency, Strav provides everything you
+          need to build scalable, maintainable applications with TypeScript and Vue.js.
+        </p>
+      </div>
+    </div>
+  </section>
+@end
+  

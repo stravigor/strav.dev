@@ -1,0 +1,357 @@
+@layout('layouts/docs')
+
+@set('title', 'View Engine - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>View Engine</h1>
+
+Server-side template engine with Vue.js island support. Renders <code>.strav</code> templates to HTML strings, compiles them to cached async functions for fast repeated renders.
+
+<h2>Quick start</h2>
+
+<pre><code class="language-typescript">import { ViewEngine, view } from '@strav/view'
+
+// In a route handler via Context
+router.get('/users', async (ctx) => {
+  const users = await User.all()
+  return ctx.view('pages/users', { users, title: 'Users' })
+})
+
+// Or with the standalone helper
+router.get('/', async () => {
+  return view('pages/home', { title: 'Welcome' })
+})
+</code></pre>
+
+<h2>Setup</h2>
+
+Register the <code>ViewProvider</code> in your application:
+
+<pre><code class="language-typescript">import { ViewProvider } from '@strav/view'
+
+app.use(new ViewProvider())
+</code></pre>
+
+This registers the <code>ViewEngine</code> singleton and wires it into the HTTP context so <code>ctx.view()</code> works in all route handlers.
+
+Templates live in the <code>views/</code> directory by default. Configure via <code>config/view.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  directory: env('VIEW_DIRECTORY', 'views'),
+  cache: env.bool('VIEW_CACHE', true),   // disable in development for auto-reload
+}
+</code></pre>
+
+<h2>Template syntax</h2>
+
+<h3>Expressions</h3>
+
+<pre><code class="language-html">{{ user.name }}           {{-- escaped output (HTML entities) --}}
+{!! user.bio !!}          {{-- raw output (no escaping) --}}
+{{-- this is a comment, stripped from output --}}
+</code></pre>
+
+Expressions are real JavaScript — <code>{{ items.length + 1 }}</code>, <code>{{ user.name.toUpperCase() }}</code>, and ternaries all work.
+
+<h3>Conditionals</h3>
+
+<pre><code class="language-html">@if(user.isAdmin)
+  <span class="badge">Admin</span>
+@elseif(user.isMod)
+  <span class="badge">Moderator</span>
+@else
+  <span class="badge">Member</span>
+@end
+</code></pre>
+
+Any JS expression works as the condition: <code>@if(items.length > 0)</code>, <code>@if(user && user.verified)</code>.
+
+<h3>Loops</h3>
+
+<pre><code class="language-html"><ul>
+  @each(item in items)
+    <li>{{ item.name }}</li>
+  @end
+</ul>
+</code></pre>
+
+<p>Inside loops, these variables are available automatically:</p>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Variable</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>$index</code></td>
+      <td><code>number</code></td>
+      <td>Current iteration index (0-based)</td>
+    </tr>
+    <tr>
+      <td><code>$first</code></td>
+      <td><code>boolean</code></td>
+      <td><code>true</code> on the first iteration</td>
+    </tr>
+    <tr>
+      <td><code>$last</code></td>
+      <td><code>boolean</code></td>
+      <td><code>true</code> on the last iteration</td>
+    </tr>
+  </tbody>
+</table>
+
+<pre><code class="language-html">@each(user in users)
+  <div class="{{ $first ? 'border-t' : '' }}">
+    {{ $index + 1 }}. {{ user.name }}
+  </div>
+@end
+</code></pre>
+
+<h3>Includes</h3>
+
+<p>Render a partial template with its own data:</p>
+
+<pre><code class="language-html">@include('partials/nav', { user, notifications })
+</code></pre>
+
+The included template receives both the parent data and any additional data passed. Template names use <code>/</code> as separators, mapping to file paths inside the views directory.
+
+<h3>Layouts and blocks</h3>
+
+<p>Layouts define the page shell. Child templates fill named blocks.</p>
+
+<pre><code class="language-html">{{-- views/layouts/app.strav --}}
+<!DOCTYPE html>
+<html>
+<head><title>{{ title }}</title></head>
+<body>
+  @include('partials/nav', { user })
+  <main>
+    @if(content)
+      {!! content !!}
+    @else
+      <p>No content</p>
+    @end
+  </main>
+</body>
+</html>
+</code></pre>
+
+<pre><code class="language-html">{{-- views/pages/dashboard.strav --}}
+@layout('layouts/app')
+
+@block('content')
+  <h1>Dashboard</h1>
+  <p>Welcome back, {{ user.name }}</p>
+@end
+</code></pre>
+
+<p>The child template renders first, collecting its blocks. Then the layout renders with those blocks available as data.</p>
+
+<h2>Vue islands</h2>
+
+For interactive components, use Vue islands. The server renders a placeholder <code><div></code> and Vue hydrates it on the client.
+
+<h3>In templates</h3>
+
+<pre><code class="language-html"><vue:search-bar placeholder="Search users..." />
+<vue:counter :initial="{{ startCount }}" label="Click me" />
+</code></pre>
+
+Static attributes pass string values. Bound attributes (<code>:prop</code>) evaluate the expression at render time. The server output:
+
+<pre><code class="language-html"><div data-vue="search-bar" data-props='{"placeholder":"Search users..."}'></div>
+<div data-vue="counter" data-props='{"initial":5,"label":"Click me"}'></div>
+</code></pre>
+
+<h3>Vue SFC islands (recommended)</h3>
+
+Write real <code>.vue</code> single-file components in an <code>islands/</code> directory. The framework compiles and bundles them automatically.
+
+<strong>1. Create <code>.vue</code> files:</strong>
+
+<pre><code class="language-vue"><!-- islands/counter.vue -->
+<template>
+  <div class="counter">
+    <button @click="count--">-</button>
+    <span>{{ count }}</span>
+    <button @click="count++">+</button>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+
+const props = defineProps({ initial: { type: Number, default: 0 } })
+const count = ref(props.initial)
+</script>
+
+<style scoped>
+.counter { display: flex; gap: 8px; align-items: center; }
+</style>
+</code></pre>
+
+Both <code><script setup></code> and Options API (<code><script></code>) are supported. <code><style scoped></code> works as expected.
+
+<strong>2. Use <code>@islands</code> in your template:</strong>
+
+<pre><code class="language-html">{{-- views/pages/home.strav --}}
+@layout('layouts/app')
+
+@block('content')
+  <h1>Welcome</h1>
+  <vue:counter :initial="{{ startCount }}" />
+@end
+
+@block('scripts')
+  @islands
+@end
+</code></pre>
+
+The <code>@islands</code> directive emits <code><script src="/islands.js"></script></code>. You can pass a custom path: <code>@islands('/assets/islands.js')</code>.
+
+<strong>3. Build islands before server start:</strong>
+
+<pre><code class="language-typescript">import { IslandBuilder } from '@strav/view'
+
+const islands = new IslandBuilder()
+await islands.build()
+
+// Then start the server (scanPublicDir picks up the built islands.js)
+server.start(router)
+</code></pre>
+
+<code>IslandBuilder.build()</code> scans the <code>islands/</code> directory, compiles all <code>.vue</code> files using <code>@vue/compiler-sfc</code>, and bundles everything (Vue runtime + components + mount logic) into a single <code>public/islands.js</code>.
+
+<strong>Options:</strong>
+
+<pre><code class="language-typescript">const islands = new IslandBuilder({
+  islandsDir: './islands',    // default: './islands'
+  outDir: './public',         // default: './public'
+  outFile: 'islands.js',     // default: 'islands.js'
+  minify: true,               // default: true in production
+})
+</code></pre>
+
+<strong>Dev mode — watch for changes:</strong>
+
+<pre><code class="language-typescript">// Rebuild islands.js automatically when .vue files change
+islands.watch()
+
+// Stop watching
+islands.unwatch()
+</code></pre>
+
+<strong>Dependencies:</strong> The app package needs <code>vue</code> as a dependency (it gets bundled into <code>islands.js</code>):
+
+<pre><code class="language-json">{
+  "dependencies": {
+    "vue": "^3.5.28"
+  }
+}
+</code></pre>
+
+<h3>Manual bootstrap (alternative)</h3>
+
+For apps that load Vue from a CDN or need custom control, you can manually register components on <code>window.__vue_components</code> and use the client-side islands bootstrap:
+
+<pre><code class="language-typescript">import SearchBar from './components/SearchBar.vue'
+import Counter from './components/Counter.vue'
+
+;(window as any).__vue_components = {
+  'search-bar': SearchBar,
+  'counter': Counter,
+}
+
+import '@strav/view/client/islands'
+</code></pre>
+
+<p>Include the bundled script in your layout:</p>
+
+<pre><code class="language-html"><script type="module" src="/assets/app.js"></script>
+</code></pre>
+
+<h2>Static file middleware</h2>
+
+Serve files from a <code>public/</code> directory:
+
+<pre><code class="language-typescript">import { staticFiles } from '@strav/view'
+
+router.use(staticFiles('public'))
+</code></pre>
+
+<p>Serves any file that exists under the root directory. Falls through to the next middleware when no file matches. Blocks directory traversal and hidden files automatically.</p>
+
+<h2>Template resolution</h2>
+
+<p>Template names map to file paths:</p>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>File path</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>'pages/home'</code></td>
+      <td><code>views/pages/home.strav</code></td>
+    </tr>
+    <tr>
+      <td><code>'layouts/app'</code></td>
+      <td><code>views/layouts/app.strav</code></td>
+    </tr>
+    <tr>
+      <td><code>'partials/nav'</code></td>
+      <td><code>views/partials/nav.strav</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Caching</h2>
+
+In production (<code>VIEW_CACHE=true</code>), templates are compiled once and cached in memory for the lifetime of the process — subsequent renders skip file I/O and parsing entirely.
+
+In development (<code>VIEW_CACHE=false</code>), the engine checks file modification times before each render and recompiles automatically when the source changes.
+
+<h2>Testing</h2>
+
+<p>Test templates directly with the engine:</p>
+
+<pre><code class="language-typescript">import { test, expect, beforeAll } from 'bun:test'
+import ViewEngine from '@strav/view'
+import Configuration from '@strav/kernel'
+
+let engine: ViewEngine
+
+beforeAll(async () => {
+  const config = new Configuration('config')
+  config.set('view.directory', 'tests/view/fixtures')
+  config.set('view.cache', false)
+  engine = new ViewEngine(config)
+})
+
+test('renders user page', async () => {
+  const html = await engine.render('pages/users', {
+    users: [{ name: 'Alice' }],
+    title: 'Users',
+  })
+  expect(html).toContain('Alice')
+})
+</code></pre>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

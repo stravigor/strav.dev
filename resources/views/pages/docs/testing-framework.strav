@@ -1,0 +1,387 @@
+@layout('layouts/docs')
+
+@set('title', 'Testing - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Testing</h1>
+
+<p>TestCase boots your app, provides HTTP helpers, and wraps each test in a rolled-back database transaction for full isolation.</p>
+
+<h2>Quick Start</h2>
+
+<pre><code class="language-typescript">import { describe, test, expect } from 'bun:test'
+import { TestCase, Factory } from '@strav/testing'
+import User from '../app/models/user'
+
+const UserFactory = Factory.define(User, (seq) => ({
+  pid: crypto.randomUUID(),
+  name: <code>User ${seq}</code>,
+  email: <code>user-${seq}@test.com</code>,
+  passwordHash: 'hashed',
+}))
+
+const t = await TestCase.boot({
+  auth: true,
+  domain: 'example.com',
+  routes: () => import('../start/api_routes'),
+})
+
+describe('Users API', () => {
+  test('list users', async () => {
+    const user = await UserFactory.create()
+    await t.actingAs(user)
+
+    const res = await t.get('/api/users')
+    expect(res.status).toBe(200)
+  })
+
+  // No cleanup needed — transaction auto-rollbacks after each test
+})
+</code></pre>
+
+<h2>TestCase</h2>
+
+<h3>Boot</h3>
+
+<code>TestCase.boot()</code> registers <code>beforeEach</code>, <code>afterEach</code>, and <code>afterAll</code> hooks automatically:
+
+<pre><code class="language-typescript">const t = await TestCase.boot({
+  routes: () => import('../start/api_routes'),
+})
+</code></pre>
+
+<p>For manual control, use the instance methods directly:</p>
+
+<pre><code class="language-typescript">const t = new TestCase()
+beforeAll(() => t.setup())
+afterAll(() => t.teardown())
+beforeEach(() => t.beforeEach())
+afterEach(() => t.afterEach())
+</code></pre>
+
+<h3>Options</h3>
+
+<pre><code class="language-typescript">const t = await TestCase.boot({
+  // Load route files (called once during setup)
+  routes: () => import('../start/api_routes'),
+
+  // Boot Auth + SessionManager, create their tables (default: false)
+  auth: true,
+
+  // Set Auth.useResolver() for loading users by ID
+  userResolver: async (id) => User.find(id as string),
+
+  // Boot ViewEngine (default: false)
+  views: true,
+
+  // Wrap each test in a transaction (default: true)
+  transaction: true,
+
+  // Base domain for subdomain extraction (default: 'localhost')
+  domain: 'example.com',
+})
+</code></pre>
+
+<h3>HTTP Helpers</h3>
+
+All helpers call <code>router.handle()</code> directly — no HTTP server needed, no port conflicts:
+
+<pre><code class="language-typescript">const res = await t.get('/api/users')
+const res = await t.post('/api/users', { name: 'Alice' })
+const res = await t.put('/api/users/1', { name: 'Bob' })
+const res = await t.patch('/api/users/1', { name: 'Charlie' })
+const res = await t.delete('/api/users/1')
+</code></pre>
+
+<p>Bodies are automatically serialized as JSON. Custom headers can be passed as the last argument:</p>
+
+<pre><code class="language-typescript">const res = await t.get('/api/users', { 'X-Custom': 'value' })
+const res = await t.post('/api/users', body, { 'X-Custom': 'value' })
+</code></pre>
+
+<h3>Authentication</h3>
+
+<pre><code class="language-typescript">// Authenticate as a user (creates a real AccessToken)
+const user = await UserFactory.create()
+await t.actingAs(user)
+
+// All subsequent requests include the Bearer token
+const res = await t.get('/api/profile')  // Authenticated
+
+// Clear authentication
+t.withoutAuth()
+const res = await t.get('/api/profile')  // Unauthenticated
+</code></pre>
+
+Auth state resets automatically after each test (via <code>afterEach</code>).
+
+<h3>Custom Headers</h3>
+
+<pre><code class="language-typescript">t.withHeaders({ 'Accept-Language': 'fr' })
+const res = await t.get('/api/content')
+</code></pre>
+
+<p>Headers reset after each test.</p>
+
+<h3>Subdomain Testing</h3>
+
+Test subdomain-based APIs (e.g., <code>api.example.com</code>) using the subdomain helpers:
+
+<pre><code class="language-typescript">// Test routes on api.example.com
+await t.onSubdomain('api').get('/users')
+await t.onSubdomain('api').post('/posts', { title: 'Hello' })
+
+// Test tenant-specific routes (tenant.example.com)
+await t.onSubdomain('acme').get('/dashboard')
+// ctx.params.tenant === 'acme' in subdomain routes
+
+// Clear subdomain for main domain requests
+t.withoutSubdomain()
+await t.get('/health')  // example.com/health
+</code></pre>
+
+<p>Subdomain state resets automatically after each test.</p>
+
+<strong>Note:</strong> You must set <code>domain: 'example.com'</code> in <code>TestCase.boot()</code> for subdomain routing to work properly.
+
+<h3>Exposed Properties</h3>
+
+<pre><code class="language-typescript">t.db       // Database instance — for direct SQL queries
+t.router   // Router instance — for custom assertions
+t.config   // Configuration instance — for reading config values
+</code></pre>
+
+<h2>Transaction Isolation</h2>
+
+<p>By default, every test runs inside a database transaction that rolls back when the test completes. This means:</p>
+
+<ul>
+<li>Tests are fully isolated — data created in one test is invisible to the next</li>
+<li>No <code>DELETE FROM</code> cleanup needed</li>
+<li>Tests can run in any order</li>
+<li>Fast — rollback is cheaper than delete + re-insert</li>
+</ul>
+
+<p>To disable transaction wrapping (e.g., for tests that don't touch the database):</p>
+
+<pre><code class="language-typescript">const t = await TestCase.boot({ transaction: false })
+</code></pre>
+
+<h2>Factory</h2>
+
+<h3>Shared factory definitions</h3>
+
+Define factories in <code>database/factories/</code> so both tests and <a href="./database.md#seeding">seeders</a> can import them:
+
+<pre><code>database/
+  factories/
+    user_factory.ts
+    post_factory.ts
+    index.ts          # re-exports all factories
+</code></pre>
+
+<pre><code class="language-typescript">// database/factories/user_factory.ts
+import { Factory } from '@strav/testing'
+import User from '../../app/models/user'
+
+export const UserFactory = Factory.define(User, (seq) => ({
+  pid: crypto.randomUUID(),
+  name: <code>User ${seq}</code>,
+  email: <code>user-${seq}@test.com</code>,
+  passwordHash: 'hashed',
+}))
+</code></pre>
+
+<p>Then import in tests:</p>
+
+<pre><code class="language-typescript">import { UserFactory, PostFactory } from '../database/factories'
+</code></pre>
+
+<h3>Define</h3>
+
+<pre><code class="language-typescript">import { Factory } from '@strav/testing'
+import User from '../app/models/user'
+import Post from '../app/models/post'
+
+const UserFactory = Factory.define(User, (seq) => ({
+  pid: crypto.randomUUID(),
+  name: <code>User ${seq}</code>,
+  email: <code>user-${seq}@test.com</code>,
+  passwordHash: 'hashed',
+}))
+
+const PostFactory = Factory.define(Post, (seq) => ({
+  title: <code>Post ${seq}</code>,
+  body: 'Lorem ipsum',
+  status: 'draft',
+}))
+</code></pre>
+
+The <code>seq</code> argument is an auto-incrementing number (1, 2, 3...) unique to each factory, useful for generating unique values.
+
+<h3>Create</h3>
+
+<pre><code class="language-typescript">// Create and persist a single record
+const user = await UserFactory.create()
+
+// With overrides
+const admin = await UserFactory.create({ name: 'Admin', role: 'admin' })
+
+// Create multiple
+const users = await UserFactory.createMany(5)
+const editors = await UserFactory.createMany(3, { role: 'editor' })
+</code></pre>
+
+<h3>Make (No Database)</h3>
+
+<p>Build an in-memory instance without persisting:</p>
+
+<pre><code class="language-typescript">const user = UserFactory.make()
+user._exists  // false — not in the database
+user.name     // 'User 1'
+
+const custom = UserFactory.make({ name: 'Override' })
+</code></pre>
+
+<h3>Reset Sequences</h3>
+
+<pre><code class="language-typescript">Factory.resetSequences()  // Resets all factory counters to 0
+</code></pre>
+
+<h2>API Testing Patterns</h2>
+
+<h3>Prefix vs Subdomain Routing</h3>
+
+<p>Strav supports two approaches for API organization:</p>
+
+<h4>1. Path Prefix (Traditional)</h4>
+<pre><code class="language-typescript">// Route registration
+router.group({ prefix: '/api' }, (r) => {
+  r.get('/users', listUsers)       // example.com/api/users
+  r.post('/posts', createPost)     // example.com/api/posts
+})
+
+// Testing
+const res = await t.get('/api/users')
+</code></pre>
+
+<h4>2. Subdomain-based</h4>
+<pre><code class="language-typescript">// Route registration
+router.setDomain('example.com')
+router.subdomain('api', (r) => {
+  r.get('/users', listUsers)       // api.example.com/users
+  r.post('/posts', createPost)     // api.example.com/posts
+})
+
+// Testing
+const t = await TestCase.boot({ domain: 'example.com' })
+const res = await t.onSubdomain('api').get('/users')
+</code></pre>
+
+<h4>Multi-tenant with Dynamic Subdomains</h4>
+<pre><code class="language-typescript">// Route registration
+router.subdomain(':tenant', (r) => {
+  r.get('/dashboard', (ctx) => {
+    const tenant = ctx.params.tenant  // 'acme', 'corp', etc.
+    return ctx.json({ tenant })
+  })
+})
+
+// Testing
+await t.onSubdomain('acme').get('/dashboard')    // acme.example.com/dashboard
+await t.onSubdomain('corp').get('/dashboard')    // corp.example.com/dashboard
+</code></pre>
+
+<h2>Full Example</h2>
+
+<pre><code class="language-typescript">import { describe, test, expect } from 'bun:test'
+import { TestCase, Factory } from '@strav/testing'
+import User from '../app/models/user'
+import Post from '../app/models/post'
+
+const UserFactory = Factory.define(User, (seq) => ({
+  pid: crypto.randomUUID(),
+  name: <code>User ${seq}</code>,
+  email: <code>user-${seq}@test.com</code>,
+  passwordHash: 'hashed',
+}))
+
+const PostFactory = Factory.define(Post, (seq) => ({
+  title: <code>Post ${seq}</code>,
+  body: <code>Content for post ${seq}</code>,
+}))
+
+const t = await TestCase.boot({
+  auth: true,
+  domain: 'example.com',
+  userResolver: async (id) => User.find(id as string),
+  routes: () => import('../start/api_routes'),
+})
+
+describe('Posts API', () => {
+  test('create a post', async () => {
+    const user = await UserFactory.create()
+    await t.actingAs(user)
+
+    const res = await t.post(<code>/api/users/${user.pid}/posts</code>, {
+      title: 'My Post',
+      body: 'Hello world',
+    })
+
+    expect(res.status).toBe(201)
+    const data = await res.json() as any
+    expect(data.title).toBe('My Post')
+  })
+
+  test('list posts for a user', async () => {
+    const user = await UserFactory.create()
+    await t.actingAs(user)
+
+    // Create posts with the factory
+    await PostFactory.create({ userPid: user.pid })
+    await PostFactory.create({ userPid: user.pid })
+
+    const res = await t.get(<code>/api/users/${user.pid}/posts</code>)
+    expect(res.status).toBe(200)
+    const data = await res.json() as any[]
+    expect(data).toHaveLength(2)
+  })
+
+  test('unauthenticated request returns 401', async () => {
+    const res = await t.get('/api/profile')
+    expect(res.status).toBe(401)
+  })
+
+  test('API on subdomain', async () => {
+    const user = await UserFactory.create()
+    await t.actingAs(user)
+
+    // Test API routes on api.example.com subdomain
+    await t.onSubdomain('api')
+    const res = await t.get('/users')  // api.example.com/users
+    expect(res.status).toBe(200)
+  })
+
+  test('tenant subdomain with parameter', async () => {
+    const user = await UserFactory.create()
+    await t.actingAs(user)
+
+    // Test tenant routes: acme.example.com/dashboard
+    // Router should be configured with router.subdomain(':tenant', ...)
+    const res = await t.onSubdomain('acme').get('/dashboard')
+    expect(res.status).toBe(200)
+
+    // Route handler can access ctx.params.tenant === 'acme'
+  })
+})
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

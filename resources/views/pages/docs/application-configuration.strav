@@ -1,0 +1,150 @@
+@layout('layouts/docs')
+
+@set('title', 'Configuration - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Configuration</h1>
+
+The configuration module loads settings from the <code>config/</code> directory and provides dot-notation access to all values.
+
+<h2>Config files</h2>
+
+Each file in <code>config/</code> exports a default object. The filename becomes the top-level key:
+
+<pre><code class="language-typescript">// config/database.ts
+import { env } from '@strav/kernel'
+
+export default {
+  host: env('DB_HOST', '127.0.0.1'),
+  port: env.int('DB_PORT', 5432),
+  username: env('DB_USER', 'postgres'),
+  password: env('DB_PASSWORD', ''),
+  database: env('DB_DATABASE', 'stravigor'),
+}
+</code></pre>
+
+<pre><code class="language-typescript">// config/http.ts
+import { env } from '@strav/kernel'
+
+export default {
+  host: env('HTTP_HOST', '0.0.0.0'),
+  port: env.int('HTTP_PORT', 3000),
+  domain: env('APP_DOMAIN', 'localhost'),
+}
+</code></pre>
+
+<h2>Loading configuration</h2>
+
+<h3>Using a service provider (recommended)</h3>
+
+<pre><code class="language-typescript">import { ConfigProvider } from '@strav/kernel'
+
+app.use(new ConfigProvider())
+</code></pre>
+
+The <code>ConfigProvider</code> registers <code>Configuration</code> as a singleton and calls <code>load()</code> automatically. Pass <code>{ directory: './config' }</code> to customize the config path (default: <code>'./config'</code>).
+
+<h3>Manual setup</h3>
+
+<pre><code class="language-typescript">import { Configuration } from '@strav/kernel'
+
+const config = new Configuration('./config')
+await config.load()
+</code></pre>
+
+The <code>load()</code> method scans the directory and loads every supported file through the appropriate loader.
+
+<h2>Reading values</h2>
+
+<p>Use dot notation to access nested values:</p>
+
+<pre><code class="language-typescript">config.get('database.host')              // '127.0.0.1'
+config.get('database.port')              // 5432
+config.get('http.domain', 'localhost')   // with default fallback
+</code></pre>
+
+<p>Other access methods:</p>
+
+<pre><code class="language-typescript">config.has('database.host')   // true
+config.set('app.debug', true) // set at runtime
+config.all()                  // returns the entire config tree
+</code></pre>
+
+<h2>Config helper</h2>
+
+For simple configuration access without resolving from the container, use the <code>config()</code> helper:
+
+<pre><code class="language-typescript">import { config } from '@strav/kernel'
+
+// Basic usage
+const dbHost = config('database.host')              // '127.0.0.1'
+const dbPort = config('database.port', 5432)        // with default fallback
+const appName = config('app.name', 'My App')        // 'My App' if not set
+</code></pre>
+
+<h3>Typed methods</h3>
+
+Similar to the <code>env()</code> helper, <code>config()</code> provides typed accessors:
+
+<pre><code class="language-typescript">config.int('app.port', 3000)        // parsed as integer
+config.float('cache.ratio', 0.75)   // parsed as float
+config.bool('app.debug', false)     // boolean conversion
+config.array('app.tags', [])        // ensures array type
+</code></pre>
+
+<h3>Additional utilities</h3>
+
+<pre><code class="language-typescript">config.has('database.host')         // check if key exists
+config.set('app.debug', true)       // set value at runtime
+config.all()                        // get entire config tree
+</code></pre>
+
+The helper lazily resolves and caches the Configuration instance from the app container, providing the same simple access pattern as the <code>env()</code> helper.
+
+<h2>Supported file formats</h2>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Format</th>
+      <th>Extensions</th>
+      <th>Loader</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>TypeScript</td>
+      <td><code>.ts</code>, <code>.js</code></td>
+      <td><code>TypeScriptLoader</code></td>
+    </tr>
+    <tr>
+      <td>Environment</td>
+      <td><code>.env</code>, <code>.env.*</code></td>
+      <td><code>EnvLoader</code></td>
+    </tr>
+  </tbody>
+</table>
+
+The loader architecture is extensible — new formats (JSON, YAML, etc.) can be added by implementing the <code>ConfigurationLoader</code> interface.
+
+<h2>Environment-specific overrides</h2>
+
+The <code>EnvLoader</code> supports environment-specific files. If you have <code>.env</code> and <code>.env.production</code>, the production values override the base values when loaded with the <code>production</code> environment name.
+
+<h2>Using with DI</h2>
+
+The <code>Configuration</code> class is <code>@inject</code>-decorated, so it works with the container:
+
+<pre><code class="language-typescript">app.singleton(Configuration)
+// other services that depend on Configuration get it auto-injected
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <a href="/docs/core/kernel/core" class="prev">← Application & DI</a>
+    <a href="/docs/core/kernel/cache" class="next">Cache →</a>
+  </div>
+</article>
+@end

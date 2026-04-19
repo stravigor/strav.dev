@@ -1,0 +1,274 @@
+@layout('layouts/docs')
+
+@set('title', 'Broadcast - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Broadcast</h1>
+
+<p>Channel-based real-time broadcasting over WebSocket. One connection per client, multiplexed channels, pattern-based authorization, auto-reconnect.</p>
+
+<h2>Setup</h2>
+
+<h3>Using a service provider (recommended)</h3>
+
+<pre><code class="language-typescript">import { BroadcastProvider } from '@strav/signal'
+import { session } from '@strav/http'
+
+app.use(new BroadcastProvider({
+  middleware: [session()],
+  pingInterval: 30_000,
+  path: '/_broadcast',
+}))
+</code></pre>
+
+The <code>BroadcastProvider</code> calls <code>BroadcastManager.boot()</code> with the router and shuts down connections on application shutdown.
+
+<h3>Manual setup</h3>
+
+<pre><code class="language-typescript">import { broadcast } from '@strav/signal'
+
+broadcast.boot(router, {
+  middleware: [session()],   // optional — run middleware on each WS connection
+  pingInterval: 30_000,      // keepalive interval in ms (default: 30s, 0 to disable)
+  path: '/_broadcast',       // WS endpoint path (default: /_broadcast)
+})
+</code></pre>
+
+<h2>Channels</h2>
+
+Define channels to control which topics clients can subscribe to. Channel patterns use the same <code>:param</code> syntax as routes.
+
+<pre><code class="language-typescript">import { broadcast } from '@strav/signal'
+</code></pre>
+
+<h3>Public channel</h3>
+
+<p>Anyone can subscribe — no authorization:</p>
+
+<pre><code class="language-typescript">broadcast.channel('announcements')
+</code></pre>
+
+<h3>Authorized channel</h3>
+
+The callback receives the connection's <code>Context</code> (with session/user from middleware) and the extracted params. Return <code>true</code> to allow, <code>false</code> to deny:
+
+<pre><code class="language-typescript">broadcast.channel('chats/:id', async (ctx, { id }) => {
+  const user = ctx.get('user')
+  return !!user
+})
+</code></pre>
+
+<h3>Channel with message handlers</h3>
+
+<p>For bidirectional communication, define message handlers that receive events from clients:</p>
+
+<pre><code class="language-typescript">broadcast.channel('chat/:id', {
+  authorize: async (ctx, { id }) => !!ctx.get('user'),
+  messages: {
+    async send(ctx, { id }, data) {
+      const user = ctx.get('user')
+      await Message.create({ chatId: id, text: data.text, userId: user.id })
+      broadcast.to(<code>chat/${id}</code>).send('new_message', { text: data.text, userId: user.id })
+    },
+    typing(ctx, { id }, data) {
+      broadcast.to(<code>chat/${id}</code>).except(ctx.clientId).send('typing', data)
+    }
+  }
+})
+</code></pre>
+
+<p>Each handler receives:</p>
+<ul>
+<li><code>ctx</code> — the connection's Context (with <code>ctx.clientId</code> set to the sender's ID)</li>
+<li><code>params</code> — extracted route parameters from the channel pattern</li>
+<li><code>data</code> — the payload sent by the client</li>
+</ul>
+
+<h2>Broadcasting</h2>
+
+<p>Send events to channel subscribers from anywhere — controllers, services, event listeners:</p>
+
+<pre><code class="language-typescript">import { broadcast } from '@strav/signal'
+
+// Broadcast to all subscribers
+broadcast.to('announcements').send('news', { title: 'v2 released!' })
+
+// Broadcast to a dynamic channel
+broadcast.to(<code>chats/${chatId}</code>).send('message', { text, userId })
+
+// Exclude a specific client (e.g. the sender)
+broadcast.to(<code>chats/${chatId}</code>).except(senderId).send('message', data)
+</code></pre>
+
+<p>Broadcasting to a channel with no subscribers is a no-op.</p>
+
+<h2>Client</h2>
+
+<p>The browser client manages a single WebSocket connection with automatic reconnection and multiplexed channel subscriptions.</p>
+
+<pre><code class="language-typescript">import { Broadcast } from '@strav/signal/broadcast'
+</code></pre>
+
+<h3>Connect</h3>
+
+<pre><code class="language-typescript">const bc = new Broadcast()  // auto-detects ws(s)://host/_broadcast
+</code></pre>
+
+<p>Or with explicit options:</p>
+
+<pre><code class="language-typescript">const bc = new Broadcast({
+  url: 'wss://api.example.com/_broadcast',
+  maxReconnectAttempts: 10,  // default: Infinity
+})
+</code></pre>
+
+<h3>Subscribe to a channel</h3>
+
+<pre><code class="language-typescript">const chat = bc.subscribe('chat/1')
+
+chat.on('new_message', (data) => {
+  console.log(data.text)
+})
+
+chat.on('typing', (data) => {
+  showTypingIndicator(data.userId)
+})
+</code></pre>
+
+The <code>on</code> method returns a cleanup function:
+
+<pre><code class="language-typescript">const stop = chat.on('new_message', handler)
+stop()  // remove this specific listener
+</code></pre>
+
+<h3>Send messages to the server</h3>
+
+<p>For channels with message handlers:</p>
+
+<pre><code class="language-typescript">chat.send('send', { text: 'Hello!' })
+chat.send('typing', { active: true })
+</code></pre>
+
+<h3>Unsubscribe</h3>
+
+<pre><code class="language-typescript">chat.leave()
+</code></pre>
+
+<h3>Connection lifecycle</h3>
+
+<pre><code class="language-typescript">bc.on('connected', () => {
+  console.log('Online')
+})
+
+bc.on('disconnected', () => {
+  console.log('Offline')
+})
+
+bc.on('reconnecting', (attempt) => {
+  console.log(<code>Reconnecting... attempt ${attempt}</code>)
+})
+
+bc.on('subscribed', (channel) => {
+  console.log(<code>Subscribed to ${channel}</code>)
+})
+
+bc.on('error', ({ channel, reason }) => {
+  console.log(<code>Subscription to ${channel} denied: ${reason}</code>)
+})
+</code></pre>
+
+<h3>Client ID</h3>
+
+Each connection receives a unique ID from the server. Available after the first <code>connected</code> event:
+
+<pre><code class="language-typescript">bc.clientId  // string | null
+</code></pre>
+
+<h3>Close</h3>
+
+<pre><code class="language-typescript">bc.close()  // closes connection, no reconnect
+</code></pre>
+
+<h2>Reconnection</h2>
+
+<p>The client reconnects automatically with exponential backoff (1s, 2s, 4s, ... up to 30s). On reconnect, all active subscriptions are re-established automatically.</p>
+
+<h2>Wire protocol</h2>
+
+<p>All messages are JSON over a single WebSocket. Short keys minimize overhead:</p>
+
+<pre><code>Client → Server:
+  { "t": "sub",   "c": "chat/1" }                            subscribe
+  { "t": "unsub", "c": "chat/1" }                            unsubscribe
+  { "t": "msg",   "c": "chat/1", "e": "send", "d": {...} }  channel message
+
+Server → Client:
+  { "t": "welcome", "id": "uuid" }                           connection established
+  { "t": "ok",   "c": "chat/1" }                             subscription confirmed
+  { "t": "err",  "c": "chat/1", "r": "unauthorized" }       subscription denied
+  { "t": "msg",  "c": "chat/1", "e": "message", "d": {...} } broadcast event
+  { "t": "ping" }                                             keepalive
+</code></pre>
+
+<h2>Introspection</h2>
+
+<pre><code class="language-typescript">broadcast.clientCount                   // number of active connections
+broadcast.subscriberCount('chat/1')     // subscribers on a specific channel
+</code></pre>
+
+<h2>Integration with events</h2>
+
+<p>Bridge application events to broadcast channels:</p>
+
+<pre><code class="language-typescript">import { Emitter } from '@strav/kernel'
+import { broadcast } from '@strav/signal'
+
+Emitter.on<{ task: Task }>('task.created', ({ task }) => {
+  broadcast.to(<code>projects/${task.projectId}/tasks</code>).send('created', task)
+})
+</code></pre>
+
+<h2>Full example</h2>
+
+<pre><code class="language-typescript">// index.ts
+import { broadcast } from '@strav/signal'
+
+broadcast.boot(router, { middleware: [session()] })
+
+broadcast.channel('notifications', (ctx) => !!ctx.get('user'))
+
+broadcast.channel('chat/:id', {
+  authorize: (ctx, { id }) => !!ctx.get('user'),
+  messages: {
+    async send(ctx, { id }, data) {
+      broadcast.to(<code>chat/${id}</code>).send('message', {
+        text: data.text,
+        userId: ctx.get('user').id,
+      })
+    }
+  }
+})
+</code></pre>
+
+<pre><code class="language-typescript">// client
+import { Broadcast } from '@strav/signal/broadcast'
+
+const bc = new Broadcast()
+const chat = bc.subscribe('chat/1')
+
+chat.on('message', (data) => {
+  addMessage(data.text, data.userId)
+})
+
+chat.send('send', { text: 'Hello!' })
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

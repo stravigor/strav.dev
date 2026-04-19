@@ -1,0 +1,296 @@
+@layout('layouts/docs')
+
+@set('title', 'Queue - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Queue</h1>
+
+<p>The queue module provides persistent, retryable background job processing backed by PostgreSQL. Jobs survive restarts and can be processed by multiple concurrent workers.</p>
+
+<h2>Setup</h2>
+
+<h3>Using a service provider (recommended)</h3>
+
+<pre><code class="language-typescript">import { QueueProvider } from '@strav/queue'
+
+app.use(new QueueProvider())
+</code></pre>
+
+The <code>QueueProvider</code> registers <code>Queue</code> as a singleton and creates the queue tables automatically. It depends on the <code>database</code> provider.
+
+<p>Options:</p>
+
+<p>| Option | Default | Description |</p>
+<p>|--------|---------|-------------|</p>
+| <code>ensureTables</code> | <code>true</code> | Auto-create the jobs and failed_jobs tables |
+
+<h3>Manual setup</h3>
+
+<pre><code class="language-typescript">import { Queue } from '@strav/queue'
+
+app.singleton(Queue)
+app.resolve(Queue)
+await Queue.ensureTables()
+</code></pre>
+
+This creates <code>_stravigor_jobs</code> and <code>_stravigor_failed_jobs</code> if they don't exist.
+
+<h2>Configuration</h2>
+
+<pre><code class="language-typescript">// config/queue.ts
+import { env } from '@strav/kernel'
+
+export default {
+  default: 'default',                           // default queue name
+  maxAttempts: env.int('QUEUE_MAX_ATTEMPTS', 3), // retries before failure
+  timeout: env.int('QUEUE_TIMEOUT', 60_000),     // per-job timeout (ms)
+  retryBackoff: 'exponential' as const,          // 'exponential' | 'linear'
+  sleep: env.int('QUEUE_SLEEP', 1000),           // poll interval (ms)
+}
+</code></pre>
+
+<h2>Pushing jobs</h2>
+
+<pre><code class="language-typescript">const id = await Queue.push('send-email', { to: 'user@example.com' })
+</code></pre>
+
+<p>Returns the job ID. The job is available for processing immediately.</p>
+
+<h3>Options</h3>
+
+<pre><code class="language-typescript">await Queue.push('send-email', payload, {
+  queue: 'emails',     // target a specific queue (default: config default)
+  delay: 60_000,       // delay before the job becomes available (ms)
+  attempts: 5,         // max retry attempts (default: config maxAttempts)
+  timeout: 120_000,    // per-job timeout (default: config timeout)
+})
+</code></pre>
+
+<h2>Handling jobs</h2>
+
+<p>Register a handler before starting the worker:</p>
+
+<pre><code class="language-typescript">Queue.handle('send-email', async (payload, meta) => {
+  await mailer.send(payload.to, payload.subject)
+})
+</code></pre>
+
+<p>The handler receives:</p>
+<ul>
+<li><code>payload</code> — the data passed to <code>Queue.push()</code>.</li>
+<li><code>meta</code> — job metadata: <code>{ id, queue, job, attempts, maxAttempts }</code>.</li>
+</ul>
+
+<p>If no handler is registered for a job, it moves directly to the failed jobs table.</p>
+
+<h2>Worker</h2>
+
+<p>The worker polls the queue, picks up jobs, and runs their handlers.</p>
+
+<pre><code class="language-typescript">import { Worker } from '@strav/queue'
+
+const worker = new Worker({ queue: 'emails', sleep: 500 })
+await worker.start() // blocks until worker.stop() is called
+</code></pre>
+
+<h3>How it works</h3>
+
+<li>Polls for available jobs using <code>SELECT ... FOR UPDATE SKIP LOCKED</code> — safe for multiple concurrent workers.</li>
+<li>Runs the job handler with a <code>Promise.race</code> timeout.</li>
+<li>On success, deletes the job.</li>
+<li>On failure, either retries (releases back with backoff) or moves to <code>_stravigor_failed_jobs</code>.</li>
+<li>Periodically releases stale jobs from crashed workers.</li>
+
+<h3>Graceful shutdown</h3>
+
+The worker listens for <code>SIGINT</code> and <code>SIGTERM</code>. When received, it finishes the current job and exits cleanly.
+
+<pre><code class="language-typescript">worker.stop() // can also be called programmatically
+</code></pre>
+
+<h3>Backoff strategy</h3>
+
+<p>When a job fails and has remaining attempts, it's released back to the queue with a delay:</p>
+
+<ul>
+<li><strong>Exponential</strong> (default): <code>2^attempts * 1000ms + random jitter</code> — e.g., 2s, 4s, 8s, 16s...</li>
+<li><strong>Linear</strong>: <code>attempts * 5000ms</code> — e.g., 5s, 10s, 15s...</li>
+</ul>
+
+<h2>Events bridge</h2>
+
+Use <code>Queue.listener()</code> to connect the event bus to the queue:
+
+<pre><code class="language-typescript">import { Emitter } from '@strav/kernel'
+import { Queue } from '@strav/queue'
+
+Emitter.on('user.registered', Queue.listener('send-welcome-email'))
+Emitter.on('order.placed', Queue.listener('generate-invoice', { queue: 'billing' }))
+</code></pre>
+
+<p>When the event fires, the payload is automatically pushed as a job. This is ideal for offloading slow work from the request cycle.</p>
+
+The <a href="./notification.md">Notification module</a> also uses the queue — notifications with <code>shouldQueue()</code> returning <code>true</code> are pushed as <code>stravigor:send-notification</code> jobs and delivered by the worker.
+
+<h2>Queue management</h2>
+
+<h3>Introspection</h3>
+
+<pre><code class="language-typescript">await Queue.size()              // pending jobs in the default queue
+await Queue.size('emails')      // pending jobs in a specific queue
+await Queue.pending()           // list pending jobs (default queue, limit 25)
+await Queue.pending('emails')   // list pending jobs in a specific queue
+</code></pre>
+
+<h3>Failed jobs</h3>
+
+<pre><code class="language-typescript">await Queue.failed()            // list failed jobs (all queues)
+await Queue.failed('emails')    // list failed jobs for a specific queue
+await Queue.retryFailed()       // move all failed jobs back to the queue
+await Queue.retryFailed('emails')
+await Queue.clearFailed()       // delete all failed jobs
+await Queue.clearFailed('emails')
+</code></pre>
+
+<h3>Clearing</h3>
+
+<pre><code class="language-typescript">await Queue.clear()             // delete all pending jobs in default queue
+await Queue.clear('emails')     // delete all pending jobs in a specific queue
+await Queue.flush()             // delete everything (jobs + failed) — dev/test only
+</code></pre>
+
+<h2>CLI commands</h2>
+
+<h3>queue:work</h3>
+
+<p>Start a worker process:</p>
+
+<pre><code class="language-bash">bun strav queue:work
+bun strav queue:work --queue emails --sleep 500
+</code></pre>
+
+<strong>Options:</strong>
+<ul>
+<li><code>--queue <name></code> — Queue to process (default: <code>'default'</code>).</li>
+<li><code>--sleep <ms></code> — Poll interval in milliseconds (default: <code>1000</code>).</li>
+</ul>
+
+<p>Press Ctrl+C to stop gracefully.</p>
+
+<h3>queue:retry</h3>
+
+<p>Move failed jobs back to the queue for reprocessing:</p>
+
+<pre><code class="language-bash">bun strav queue:retry
+bun strav queue:retry --queue emails
+</code></pre>
+
+<strong>Options:</strong>
+<ul>
+<li><code>--queue <name></code> — Only retry failed jobs from this queue.</li>
+</ul>
+
+<h3>queue:flush</h3>
+
+<p>Delete jobs from a queue:</p>
+
+<pre><code class="language-bash">bun strav queue:flush
+bun strav queue:flush --queue emails
+bun strav queue:flush --failed          # also clear failed jobs
+</code></pre>
+
+<strong>Options:</strong>
+<ul>
+<li><code>--queue <name></code> — Queue to flush (default: <code>'default'</code>).</li>
+<li><code>--failed</code> — Also clear failed jobs.</li>
+</ul>
+
+<h2>Database tables</h2>
+
+The queue module creates two internal tables (prefixed with <code>_stravigor_</code>):
+
+<strong>_stravigor_jobs</strong>
+
+<p>| Column | Type | Notes |</p>
+<p>|--------|------|-------|</p>
+<p>| id | BIGSERIAL | Primary key |</p>
+| queue | VARCHAR(255) | Default <code>'default'</code> |
+<p>| job | VARCHAR(255) | Job name |</p>
+<p>| payload | JSONB | Serialized data |</p>
+<p>| attempts | INT | Current attempt count |</p>
+<p>| max_attempts | INT | Max retries |</p>
+<p>| timeout | INT | Per-job timeout (ms) |</p>
+<p>| available_at | TIMESTAMPTZ | When the job becomes available |</p>
+<p>| reserved_at | TIMESTAMPTZ | NULL if available, set when a worker picks it up |</p>
+<p>| created_at | TIMESTAMPTZ | |</p>
+
+A partial index on <code>(queue, available_at) WHERE reserved_at IS NULL</code> ensures only fetchable jobs are indexed.
+
+<strong>_stravigor_failed_jobs</strong>
+
+<p>| Column | Type | Notes |</p>
+<p>|--------|------|-------|</p>
+<p>| id | BIGSERIAL | Primary key |</p>
+<p>| queue | VARCHAR(255) | |</p>
+<p>| job | VARCHAR(255) | |</p>
+<p>| payload | JSONB | Original payload |</p>
+<p>| error | TEXT | Error message |</p>
+<p>| failed_at | TIMESTAMPTZ | |</p>
+
+<h2>Full example</h2>
+
+<pre><code class="language-typescript">import { Emitter } from '@strav/kernel'
+import { Queue, Worker } from '@strav/queue'
+
+// Bootstrap
+app.singleton(Queue)
+app.resolve(Queue)
+await Queue.ensureTables()
+
+// Register handlers
+Queue.handle('send-welcome-email', async (payload, meta) => {
+  await mailer.send(payload.email, 'Welcome!')
+  console.log(<code>Sent welcome email (attempt ${meta.attempts}/${meta.maxAttempts})</code>)
+})
+
+Queue.handle('generate-report', async (payload) => {
+  const report = await buildReport(payload.userId)
+  await saveReport(report)
+})
+
+// Connect events to queue
+Emitter.on('user.registered', Queue.listener('send-welcome-email'))
+
+// Push a job directly
+await Queue.push('generate-report', { userId: 42 }, {
+  queue: 'reports',
+  timeout: 120_000,
+})
+
+// Start a worker (typically in a separate process)
+const worker = new Worker()
+await worker.start()
+</code></pre>
+
+<h2>Testing</h2>
+
+Use <code>Queue.flush()</code> and <code>Queue.reset()</code> in your test teardown:
+
+<pre><code class="language-typescript">import { afterEach } from 'bun:test'
+import { Queue } from '@strav/queue'
+
+afterEach(async () => {
+  await Queue.flush()  // clear all jobs from DB
+  Queue.reset()        // clear registered handlers
+})
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

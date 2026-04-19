@@ -1,0 +1,310 @@
+@layout('layouts/docs')
+
+@set('title', 'Error Handling & Exceptions - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Error Handling & Exceptions</h1>
+
+Typed error hierarchy, a global exception handler, and the <code>abort()</code> helper for clean HTTP error responses.
+
+<h2>Overview</h2>
+
+Every framework error extends <code>StravError</code>, which extends <code>Error</code>. This lets you catch all framework errors with <code>instanceof StravError</code>, or target specific categories like <code>HttpException</code> or <code>ConfigurationError</code>.
+
+The <code>ExceptionHandler</code> catches thrown errors and converts them into HTTP responses automatically — no more manual try/catch in every controller.
+
+<h2>Setup</h2>
+
+In your bootstrap (<code>index.ts</code>):
+
+<pre><code class="language-typescript">import { ExceptionHandler } from '@strav/kernel'
+
+const handler = new ExceptionHandler(config.get('app.env') === 'local')
+router.useExceptionHandler(handler)
+</code></pre>
+
+Pass <code>true</code> for dev mode — stack traces are included in error responses. In production, unknown errors return a generic <code>"Internal Server Error"</code>.
+
+<h2>Throwing HTTP Errors</h2>
+
+<h3>With <code>abort()</code></h3>
+
+<p>The quickest way to stop execution and return an HTTP error:</p>
+
+<pre><code class="language-typescript">import { abort } from '@strav/kernel'
+
+// 404
+const project = await Project.find(id)
+if (!project) abort(404, 'Project not found')
+
+// 403
+if (!user.isAdmin) abort(403, 'Admin access required')
+
+// 422 with structured validation errors
+abort(422, { email: ['Required'], name: ['Too short'] })
+</code></pre>
+
+<h3>With error classes</h3>
+
+<p>For more control, throw an error class directly:</p>
+
+<pre><code class="language-typescript">import { NotFoundError, AuthorizationError, ValidationError } from '@strav/kernel'
+
+throw new NotFoundError('Project not found')
+throw new AuthorizationError('You do not own this resource')
+throw new ValidationError({ email: ['Invalid format'] })
+</code></pre>
+
+<h2>HTTP Error Classes</h2>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Class</th>
+      <th>Status</th>
+      <th>Default Message</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>BadRequestError</code></td>
+      <td>400</td>
+      <td>Bad Request</td>
+    </tr>
+    <tr>
+      <td><code>AuthenticationError</code></td>
+      <td>401</td>
+      <td>Unauthenticated</td>
+    </tr>
+    <tr>
+      <td><code>AuthorizationError</code></td>
+      <td>403</td>
+      <td>Forbidden</td>
+    </tr>
+    <tr>
+      <td><code>NotFoundError</code></td>
+      <td>404</td>
+      <td>Not Found</td>
+    </tr>
+    <tr>
+      <td><code>ConflictError</code></td>
+      <td>409</td>
+      <td>Conflict</td>
+    </tr>
+    <tr>
+      <td><code>ValidationError</code></td>
+      <td>422</td>
+      <td>Validation Failed</td>
+    </tr>
+    <tr>
+      <td><code>RateLimitError</code></td>
+      <td>429</td>
+      <td>Too Many Requests</td>
+    </tr>
+    <tr>
+      <td><code>ServerError</code></td>
+      <td>500</td>
+      <td>Internal Server Error</td>
+    </tr>
+  </tbody>
+</table>
+
+All extend <code>HttpException</code>, which extends <code>StravError</code>.
+
+<h3>HttpException</h3>
+
+For non-standard status codes, use <code>HttpException</code> directly:
+
+<pre><code class="language-typescript">import { HttpException } from '@strav/kernel'
+
+throw new HttpException(402, 'Payment required')
+throw new HttpException(418, "I'm a teapot")
+</code></pre>
+
+<h3>ValidationError</h3>
+
+<p>Carries structured field errors:</p>
+
+<pre><code class="language-typescript">const err = new ValidationError({
+  email: ['Required', 'Must be valid'],
+  password: ['Too short'],
+})
+
+err.status     // 422
+err.errors     // { email: [...], password: [...] }
+</code></pre>
+
+<p>Rendered as:</p>
+
+<pre><code class="language-json">{
+  "error": "Validation Failed",
+  "errors": { "email": ["Required", "Must be valid"], "password": ["Too short"] }
+}
+</code></pre>
+
+<h3>RateLimitError</h3>
+
+Optionally carries a <code>Retry-After</code> value (seconds):
+
+<pre><code class="language-typescript">throw new RateLimitError(60)  // Adds Retry-After: 60 header
+throw new RateLimitError()    // No Retry-After header
+</code></pre>
+
+<h2>Module Errors</h2>
+
+<p>These are thrown internally by the framework. The ExceptionHandler maps them to appropriate HTTP responses.</p>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Class</th>
+      <th>HTTP Status</th>
+      <th>When</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ConfigurationError</code></td>
+      <td>500</td>
+      <td>Service not configured or unknown driver</td>
+    </tr>
+    <tr>
+      <td><code>ModelNotFoundError</code></td>
+      <td>404</td>
+      <td><code>findOrFail()</code> / <code>firstOrFail()</code> with no result</td>
+    </tr>
+    <tr>
+      <td><code>DatabaseError</code></td>
+      <td>500</td>
+      <td>Migration or query failures</td>
+    </tr>
+    <tr>
+      <td><code>EncryptionError</code></td>
+      <td>500</td>
+      <td>Encrypt/decrypt/sign failures</td>
+    </tr>
+    <tr>
+      <td><code>TemplateError</code></td>
+      <td>500</td>
+      <td>View compilation or rendering errors</td>
+    </tr>
+    <tr>
+      <td><code>ExternalServiceError</code></td>
+      <td>502</td>
+      <td>AI provider, mail transport, or webhook errors</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>ModelNotFoundError</h3>
+
+Thrown by <code>findOrFail()</code> and <code>firstOrFail()</code>:
+
+<pre><code class="language-typescript">// These throw ModelNotFoundError automatically
+const user = await User.findOrFail(id)
+const post = await query(Post).where('slug', slug).firstOrFail()
+</code></pre>
+
+The handler renders: <code>{ "error": "User with ID 42 not found" }</code> with status 404.
+
+<h3>ExternalServiceError</h3>
+
+<p>Thrown by AI providers, mail transports, and notification channels when external APIs return errors:</p>
+
+<pre><code class="language-typescript">import { ExternalServiceError } from '@strav/kernel'
+
+throw new ExternalServiceError('Stripe', 402, 'Card declined')
+// Message: "Stripe error (402): Card declined"
+// Handler renders: { "error": "Service unavailable" } with status 502
+</code></pre>
+
+<h2>Custom Renderers</h2>
+
+<p>Override how specific error classes are rendered:</p>
+
+<pre><code class="language-typescript">import { ExceptionHandler } from '@strav/kernel'
+
+class PaymentError extends StravError {
+  constructor(public code: string, message: string) {
+    super(message)
+  }
+}
+
+const handler = new ExceptionHandler()
+
+handler.render(PaymentError, (error) => {
+  return Response.json(
+    { error: error.message, code: error.code },
+    { status: 402 }
+  )
+})
+</code></pre>
+
+Custom renderers walk the prototype chain — a renderer for <code>HttpException</code> catches all its subclasses too (unless they have their own renderer).
+
+<h2>Reporters</h2>
+
+<p>Log or report errors before they're rendered:</p>
+
+<pre><code class="language-typescript">handler.report((error, ctx) => {
+  logger.error(error.message, {
+    path: ctx?.path,
+    stack: error.stack,
+  })
+})
+
+// Chain multiple reporters
+handler
+  .report((error) => logger.error(error.message))
+  .report((error) => sentry.captureException(error))
+</code></pre>
+
+<p>Reporters never crash the handler — if a reporter throws, its error is silently swallowed.</p>
+
+<h2>Error Hierarchy</h2>
+
+<pre><code>Error
+└── StravError
+    ├── HttpException
+    │   ├── BadRequestError (400)
+    │   ├── AuthenticationError (401)
+    │   ├── AuthorizationError (403)
+    │   ├── NotFoundError (404)
+    │   ├── ConflictError (409)
+    │   ├── ValidationError (422)
+    │   ├── RateLimitError (429)
+    │   └── ServerError (500)
+    ├── ConfigurationError
+    ├── ModelNotFoundError
+    ├── DatabaseError
+    ├── EncryptionError
+    ├── TemplateError
+    └── ExternalServiceError
+</code></pre>
+
+<h2>Catching Errors</h2>
+
+<pre><code class="language-typescript">import { StravError, HttpException, ConfigurationError } from '@strav/kernel'
+
+try {
+  await riskyOperation()
+} catch (error) {
+  if (error instanceof HttpException) {
+    // Any HTTP error (400-599)
+    console.log(error.status, error.message)
+  } else if (error instanceof StravError) {
+    // Any framework error
+    console.log(error.name, error.message)
+  }
+}
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

@@ -1,0 +1,490 @@
+@layout('layouts/docs')
+
+@set('title', 'Static Pages - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Static Pages</h1>
+
+Serve static <code>.strav</code> templates directly via clean URLs without explicit route definitions. Perfect for documentation sites, marketing pages, and simple content that doesn't require complex controller logic.
+
+<h2>Quick start</h2>
+
+<pre><code class="language-typescript">// 1. Enable static pages in config/view.ts
+export default {
+  directory: 'resources/views',
+  cache: env.bool('VIEW_CACHE', true),
+  assets: ['css/app.css', 'builds/islands.js'],
+  pages: {
+    directory: 'pages',
+    enabled: true,
+    indexFile: 'index.strav'
+  }
+}
+
+// 2. Register PagesProvider in start/providers.ts
+import { ViewProvider, PagesProvider } from '@strav/view'
+
+export const providers = [
+  new ViewProvider(),
+  new PagesProvider(),  // Must come after ViewProvider
+]
+</code></pre>
+
+<pre><code class="language-html"><!-- 3. Create pages/about.strav -->
+@layout('layouts/app')
+
+@section('content')
+  <h1>About Us</h1>
+  <p>This page is automatically served at /about</p>
+  <vue:contact-form />
+@end
+</code></pre>
+
+Now visit <code>/about</code> in your browser to see the rendered page with full Vue islands support.
+
+<h2>Setup</h2>
+
+Add both <code>ViewProvider</code> and <code>PagesProvider</code> to <code>start/providers.ts</code>:
+
+<pre><code class="language-typescript">import { ViewProvider, PagesProvider } from '@strav/view'
+
+export const providers = [
+  // ... other providers
+  new ViewProvider(),
+  new PagesProvider(),
+]
+</code></pre>
+
+The <code>PagesProvider</code> depends on <code>ViewProvider</code> and must be registered after it.
+
+<h2>Configuration</h2>
+
+Configure static pages in <code>config/view.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  directory: 'resources/views',
+  cache: env.bool('VIEW_CACHE', true),
+  assets: ['css/app.css', 'builds/islands.js'],
+  pages: {
+    directory: 'pages',           // Directory relative to resources/views
+    enabled: true,                // Enable/disable static pages
+    indexFile: 'index.strav'      // Default file for directory requests
+  }
+}
+</code></pre>
+
+<h3>Configuration options</h3>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Type</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>directory</code></td>
+      <td><code>string</code></td>
+      <td><code>'pages'</code></td>
+      <td>Directory containing page files, relative to view directory</td>
+    </tr>
+    <tr>
+      <td><code>enabled</code></td>
+      <td><code>boolean</code></td>
+      <td><code>true</code></td>
+      <td>Whether static pages are enabled</td>
+    </tr>
+    <tr>
+      <td><code>indexFile</code></td>
+      <td><code>string</code></td>
+      <td><code>'index.strav'</code></td>
+      <td>Default file to serve for directory requests</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Subdomain routing configuration</h3>
+
+<p>Enable subdomain-specific pages with additional configuration:</p>
+
+<pre><code class="language-typescript">export default {
+  directory: 'resources/views',
+  cache: env.bool('VIEW_CACHE', true),
+  assets: ['css/app.css', 'builds/islands.js'],
+  pages: {
+    directory: 'pages',
+    enabled: true,
+    indexFile: 'index.strav',
+    subdomains: {
+      enabled: true,
+      mappings: {
+        'docs': '_docs',           // docs.example.com → pages/_docs/
+        'api': '_api',             // api.example.com → pages/_api/
+        'blog': '_blog',           // blog.example.com → pages/_blog/
+        ':tenant': '_tenants'      // *.example.com → pages/_tenants/
+      },
+      defaultDirectory: '_default', // Main domain → pages/_default/
+      fallbackToDefault: true       // Fallback to _default if subdomain page not found
+    }
+  }
+}
+</code></pre>
+
+<h3>Subdomain configuration options</h3>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Type</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>enabled</code></td>
+      <td><code>boolean</code></td>
+      <td><code>false</code></td>
+      <td>Whether subdomain routing is enabled</td>
+    </tr>
+    <tr>
+      <td><code>mappings</code></td>
+      <td><code>object</code></td>
+      <td><code>{}</code></td>
+      <td>Map of subdomain patterns to directories</td>
+    </tr>
+    <tr>
+      <td><code>defaultDirectory</code></td>
+      <td><code>string</code></td>
+      <td><code>'_default'</code></td>
+      <td>Directory for main domain pages</td>
+    </tr>
+    <tr>
+      <td><code>fallbackToDefault</code></td>
+      <td><code>boolean</code></td>
+      <td><code>true</code></td>
+      <td>Fallback to default directory when subdomain page not found</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>URL mapping</h2>
+
+<p>Static pages follow a simple file-to-URL mapping:</p>
+
+<pre><code>resources/views/pages/
+├── index.strav          → /
+├── about.strav          → /about
+├── contact.strav        → /contact
+├── docs/
+│   ├── index.strav      → /docs or /docs/
+│   ├── getting-started.strav → /docs/getting-started
+│   └── api/
+│       └── reference.strav   → /docs/api/reference
+└── blog/
+    ├── index.strav      → /blog
+    └── 2024-recap.strav → /blog/2024-recap
+</code></pre>
+
+<h3>Subdomain URL mapping</h3>
+
+<p>When subdomain routing is enabled, pages are organized by subdomain:</p>
+
+<pre><code>resources/views/pages/
+├── _default/                     # Main domain (example.com)
+│   ├── index.strav              → example.com/
+│   ├── about.strav              → example.com/about
+│   └── contact.strav            → example.com/contact
+├── _docs/                        # docs.example.com
+│   ├── index.strav              → docs.example.com/
+│   ├── getting-started.strav    → docs.example.com/getting-started
+│   └── api/
+│       └── reference.strav      → docs.example.com/api/reference
+├── _api/                         # api.example.com
+│   ├── index.strav              → api.example.com/
+│   └── v1/
+│       └── endpoints.strav      → api.example.com/v1/endpoints
+└── _tenants/                     # Dynamic subdomain (*.example.com)
+    ├── index.strav              → acme.example.com/
+    ├── dashboard.strav          → acme.example.com/dashboard
+    └── settings.strav           → acme.example.com/settings
+</code></pre>
+
+With <code>fallbackToDefault: true</code>, if a page doesn't exist in the subdomain directory, it will try the <code>_default</code> directory. For example:
+<ul>
+<li><code>docs.example.com/contact</code> → First tries <code>_docs/contact.strav</code>, then falls back to <code>_default/contact.strav</code></li>
+</ul>
+
+<h3>URL resolution rules</h3>
+
+<li><strong>Root path</strong> (<code>/</code>) → <code>pages/index.strav</code></li>
+<li><strong>Direct file</strong> (<code>/about</code>) → <code>pages/about.strav</code></li>
+<li><strong>Directory with slash</strong> (<code>/docs/</code>) → <code>pages/docs/index.strav</code></li>
+<li><strong>Directory without slash</strong> (<code>/docs</code>) → tries <code>pages/docs.strav</code> first, then <code>pages/docs/index.strav</code></li>
+<li><strong>Nested paths</strong> (<code>/docs/getting-started</code>) → <code>pages/docs/getting-started.strav</code></li>
+
+<h2>Template features</h2>
+
+Static pages support all <code>.strav</code> template features:
+
+<h3>Layout inheritance</h3>
+
+<pre><code class="language-html"><!-- pages/about.strav -->
+@layout('layouts/app')
+
+@section('title', 'About Us')
+
+@section('content')
+  <h1>About Our Company</h1>
+  <p>Founded in 2024...</p>
+@end
+</code></pre>
+
+<h3>Vue islands</h3>
+
+<pre><code class="language-html"><!-- pages/contact.strav -->
+@layout('layouts/app')
+
+@section('content')
+  <h1>Contact Us</h1>
+  <vue:contact-form :user="{{ auth.user() }}" />
+
+  <div class="map">
+    <vue:interactive-map location="San Francisco" />
+  </div>
+@end
+</code></pre>
+
+<h3>Template directives</h3>
+
+<pre><code class="language-html"><!-- pages/features.strav -->
+@layout('layouts/app')
+
+@section('content')
+  <h1>Features</h1>
+
+  @if(features.length > 0)
+    <div class="feature-grid">
+      @each feature in features
+        <div class="feature-card">
+          <h3>{{ feature.title }}</h3>
+          <p>{{ feature.description }}</p>
+        </div>
+      @end
+    </div>
+  @else
+    <p>No features available.</p>
+  @end
+@end
+</code></pre>
+
+<h3>Asset inclusion</h3>
+
+<pre><code class="language-html"><!-- pages/dashboard.strav -->
+@layout('layouts/app')
+
+@section('head')
+  @push('styles')
+    <link rel="stylesheet" href="{{ asset('css/dashboard.css') }}">
+  @end
+@end
+
+@section('content')
+  <h1>Dashboard</h1>
+  <vue:analytics-chart />
+@end
+</code></pre>
+
+<h2>Data passing</h2>
+
+<p>Since static pages don't use controllers, they can't receive dynamic data directly. However, you can:</p>
+
+<h3>Use global view helpers</h3>
+
+<pre><code class="language-typescript">// In a service provider
+ViewEngine.setGlobal('currentYear', new Date().getFullYear())
+ViewEngine.setGlobal('siteName', 'My Awesome Site')
+</code></pre>
+
+<pre><code class="language-html"><!-- Any page can now use -->
+<footer>
+  &amp;copy; {{ currentYear }} {{ siteName }}
+</footer>
+</code></pre>
+
+<h3>Pass data via Vue islands</h3>
+
+<pre><code class="language-html"><!-- pages/pricing.strav -->
+@layout('layouts/app')
+
+@section('content')
+  <h1>Pricing</h1>
+  <vue:pricing-table
+    :plans="{{ JSON.stringify(plans) }}"
+    currency="USD"
+  />
+@end
+</code></pre>
+
+<p>The Vue component receives the data and handles any dynamic behavior.</p>
+
+<h2>Security</h2>
+
+<p>Static pages include built-in security protections:</p>
+
+<ul>
+<li><strong>Path traversal prevention</strong>: URLs like <code>/../../etc/passwd</code> are blocked</li>
+<li><strong>File extension validation</strong>: Only <code>.strav</code> files are served</li>
+<li><strong>Directory bounds</strong>: File resolution is restricted to the pages directory</li>
+</ul>
+
+<h2>File organization</h2>
+
+<p>Organize your pages logically:</p>
+
+<pre><code>resources/views/pages/
+├── index.strav                    # Homepage
+├── about.strav                    # About page
+├── contact.strav                  # Contact page
+├── legal/
+│   ├── index.strav               # Legal hub page
+│   ├── privacy.strav             # Privacy policy
+│   └── terms.strav               # Terms of service
+├── docs/
+│   ├── index.strav               # Documentation home
+│   ├── getting-started.strav     # Getting started guide
+│   ├── api/
+│   │   ├── index.strav          # API documentation home
+│   │   ├── authentication.strav  # Auth docs
+│   │   └── endpoints.strav       # Endpoint docs
+│   └── examples/
+│       ├── index.strav          # Examples home
+│       └── basic-usage.strav     # Basic usage example
+└── blog/
+    ├── index.strav               # Blog listing
+    ├── 2024-year-in-review.strav # Blog post
+    └── welcome-to-strav.strav    # Blog post
+</code></pre>
+
+<h2>Performance</h2>
+
+<p>Static pages benefit from all existing Strav view optimizations:</p>
+
+<ul>
+<li><strong>Template caching</strong>: Compiled templates are cached for fast re-renders</li>
+<li><strong>Asset versioning</strong>: Automatic cache-busting for CSS/JS assets</li>
+<li><strong>Vue islands</strong>: Only interactive components are hydrated client-side</li>
+<li><strong>File watching</strong>: Templates auto-reload in development</li>
+</ul>
+
+<h2>Route precedence</h2>
+
+Static pages use catch-all routes registered <strong>after</strong> all application routes, so:
+
+<li>Explicit application routes take precedence</li>
+<li>Static pages serve as fallbacks</li>
+<li>404 responses for missing static pages</li>
+
+<p>Example:</p>
+
+<pre><code class="language-typescript">// This explicit route takes precedence over pages/api.strav
+router.get('/api', (ctx) => ctx.json({ message: 'API endpoint' }))
+
+// Only if no /api route exists will pages/api.strav be served
+</code></pre>
+
+<h2>Dynamic subdomain patterns</h2>
+
+<p>Use dynamic subdomain patterns to handle multi-tenant applications or user-specific pages:</p>
+
+<pre><code class="language-typescript">// config/view.ts
+pages: {
+  subdomains: {
+    enabled: true,
+    mappings: {
+      ':tenant': '_tenants',     // Any subdomain → _tenants/
+      ':user': '_profiles'       // Any subdomain → _profiles/
+    }
+  }
+}
+</code></pre>
+
+<p>In your templates, you can access the subdomain value via the context:</p>
+
+<pre><code class="language-html"><!-- pages/_tenants/dashboard.strav -->
+@layout('layouts/app')
+
+@section('content')
+  <h1>Welcome to {{ ctx.subdomain }}'s Dashboard</h1>
+  <!-- For acme.example.com, displays: Welcome to acme's Dashboard -->
+@end
+</code></pre>
+
+<h2>Common patterns</h2>
+
+<h3>Documentation site</h3>
+
+<pre><code>pages/
+├── index.strav              # Landing page
+├── docs/
+│   ├── index.strav          # Docs home with navigation
+│   ├── installation.strav   # Installation guide
+│   ├── configuration.strav  # Configuration guide
+│   └── api-reference.strav  # API reference
+└── examples/
+    ├── index.strav          # Examples home
+    ├── basic.strav          # Basic example
+    └── advanced.strav       # Advanced example
+</code></pre>
+
+<h3>Marketing site</h3>
+
+<pre><code>pages/
+├── index.strav              # Homepage
+├── features.strav           # Feature overview
+├── pricing.strav            # Pricing plans
+├── about.strav              # About the company
+├── contact.strav            # Contact form
+└── legal/
+    ├── privacy.strav        # Privacy policy
+    └── terms.strav          # Terms of service
+</code></pre>
+
+<h3>Blog</h3>
+
+<pre><code>pages/
+├── blog/
+│   ├── index.strav                    # Blog listing
+│   ├── getting-started-with-strav.strav
+│   ├── vue-islands-explained.strav
+│   └── building-apis-in-2024.strav
+└── authors/
+    ├── john-doe.strav               # Author profile
+    └── jane-smith.strav             # Author profile
+</code></pre>
+
+<h2>Limitations</h2>
+
+<ul>
+<li><strong>No dynamic data</strong>: Pages can't receive controller-injected data</li>
+<li><strong>No middleware</strong>: Pages bypass route middleware (use global middleware instead)</li>
+<li><strong>No validation</strong>: No built-in form validation (handle in Vue islands)</li>
+<li><strong>Static only</strong>: Best for content that doesn't change frequently</li>
+</ul>
+
+<p>For dynamic content, use traditional routes with controllers instead of static pages.</p>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

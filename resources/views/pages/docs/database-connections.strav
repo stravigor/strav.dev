@@ -1,0 +1,273 @@
+@layout('layouts/docs')
+
+@set('title', 'Database - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Database</h1>
+
+<p>The database module provides the PostgreSQL connection wrapper, database introspection, and the full migration system.</p>
+
+<h2>Database connection</h2>
+
+The <code>Database</code> class wraps <code>Bun.sql</code> and reads connection settings from <code>config/database.ts</code>:
+
+<p>Using a service provider (recommended):</p>
+
+<pre><code class="language-typescript">import { DatabaseProvider } from '@strav/database'
+
+app.use(new DatabaseProvider())
+</code></pre>
+
+The <code>DatabaseProvider</code> registers <code>Database</code> as a singleton and closes the connection on shutdown. It depends on the <code>config</code> provider.
+
+<p>Or manually:</p>
+
+<pre><code class="language-typescript">import { Database } from '@strav/database'
+
+app.singleton(Database)
+const db = app.resolve(Database)
+</code></pre>
+
+<h3>Running queries</h3>
+
+Import the <code>sql</code> tagged-template from <code>@strav/database</code> and use it directly:
+
+<pre><code class="language-typescript">import { sql } from '@strav/database'
+
+// Parameterized queries (safe by default)
+const rows = await sql<code>SELECT * FROM "user" WHERE "role" = ${'admin'}</code>
+
+// Dynamic queries (use with caution)
+const rows = await sql.unsafe(
+  'SELECT * FROM "user" WHERE "pid" = $1',
+  [userId]
+)
+</code></pre>
+
+The <code>sql</code> export is a transparent proxy to the Database singleton's underlying Bun SQL connection. It's available after the Database is resolved through the DI container during bootstrap.
+
+<h3>Transactions</h3>
+
+Never use raw <code>BEGIN</code>/<code>COMMIT</code> — Bun throws <code>ERR_POSTGRES_UNSAFE_TRANSACTION</code> with connection pooling.
+
+<h4><code>transaction()</code> helper (recommended)</h4>
+
+The <code>transaction()</code> helper wraps a callback in a database transaction. It commits on success and rolls back on error:
+
+<pre><code class="language-typescript">import { transaction } from '@strav/database'
+
+await transaction(async (trx) => {
+  await trx<code>INSERT INTO "order" ("user_id") VALUES (${userId})</code>
+  await trx<code>UPDATE "inventory" SET "stock" = "stock" - 1 WHERE "product_id" = ${productId}</code>
+})
+</code></pre>
+
+The <code>trx</code> handle can be passed to ORM methods (<code>query()</code>, <code>create()</code>, <code>save()</code>, <code>delete()</code>, <code>forceDelete()</code>) so they run inside the same transaction — see the <a href="./orm.md#transactions">ORM guide</a>.
+
+<h4><code>sql.begin()</code> (low-level)</h4>
+
+You can also use <code>sql.begin()</code> directly:
+
+<pre><code class="language-typescript">import { sql } from '@strav/database'
+
+await sql.begin(async (tx) => {
+  await tx<code>INSERT INTO "order" ("user_id") VALUES (${userId})</code>
+  await tx<code>UPDATE "inventory" SET "stock" = "stock" - 1 WHERE "product_id" = ${productId}</code>
+})
+</code></pre>
+
+<h3>Closing the connection</h3>
+
+<pre><code class="language-typescript">await db.close()
+</code></pre>
+
+<h2>Database introspection</h2>
+
+The <code>DatabaseIntrospector</code> reads the live database schema and produces a <code>DatabaseRepresentation</code>:
+
+<pre><code class="language-typescript">import { DatabaseIntrospector } from '@strav/database'
+
+const introspector = new DatabaseIntrospector(db)
+const actual = await introspector.introspect()
+
+// actual.tables  — Map of table definitions
+// actual.enums   — Map of enum definitions
+</code></pre>
+
+The introspector automatically excludes the <code>_strav_migrations</code> tracking table.
+
+<h2>Migration system</h2>
+
+<h3>Overview</h3>
+
+<p>The migration pipeline works in three stages:</p>
+
+<li><strong>Diff</strong> — <code>SchemaDiffer</code> compares the desired state (from schemas) against the actual state (from introspection) and produces a list of changes.</li>
+<li><strong>Generate SQL</strong> — <code>SqlGenerator</code> converts the diff into executable SQL statements (both <code>up</code> and <code>down</code>).</li>
+<li><strong>Write/Run</strong> — <code>MigrationFileGenerator</code> writes the SQL to disk; <code>MigrationRunner</code> executes them.</li>
+
+<h3>Migration file structure</h3>
+
+Migrations are stored in <code>database/migrations/</code> as timestamped directories:
+
+<pre><code>database/migrations/
+  20250115_120000_create_users/
+    manifest.json          # metadata: version, message, steps
+    01_enums/
+      up.sql               # CREATE TYPE ...
+      down.sql             # DROP TYPE ...
+    02_tables/
+      user/
+        up.sql             # CREATE TABLE ...
+        down.sql           # DROP TABLE ...
+    03_constraints/
+      up.sql               # ALTER TABLE ADD CONSTRAINT ...
+      down.sql             # ALTER TABLE DROP CONSTRAINT ...
+    04_indexes/
+      up.sql               # CREATE INDEX ...
+      down.sql             # DROP INDEX ...
+</code></pre>
+
+<h3>Tracking</h3>
+
+The <code>MigrationTracker</code> uses a <code>_strav_migrations</code> table to track which migrations have been applied. Migrations are grouped into <strong>batches</strong> — each <code>migrate</code> invocation creates a new batch.
+
+<h3>CLI commands</h3>
+
+<p>All migration operations are available through the CLI:</p>
+
+<pre><code class="language-bash"><h1>Generate migration files from schema changes</h1>
+bun strav generate:migration -m "add user roles"
+
+<h1>Apply pending migrations</h1>
+bun strav migrate
+
+<h1>Roll back the last batch</h1>
+bun strav rollback
+
+<h1>Roll back a specific batch</h1>
+bun strav rollback --batch 3
+
+<h1>Compare schemas vs live database (read-only)</h1>
+bun strav compare
+
+<h1>Drop everything and rebuild (local env only, requires confirmation)</h1>
+bun strav fresh
+</code></pre>
+
+<h3>SchemaDiffer</h3>
+
+Compares two <code>DatabaseRepresentation</code> objects and returns categorized changes:
+
+<pre><code class="language-typescript">import { SchemaDiffer } from '@strav/database'
+
+const differ = new SchemaDiffer()
+const diff = differ.diff(desired, actual)
+
+// diff.enums    — enum changes (create, drop, modify)
+// diff.tables   — table changes (create, drop, modify with column-level detail)
+// diff.indexes  — index changes
+</code></pre>
+
+<h3>SqlGenerator</h3>
+
+<p>Converts a diff into SQL:</p>
+
+<pre><code class="language-typescript">import { SqlGenerator } from '@strav/database'
+
+const generator = new SqlGenerator()
+const statements = generator.generate(diff)
+
+// statements.up   — SQL to apply the migration
+// statements.down — SQL to revert the migration
+</code></pre>
+
+Important: serial columns (<code>serial</code>, <code>smallserial</code>, <code>bigserial</code>) are handled specially — no <code>NOT NULL</code> or <code>DEFAULT</code> is emitted for them, as PostgreSQL manages this automatically.
+
+<h2>Seeding</h2>
+
+The <code>Seeder</code> base class provides a structured way to populate the database with dev/test data.
+
+<h3>Creating seeders</h3>
+
+<p>Generate a seeder with the CLI:</p>
+
+<pre><code class="language-bash">bun strav generate:seeder DatabaseSeeder
+bun strav generate:seeder UserSeeder
+</code></pre>
+
+This creates files in <code>database/seeders/</code>:
+
+<pre><code class="language-typescript">import { Seeder } from '@strav/database'
+import { UserFactory, PostFactory } from '../factories'
+
+export default class DatabaseSeeder extends Seeder {
+  async run(): Promise<void> {
+    await this.call(UserSeeder)
+    await this.call(PostSeeder)
+  }
+}
+</code></pre>
+
+<p>Sub-seeders focus on a single model or concern:</p>
+
+<pre><code class="language-typescript">import { Seeder } from '@strav/database'
+import { UserFactory } from '../factories'
+
+export default class UserSeeder extends Seeder {
+  async run(): Promise<void> {
+    await UserFactory.createMany(10)
+    await UserFactory.create({ name: 'Admin', role: 'admin' })
+  }
+}
+</code></pre>
+
+<h3>Running seeders</h3>
+
+<pre><code class="language-bash"><h1>Run the default seeder (database/seeders/database_seeder.ts)</h1>
+bun strav seed
+
+<h1>Run a specific seeder</h1>
+bun strav seed --class UserSeeder
+
+<h1>Drop everything, re-migrate, then seed (APP_ENV=local only)</h1>
+bun strav seed --fresh
+</code></pre>
+
+<h3>Factories</h3>
+
+Seeders work with the <code>Factory</code> class from <code>@strav/testing</code>. Define factories in <code>database/factories/</code> so both seeders and tests can share them:
+
+<pre><code>database/
+  factories/
+    user_factory.ts
+    post_factory.ts
+    index.ts
+  seeders/
+    database_seeder.ts
+    user_seeder.ts
+</code></pre>
+
+<pre><code class="language-typescript">// database/factories/user_factory.ts
+import { Factory } from '@strav/testing'
+import User from '../../app/models/user'
+
+export const UserFactory = Factory.define(User, (seq) => ({
+  pid: crypto.randomUUID(),
+  name: <code>User ${seq}</code>,
+  email: <code>user-${seq}@test.com</code>,
+  passwordHash: 'hashed',
+}))
+</code></pre>
+
+See the <a href="./testing.md#factory">Testing guide</a> for full factory API documentation.
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

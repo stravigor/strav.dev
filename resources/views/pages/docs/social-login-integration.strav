@@ -1,0 +1,459 @@
+@layout('layouts/docs')
+
+@set('title', 'Social - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Social</h1>
+
+The social module (<code>@strav/social</code>) provides OAuth 2.0 social authentication with a fluent, driver-based API. Users click "Sign in with Google" (or GitHub, Discord, etc.), get redirected to the provider, and come back with a verified profile you can use to create or log in a user.
+
+Built-in providers: <strong>Google</strong>, <strong>GitHub</strong>, <strong>Discord</strong>, <strong>Facebook</strong>, <strong>LinkedIn</strong>. Custom providers can be added via <code>extend()</code>.
+
+Requires the <code>session()</code> middleware from the <a href="./session.md">session module</a> for CSRF state verification (unless running in stateless mode).
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/social
+bun strav install social
+</code></pre>
+
+The <code>install</code> command copies two files into your project:
+
+<ul>
+<li><code>config/social.ts</code> — provider credentials and the <code>userKey</code> setting.</li>
+<li><code>database/schemas/social_account.ts</code> — the schema for the <code>social_account</code> table.</li>
+</ul>
+
+Both files are yours to edit. If a file already exists, the command skips it (use <code>--force</code> to overwrite).
+
+<h2>Setup</h2>
+
+<h3>1. Register SocialManager</h3>
+
+<h4>Using a service provider (recommended)</h4>
+
+<pre><code class="language-typescript">import { SocialProvider } from '@strav/social'
+
+app.use(new SocialProvider())
+</code></pre>
+
+The <code>SocialProvider</code> registers <code>SocialManager</code> as a singleton. It depends on the <code>database</code> provider.
+
+<h4>Manual setup</h4>
+
+<pre><code class="language-typescript">import { SocialManager } from '@strav/social'
+
+app.singleton(SocialManager)
+app.resolve(SocialManager)
+</code></pre>
+
+<h3>2. Configure providers</h3>
+
+Edit <code>config/social.ts</code> and uncomment the providers you need:
+
+<pre><code class="language-typescript">// config/social.ts
+import { env } from '@strav/kernel'
+
+export default {
+  userKey: 'id',
+  providers: {
+    google: {
+      clientId: env('GOOGLE_CLIENT_ID', ''),
+      clientSecret: env('GOOGLE_CLIENT_SECRET', ''),
+      redirectUrl: env('GOOGLE_REDIRECT_URL', 'http://localhost:3000/auth/google/callback'),
+    },
+    github: {
+      clientId: env('GITHUB_CLIENT_ID', ''),
+      clientSecret: env('GITHUB_CLIENT_SECRET', ''),
+      redirectUrl: env('GITHUB_REDIRECT_URL', 'http://localhost:3000/auth/github/callback'),
+    },
+  },
+}
+</code></pre>
+
+The <code>userKey</code> option controls which field on your user table is used as the foreign key in <code>social_account</code>. It defaults to <code>'id'</code>, which produces a <code>user_id</code> FK column. If your user table uses a custom primary key (e.g. <code>uuid</code>), set <code>userKey: 'uuid'</code> and the FK column becomes <code>user_uuid</code>.
+
+<h3>3. Run the migration</h3>
+
+Generate and apply the migration for the <code>social_account</code> table:
+
+<pre><code class="language-bash">bun strav generate:migration -m "add social accounts"
+bun strav migrate
+</code></pre>
+
+<h3>4. Add environment variables</h3>
+
+<pre><code class="language-env">GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+</code></pre>
+
+<p>Only configure the providers you need.</p>
+
+<h2>Basic usage</h2>
+
+The flow has two steps: <strong>redirect</strong> (send the user to the provider) and <strong>callback</strong> (receive the user back).
+
+<pre><code class="language-typescript">import { router } from '@strav/http'
+import { session } from '@strav/http'
+import { social } from '@strav/social'
+
+router.group({ middleware: [session()] }, r => {
+  // Step 1: Redirect to provider
+  r.get('/auth/github', ctx => {
+    return social.driver('github').redirect(ctx)
+  })
+
+  // Step 2: Handle callback
+  r.get('/auth/github/callback', async ctx => {
+    const githubUser = await social.driver('github').user(ctx)
+
+    // githubUser.id       → "12345"
+    // githubUser.name     → "John Doe"
+    // githubUser.email    → "john@example.com"
+    // githubUser.avatar   → "https://avatars.githubusercontent.com/u/12345"
+    // githubUser.nickname → "johndoe"
+    // githubUser.token    → "gho_xxxx..."
+
+    // Find or create your app user
+    let user = await User.findBy('email', githubUser.email)
+    if (!user) {
+      user = new User()
+      user.merge({ name: githubUser.name, email: githubUser.email })
+      await user.save()
+    }
+
+    // Link the social account (or update tokens if already linked)
+    await social.findOrCreate('github', githubUser, user)
+
+    const s = ctx.get<Session>('session')
+    s.authenticate(user)
+    await s.regenerate()
+
+    return ctx.redirect('/dashboard')
+  })
+})
+</code></pre>
+
+<h2>SocialUser</h2>
+
+Every provider returns a <code>SocialUser</code> with these fields:
+
+<p>| Field | Type | Description |</p>
+<p>|-------|------|-------------|</p>
+| <code>id</code> | <code>string</code> | Unique identifier from the provider |
+| <code>name</code> | <code>string \| null</code> | Full name |
+| <code>email</code> | <code>string \| null</code> | Email address |
+| <code>avatar</code> | <code>string \| null</code> | Profile picture URL |
+| <code>nickname</code> | <code>string \| null</code> | Username / handle |
+| <code>token</code> | <code>string</code> | OAuth access token |
+| <code>refreshToken</code> | <code>string \| null</code> | Refresh token (if provided) |
+| <code>expiresIn</code> | <code>number \| null</code> | Token lifetime in seconds |
+| <code>approvedScopes</code> | <code>string[]</code> | Scopes granted by the user |
+| <code>raw</code> | <code>Record<string, unknown></code> | Full raw response from the provider API |
+
+<h2>Fluent API</h2>
+
+<h3>Additional scopes</h3>
+
+<p>Merge extra scopes onto the provider's defaults:</p>
+
+<pre><code class="language-typescript">social.driver('github').scopes(['repo', 'gist']).redirect(ctx)
+</code></pre>
+
+<h3>Replace all scopes</h3>
+
+<p>Override the default scopes entirely:</p>
+
+<pre><code class="language-typescript">social.driver('google').setScopes(['openid', 'email']).redirect(ctx)
+</code></pre>
+
+<h3>Custom parameters</h3>
+
+<p>Pass additional query parameters to the authorization URL:</p>
+
+<pre><code class="language-typescript">social.driver('google')
+  .with({ hd: 'example.com', prompt: 'consent' })
+  .redirect(ctx)
+</code></pre>
+
+<h3>Stateless mode</h3>
+
+<p>Skip session-based CSRF state verification. Useful for SPAs or token-based APIs where you manage state yourself:</p>
+
+<pre><code class="language-typescript">// Redirect (no state stored in session)
+social.driver('google').stateless().redirect(ctx)
+
+// Callback (no state verification)
+const user = await social.driver('google').stateless().user(ctx)
+</code></pre>
+
+<h3>User from token</h3>
+
+<p>If you already have an access token (e.g., from a mobile app), fetch the user profile directly without the redirect flow:</p>
+
+<pre><code class="language-typescript">const user = await social.driver('google').userFromToken(accessToken)
+</code></pre>
+
+<h2>Built-in providers</h2>
+
+<h3>Google</h3>
+
+<ul>
+<li>Default scopes: <code>openid</code>, <code>email</code>, <code>profile</code></li>
+<li>User fields: <code>sub</code> → id, <code>name</code> → name, <code>email</code> → email, <code>picture</code> → avatar</li>
+<li>Supports the <code>hd</code> parameter to restrict to a Google Workspace domain:</li>
+</ul>
+
+<pre><code class="language-typescript">social.driver('google').with({ hd: 'mycompany.com' }).redirect(ctx)
+</code></pre>
+
+<h3>GitHub</h3>
+
+<ul>
+<li>Default scopes: <code>read:user</code>, <code>user:email</code></li>
+<li>User fields: <code>id</code> → id, <code>login</code> → nickname, <code>name</code> → name, <code>avatar_url</code> → avatar</li>
+<li>Automatically fetches the primary verified email from <code>/user/emails</code> when the profile email is private</li>
+</ul>
+
+<h3>Discord</h3>
+
+<ul>
+<li>Default scopes: <code>identify</code>, <code>email</code></li>
+<li>User fields: <code>id</code> → id, <code>username</code> → nickname, <code>global_name</code> → name, <code>email</code> → email</li>
+<li>Avatar URL is computed from the user's ID and avatar hash, with a default fallback</li>
+</ul>
+
+<p>To request guild information:</p>
+
+<pre><code class="language-typescript">social.driver('discord').scopes(['guilds']).redirect(ctx)
+</code></pre>
+
+<h3>Facebook</h3>
+
+<ul>
+<li>Default scopes: <code>email</code>, <code>public_profile</code></li>
+<li>User fields: <code>id</code> → id, <code>name</code> → name, <code>email</code> → email, <code>picture.data.url</code> → avatar</li>
+<li>Uses Graph API v21.0</li>
+</ul>
+
+<p>To request additional permissions:</p>
+
+<pre><code class="language-typescript">social.driver('facebook').scopes(['user_birthday', 'user_location']).redirect(ctx)
+</code></pre>
+
+<h3>LinkedIn</h3>
+
+<ul>
+<li>Default scopes: <code>openid</code>, <code>profile</code>, <code>email</code></li>
+<li>User fields: <code>sub</code> → id, <code>name</code> → name, <code>email</code> → email, <code>picture</code> → avatar</li>
+<li>Uses the OpenID Connect userinfo endpoint (<code>/v2/userinfo</code>)</li>
+</ul>
+
+<p>To request posting permissions:</p>
+
+<pre><code class="language-typescript">social.driver('linkedin').scopes(['w_member_social']).redirect(ctx)
+</code></pre>
+
+<h2>Custom providers</h2>
+
+Register a custom OAuth provider with <code>extend()</code>:
+
+<pre><code class="language-typescript">import { AbstractProvider, social } from '@strav/social'
+import type { SocialUser } from '@strav/social'
+
+class SpotifyProvider extends AbstractProvider {
+  readonly name = 'Spotify'
+
+  protected getDefaultScopes() {
+    return ['user-read-email', 'user-read-private']
+  }
+
+  protected getAuthUrl() {
+    return 'https://accounts.spotify.com/authorize'
+  }
+
+  protected getTokenUrl() {
+    return 'https://accounts.spotify.com/api/token'
+  }
+
+  protected async getUserByToken(token: string) {
+    const res = await fetch('https://api.spotify.com/v1/me', {
+      headers: { Authorization: <code>Bearer ${token}</code> },
+    })
+    if (!res.ok) throw new Error(<code>Spotify API error: ${res.status}</code>)
+    return await res.json()
+  }
+
+  protected mapUserToObject(data: Record<string, unknown>): SocialUser {
+    const images = data.images as Array<{ url: string }> | undefined
+    return {
+      id: data.id as string,
+      name: (data.display_name as string) ?? null,
+      email: (data.email as string) ?? null,
+      avatar: images?.[0]?.url ?? null,
+      nickname: data.id as string,
+      token: '',
+      refreshToken: null,
+      expiresIn: null,
+      approvedScopes: [],
+      raw: data,
+    }
+  }
+}
+
+// Register the provider
+social.extend('spotify', config => new SpotifyProvider(config))
+</code></pre>
+
+<p>Then add it to your config:</p>
+
+<pre><code class="language-typescript">// config/social.ts
+export default {
+  providers: {
+    spotify: {
+      driver: 'spotify',
+      clientId: Bun.env.SPOTIFY_CLIENT_ID,
+      clientSecret: Bun.env.SPOTIFY_CLIENT_SECRET,
+      redirectUrl: 'http://localhost:3000/auth/spotify/callback',
+    },
+  },
+}
+</code></pre>
+
+<p>Use it like any built-in driver:</p>
+
+<pre><code class="language-typescript">social.driver('spotify').redirect(ctx)
+const user = await social.driver('spotify').user(ctx)
+</code></pre>
+
+<h2>Driver aliases</h2>
+
+Use the <code>driver</code> field to reuse a built-in provider with different credentials:
+
+<pre><code class="language-typescript">// config/social.ts
+export default {
+  providers: {
+    // Production Google
+    google: {
+      clientId: Bun.env.GOOGLE_CLIENT_ID,
+      clientSecret: Bun.env.GOOGLE_CLIENT_SECRET,
+      redirectUrl: 'https://myapp.com/auth/google/callback',
+    },
+    // Same Google provider, different OAuth app for admin
+    'google-admin': {
+      driver: 'google',
+      clientId: Bun.env.GOOGLE_ADMIN_CLIENT_ID,
+      clientSecret: Bun.env.GOOGLE_ADMIN_CLIENT_SECRET,
+      redirectUrl: 'https://myapp.com/admin/auth/google/callback',
+      scopes: ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/admin.directory.user.readonly'],
+    },
+  },
+}
+</code></pre>
+
+<h2>Error handling</h2>
+
+<p>The module throws two error types:</p>
+
+<ul>
+<li><strong><code>SocialError</code></strong> — OAuth flow errors (invalid state, missing code, user denied access)</li>
+<li><strong><code>ExternalServiceError</code></strong> — HTTP errors from the provider API (token exchange failure, profile fetch failure)</li>
+</ul>
+
+<pre><code class="language-typescript">import { SocialError } from '@strav/social'
+
+r.get('/auth/github/callback', async ctx => {
+  try {
+    const user = await social.driver('github').user(ctx)
+    // ... handle success
+  } catch (error) {
+    if (error instanceof SocialError) {
+      // User denied access or CSRF mismatch
+      return ctx.redirect('/login?error=auth_failed')
+    }
+    throw error
+  }
+})
+</code></pre>
+
+When the user denies authorization at the provider, the callback URL receives an <code>error</code> query parameter (e.g., <code>?error=access_denied</code>), which is surfaced as a <code>SocialError</code>.
+
+<h2>SocialAccount</h2>
+
+The <code>SocialAccount</code> class provides static methods for managing the <code>social_account</code> database table. It stores the link between a provider account and a local user, along with OAuth tokens.
+
+<h3>findOrCreate</h3>
+
+<p>The recommended way to link a social account. If a record already exists for the provider + provider ID, it updates the tokens. Otherwise it creates a new row.</p>
+
+<pre><code class="language-typescript">import { social, SocialAccount } from '@strav/social'
+
+const githubUser = await social.driver('github').user(ctx)
+const { account, created } = await social.findOrCreate('github', githubUser, user)
+// or equivalently:
+const { account, created } = await SocialAccount.findOrCreate('github', githubUser, user)
+</code></pre>
+
+<h3>Other methods</h3>
+
+<pre><code class="language-typescript">// Find by provider + provider ID
+const account = await SocialAccount.findByProvider('github', '12345')
+
+// Find all social accounts for a user
+const accounts = await SocialAccount.findByUser(user)
+
+// Create a new link manually
+const account = await SocialAccount.create({
+  user,
+  provider: 'github',
+  providerId: '12345',
+  token: 'gho_xxxx',
+  refreshToken: null,
+  expiresAt: null,
+})
+
+// Update tokens
+await SocialAccount.updateTokens(account.id, newToken, newRefreshToken, newExpiresAt)
+
+// Delete
+await SocialAccount.delete(account.id)
+await SocialAccount.deleteByUser(user)
+</code></pre>
+
+<h3>SocialAccountData</h3>
+
+All methods return or accept a <code>SocialAccountData</code> object:
+
+<p>| Field | Type | Description |</p>
+<p>|-------|------|-------------|</p>
+| <code>id</code> | <code>number</code> | Auto-incrementing primary key |
+| <code>userId</code> | <code>string \| number</code> | Foreign key to the user table |
+| <code>provider</code> | <code>string</code> | Provider name (e.g. <code>'github'</code>) |
+| <code>providerId</code> | <code>string</code> | User's ID from the provider |
+| <code>token</code> | <code>string</code> | OAuth access token |
+| <code>refreshToken</code> | <code>string \| null</code> | Refresh token |
+| <code>expiresAt</code> | <code>Date \| null</code> | Token expiry |
+| <code>createdAt</code> | <code>Date</code> | Row creation time |
+| <code>updatedAt</code> | <code>Date</code> | Last update time |
+
+<h2>Security</h2>
+
+<ul>
+<li><strong>CSRF state</strong>: By default, a random 64-character hex string is stored in the session before redirect and verified on callback. This prevents cross-site request forgery attacks.</li>
+<li><strong>State is single-use</strong>: The state value is removed from the session after verification.</li>
+<li><strong>Stateless mode</strong>: Only use <code>stateless()</code> when you manage CSRF protection through other means (e.g., SPA with its own state parameter).</li>
+<li><strong>Credentials</strong>: Never commit client secrets. Use environment variables and <code>.env</code> files with strict permissions.</li>
+</ul>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

@@ -1,0 +1,195 @@
+@layout('layouts/docs')
+
+@set('title', 'Encryption - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Encryption</h1>
+
+<p>Symmetric encryption, password hashing, HMAC signing, and random token generation — all backed by the application key.</p>
+
+<h2>Setup</h2>
+
+<p>Generate an application key:</p>
+
+<pre><code class="language-bash">bun strav generate:key
+</code></pre>
+
+This writes <code>APP_KEY</code> to your <code>.env</code> file. The key is required for <code>encrypt</code>, <code>decrypt</code>, <code>seal</code>, <code>unseal</code>, <code>sign</code>, and <code>verifySignature</code>.
+
+Register the <code>EncryptionManager</code> using a service provider (recommended):
+
+<pre><code class="language-typescript">import { EncryptionProvider } from '@strav/kernel'
+
+app.use(new EncryptionProvider())
+</code></pre>
+
+The <code>EncryptionProvider</code> depends on the <code>config</code> provider.
+
+<p>Or manually:</p>
+
+<pre><code class="language-typescript">import { EncryptionManager } from '@strav/kernel'
+
+app.singleton(EncryptionManager)
+app.resolve(EncryptionManager)
+</code></pre>
+
+Create <code>config/encryption.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  key: env('APP_KEY', ''),
+  previousKeys: [],
+}
+</code></pre>
+
+<h2>Encryption helpers</h2>
+
+The <code>encrypt</code> object is the primary API. All symmetric operations use AES-256-GCM with keys derived from your <code>APP_KEY</code>.
+
+<pre><code class="language-typescript">import { encrypt } from '@strav/kernel'
+</code></pre>
+
+<h3>encrypt / decrypt</h3>
+
+<p>Encrypt and decrypt strings. Returns a compact base64url-encoded payload (safe for URLs, databases, cookies).</p>
+
+<pre><code class="language-typescript">const encrypted = encrypt.encrypt('sensitive data')
+// 'eyJhbG...' — opaque, tamper-proof string
+
+const original = encrypt.decrypt(encrypted)
+// 'sensitive data'
+</code></pre>
+
+<p>Each call produces a unique ciphertext (random IV), so encrypting the same value twice yields different outputs.</p>
+
+<h3>seal / unseal</h3>
+
+<p>Encrypt and JSON-serialize an object in one step. Perfect for tamper-proof cookies, tokens, or API payloads.</p>
+
+<pre><code class="language-typescript">const token = encrypt.seal({ userId: 123, role: 'admin' })
+// Send to client — it's encrypted and tamper-proof
+
+const data = encrypt.unseal<{ userId: number; role: string }>(token)
+// { userId: 123, role: 'admin' }
+</code></pre>
+
+<h3>hash / verify (passwords)</h3>
+
+Hash passwords using argon2id (via <code>Bun.password</code>). Each hash includes a unique salt automatically.
+
+<pre><code class="language-typescript">const hash = await encrypt.hash(formData.password)
+await db.sql<code>UPDATE users SET password = ${hash} WHERE id = ${userId}</code>
+
+const valid = await encrypt.verify(formData.password, user.password)
+if (!valid) throw new Error('Invalid credentials')
+</code></pre>
+
+<code>verify</code> works with both argon2id and bcrypt hashes, so migrating from bcrypt is seamless.
+
+<h3>sign / verifySignature</h3>
+
+<p>Create and verify HMAC-SHA256 signatures. Uses timing-safe comparison to prevent timing attacks.</p>
+
+<pre><code class="language-typescript">// Signing outgoing webhooks
+const payload = JSON.stringify(event)
+const sig = encrypt.sign(payload)
+response.headers.set('X-Signature', sig)
+
+// Verifying incoming webhooks
+const body = await request.text()
+const signature = request.headers.get('X-Signature')!
+if (!encrypt.verifySignature(body, signature)) {
+  return new Response('Invalid signature', { status: 401 })
+}
+</code></pre>
+
+<h3>sha256 / sha512</h3>
+
+<p>One-way hashing. Returns hex strings.</p>
+
+<pre><code class="language-typescript">const checksum = encrypt.sha256(fileContents)
+const fingerprint = encrypt.sha512(data)
+</code></pre>
+
+<h3>random / randomBytes</h3>
+
+<p>Cryptographically secure random generation.</p>
+
+<pre><code class="language-typescript">const apiKey = encrypt.random()       // 64-char hex string (32 bytes)
+const token = encrypt.random(16)      // 32-char hex string (16 bytes)
+const iv = encrypt.randomBytes(12)    // raw Uint8Array
+</code></pre>
+
+<h2>Key rotation</h2>
+
+When you rotate your <code>APP_KEY</code>, move the old key into <code>previousKeys</code> so existing encrypted data can still be decrypted:
+
+<pre><code class="language-typescript">// config/encryption.ts
+export default {
+  key: env('APP_KEY', ''),
+  previousKeys: [
+    'old-key-abc123',    // retired key — still used for decryption
+  ],
+}
+</code></pre>
+
+On <code>decrypt</code>, <code>unseal</code>, and <code>verifySignature</code>, the current key is tried first. If it fails, each previous key is tried in order. New encryptions and signatures always use the current key.
+
+<h2>Advanced usage</h2>
+
+<h3>Direct manager access</h3>
+
+<p>For runtime key swapping (e.g., in tests):</p>
+
+<pre><code class="language-typescript">import { EncryptionManager } from '@strav/kernel'
+
+EncryptionManager.useKey('test-key-for-unit-tests')
+</code></pre>
+
+<h2>Controller example</h2>
+
+<pre><code class="language-typescript">import { encrypt } from '@strav/kernel'
+
+export default class ApiKeyController {
+  async create(ctx: Context) {
+    const user = ctx.get<User>('user')
+
+    // Generate and store an encrypted API key
+    const plain = encrypt.random()
+    const hash = encrypt.sha256(plain)
+
+    await db.sql<code>
+      INSERT INTO api_keys (user_id, hash) VALUES (${user.id}, ${hash})
+    </code>
+
+    // Return the plain key once — it can never be recovered
+    return ctx.json({ apiKey: plain })
+  }
+
+  async verify(ctx: Context) {
+    const { apiKey } = await ctx.body<{ apiKey: string }>()
+    const hash = encrypt.sha256(apiKey)
+
+    const rows = await db.sql<code>
+      SELECT * FROM api_keys WHERE hash = ${hash} LIMIT 1
+    </code>
+
+    if (rows.length === 0) {
+      return ctx.json({ error: 'Invalid API key' }, 401)
+    }
+
+    return ctx.json({ valid: true, userId: rows[0].user_id })
+  }
+}
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

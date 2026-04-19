@@ -1,0 +1,161 @@
+@layout('layouts/docs')
+
+@set('title', 'Events - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Events</h1>
+
+<p>The events module provides an in-memory publish/subscribe event bus with async support. No DI, no database, no configuration required.</p>
+
+<h2>Quick start</h2>
+
+<pre><code class="language-typescript">import { Emitter } from '@strav/kernel'
+
+// Listen
+Emitter.on('user.registered', async ({ user }) => {
+  await sendWelcomeEmail(user)
+})
+
+// Emit — awaits all listeners in parallel
+await Emitter.emit('user.registered', { user })
+</code></pre>
+
+<h2>Listening</h2>
+
+<h3>on — persistent listener</h3>
+
+<pre><code class="language-typescript">Emitter.on('order.placed', async (payload) => {
+  console.log('Order placed:', payload.orderId)
+})
+</code></pre>
+
+<h3>once — single-use listener</h3>
+
+<p>Automatically removed after its first invocation:</p>
+
+<pre><code class="language-typescript">Emitter.once('app.ready', () => {
+  console.log('App is ready')
+})
+</code></pre>
+
+<h3>off — remove a listener</h3>
+
+<pre><code class="language-typescript">const listener = async (payload) => { /<em> ... </em>/ }
+
+Emitter.on('user.deleted', listener)
+Emitter.off('user.deleted', listener)
+</code></pre>
+
+<h3>removeAllListeners</h3>
+
+<pre><code class="language-typescript">// Remove all listeners for a specific event
+Emitter.removeAllListeners('user.registered')
+
+// Remove all listeners for all events
+Emitter.removeAllListeners()
+</code></pre>
+
+<h2>Emitting</h2>
+
+<pre><code class="language-typescript">await Emitter.emit('order.placed', { orderId: 42, total: 99.95 })
+</code></pre>
+
+<code>emit()</code> is async — it runs all listeners in parallel via <code>Promise.allSettled</code> and awaits their completion. If no listeners are registered, it returns immediately.
+
+<h2>Typed payloads</h2>
+
+<p>Use generics to type the payload:</p>
+
+<pre><code class="language-typescript">interface UserRegistered {
+  user: User
+  invitedBy?: number
+}
+
+Emitter.on<UserRegistered>('user.registered', async ({ user, invitedBy }) => {
+  // user and invitedBy are typed
+})
+
+await Emitter.emit<UserRegistered>('user.registered', { user })
+</code></pre>
+
+<h2>Error isolation</h2>
+
+<p>If a listener throws, the other listeners still run to completion. After all listeners settle, the first error is re-thrown:</p>
+
+<pre><code class="language-typescript">Emitter.on('process', async () => {
+  throw new Error('listener A failed')
+})
+
+Emitter.on('process', async () => {
+  // This still runs, even though listener A threw
+  console.log('listener B succeeded')
+})
+
+await Emitter.emit('process', {})
+// throws: 'listener A failed' — but listener B already executed
+</code></pre>
+
+<p>This makes it safe to register independent side-effects without worrying about one breaking the others.</p>
+
+<h2>Introspection</h2>
+
+<pre><code class="language-typescript">Emitter.listenerCount('user.registered') // 3
+</code></pre>
+
+<h2>Connecting events to the queue</h2>
+
+Use <code>Queue.listener()</code> to bridge events to background jobs:
+
+<pre><code class="language-typescript">import { Emitter } from '@strav/kernel'
+import { Queue } from '@strav/queue'
+
+// When a user registers, push a background job
+Emitter.on('user.registered', Queue.listener('send-welcome-email'))
+
+// The job handler runs later, in a worker process
+Queue.handle('send-welcome-email', async (payload) => {
+  await mailer.send(payload.user.email, 'Welcome!')
+})
+</code></pre>
+
+<p>This is the recommended pattern for offloading slow work (emails, webhooks, image processing) from the request cycle.</p>
+
+<h2>Connecting events to notifications</h2>
+
+Use <code>NotificationManager.on()</code> to declaratively map events to multi-channel notifications:
+
+<pre><code class="language-typescript">import { NotificationManager, notifications } from '@strav/signal'
+
+NotificationManager.on('task.assigned', {
+  create: ({ task, assigner }) => new TaskAssignedNotification(task, assigner),
+  recipients: ({ assignee }) => assignee,
+})
+
+notifications.wireEvents()
+</code></pre>
+
+When <code>task.assigned</code> fires, the notification is automatically created and delivered to the resolved recipients through all configured channels (email, in-app, webhook, Discord, etc.).
+
+See the <a href="./notification.md">Notification guide</a> for full details.
+
+<h2>Testing</h2>
+
+Call <code>Emitter.reset()</code> in your test teardown to clear all listeners:
+
+<pre><code class="language-typescript">import { afterEach } from 'bun:test'
+import { Emitter } from '@strav/kernel'
+
+afterEach(() => {
+  Emitter.reset()
+})
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

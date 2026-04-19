@@ -1,0 +1,36 @@
+body {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-weight: 500;
+  font-style: normal;
+  font-size: 17px;
+  line-height: 1.8;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+.logo {
+  font-family: "Passero One", sans-serif;
+  .strav {
+    color: var(--text-accent);
+  }
+}
+
+a {
+  color: var(--text-accent);
+  text-decoration: none;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.shell {
+  font-family: "JetBrains Mono", monospace;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  background-color: var(--bg-secondary);
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 14px;
+}

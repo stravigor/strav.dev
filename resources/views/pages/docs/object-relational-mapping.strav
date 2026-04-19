@@ -1,0 +1,369 @@
+@layout('layouts/docs')
+
+@set('title', 'ORM - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>ORM</h1>
+
+<p>The ORM module provides an Active Record implementation with model decorators, relationship loading, and a fluent query builder.</p>
+
+<h2>BaseModel</h2>
+
+All models extend <code>BaseModel</code>. The framework generates model classes from your schemas, but the API is the same whether you write models by hand or generate them.
+
+<pre><code class="language-typescript">import { BaseModel, primary } from '@strav/database'
+
+class User extends BaseModel {
+  static override softDeletes = true
+
+  @primary
+  declare pid: string
+
+  declare username: string | null
+  declare createdAt: DateTime
+}
+</code></pre>
+
+<h3>Conventions</h3>
+
+<ul>
+<li><strong>Table name</strong>: derived from the class name — <code>User</code> becomes <code>user</code>, <code>OrderItem</code> becomes <code>order_item</code>.</li>
+<li><strong>Primary key</strong>: marked with <code>@primary</code> (defaults to <code>id</code> if no decorator).</li>
+<li><strong>Column mapping</strong>: camelCase properties map to snake_case columns automatically (<code>createdAt</code> <-> <code>created_at</code>).</li>
+<li><strong>Timestamps</strong>: <code>Date</code> values from the database are hydrated as Luxon <code>DateTime</code> objects.</li>
+</ul>
+
+<h3>The <code>declare</code> keyword</h3>
+
+Properties that have no schema default use <code>declare</code> so they don't appear in <code>Object.keys()</code> on a fresh instance. This prevents them from being included in INSERT statements (letting the database generate values like serial PKs and timestamps).
+
+<p>Properties with schema defaults use initializers instead:</p>
+
+<pre><code class="language-typescript">role: UserRole = UserRole.User   // included in INSERT
+declare createdAt: DateTime      // NOT included — DB generates it
+</code></pre>
+
+<h2>CRUD operations</h2>
+
+<h3>Creating records</h3>
+
+<pre><code class="language-typescript">// Using create()
+const user = await User.create({ username: 'alice' })
+
+// Using save()
+const user = new User()
+user.username = 'alice'
+await user.save()   // INSERT ... RETURNING *
+
+// Using merge() + save()
+const user = new User()
+user.merge({ username: 'alice', role: 'admin' })
+await user.save()
+
+// Inside a transaction (all CRUD methods accept an optional trx parameter)
+await transaction(async (trx) => {
+  const user = await User.create({ username: 'alice' }, trx)
+  await user.save(trx)
+  await user.delete(trx)
+})
+</code></pre>
+
+<code>save()</code> on a new record runs an INSERT with <code>RETURNING *</code>, which populates all database-generated columns (PK, timestamps, etc.) back onto the instance.
+
+<h3>Reading records</h3>
+
+<pre><code class="language-typescript">const user = await User.find(userId)            // returns null if not found
+const user = await User.findOrFail(userId)      // throws if not found
+const users = await User.all()                  // all non-deleted records
+</code></pre>
+
+<p>All static read methods respect soft deletes — soft-deleted records are excluded automatically.</p>
+
+<h3>Merging data</h3>
+
+<code>merge()</code> assigns properties from a plain object onto a model instance and returns <code>this</code> for chaining:
+
+<pre><code class="language-typescript">const user = await User.findOrFail(userId)
+user.merge({ username: 'bob', role: 'admin' }).save()
+</code></pre>
+
+This is the recommended way to bulk-assign validated input to a model. Generated services use <code>merge()</code> internally.
+
+<h3>Updating records</h3>
+
+<pre><code class="language-typescript">const user = await User.findOrFail(userId)
+user.username = 'bob'
+await user.save()   // UPDATE — auto-sets updatedAt
+</code></pre>
+
+<h3>Deleting records</h3>
+
+<pre><code class="language-typescript">await user.delete()        // soft-delete if model supports it
+await user.forceDelete()   // always hard-delete
+</code></pre>
+
+<h2>Decorators</h2>
+
+<h3>@primary</h3>
+
+<p>Marks the primary key property:</p>
+
+<pre><code class="language-typescript">@primary
+declare id: number
+</code></pre>
+
+If no property is decorated, the default PK name is <code>id</code>.
+
+<h3>@ulid</h3>
+
+<p>Marks a field as a ULID that should be auto-generated on insert if not provided:</p>
+
+<pre><code class="language-typescript">import { ulid } from '@strav/database'
+
+@ulid
+@primary
+declare id: string  // Auto-generates ULID on insert
+</code></pre>
+
+<p>ULIDs (Universally Unique Lexicographically Sortable Identifiers) are 26-character strings that are:</p>
+<ul>
+<li>Lexicographically sortable (time-ordered)</li>
+<li>Cryptographically secure</li>
+<li>Compatible with distributed systems</li>
+</ul>
+
+The decorator works with fields defined as <code>t.ulid()</code> in schemas or any <code>char(26)</code> column.
+
+<h3>@reference (belongs-to)</h3>
+
+<p>Defines a belongs-to relationship. The decorated property is excluded from persistence and can be loaded on demand:</p>
+
+<pre><code class="language-typescript">@reference({ model: 'User', foreignKey: 'userId', targetPK: 'id' })
+declare user: User
+</code></pre>
+
+A bare <code>@reference</code> (without options) simply excludes the property from persistence.
+
+<h3>@associate (many-to-many)</h3>
+
+<p>Defines a many-to-many relationship through a pivot table:</p>
+
+<pre><code class="language-typescript">@associate({
+  through: 'team_user',
+  foreignKey: 'team_id',
+  otherKey: 'user_pid',
+  model: 'User',
+  targetPK: 'pid',
+})
+declare members: User[]
+</code></pre>
+
+<h3>@cast (type casting)</h3>
+
+<p>Defines automatic type casting between database and application values. Transforms are applied during hydration (DB → model) and dehydration (model → DB).</p>
+
+<pre><code class="language-typescript">import { cast } from '@strav/database'
+
+// Bare — defaults to JSON parsing/serialization
+@cast
+declare state: CanvasState
+
+// Named built-in type
+@cast('boolean')
+declare isActive: boolean
+
+// Custom get/set functions
+@cast({ get: (v) => new Money(v as number), set: (v: Money) => v.toCents() })
+declare price: Money
+</code></pre>
+
+Built-in cast types: <code>'json'</code>, <code>'boolean'</code>, <code>'number'</code>, <code>'integer'</code>, <code>'string'</code>, <code>'bigint'</code>.
+
+The JSON cast handles both <code>json</code> columns (stored as text, needs parsing) and <code>jsonb</code> columns (auto-parsed by Bun.sql, passed through as-is). Null values always pass through without casting.
+
+The <code>'bigint'</code> cast converts BigInt values to <code>Number</code> when within the safe integer range, or to <code>String</code> for values exceeding <code>Number.MAX_SAFE_INTEGER</code>. Use it on <code>bigint</code>/<code>bigserial</code> columns to ensure JSON-safe values:
+
+<pre><code class="language-typescript">@cast('bigint')
+declare viewCount: number
+</code></pre>
+
+<h3>@encrypt (field-level encryption)</h3>
+
+Encrypts a field before database storage (AES-256-GCM) and decrypts it on hydration. The database column <strong>must</strong> be TEXT to avoid truncating the encrypted payload.
+
+<pre><code class="language-typescript">import { encrypt } from '@strav/database'
+
+@encrypt
+declare ssn: string
+</code></pre>
+
+Encrypted fields are automatically excluded from <code>toJSON()</code> output to prevent leaking sensitive data into API responses or Vue island props. Access the decrypted value directly via the property.
+
+<h3>Serialization & BigInt safety</h3>
+
+<code>toJSON()</code> automatically converts <code>DateTime</code> values to ISO 8601 strings and <code>BigInt</code> values to JSON-safe types (<code>Number</code> if within safe integer range, <code>String</code> otherwise). This prevents <code>JSON.stringify()</code> from throwing a <code>TypeError</code> on BigInt values.
+
+> <strong>Note:</strong> Bun.sql returns <code>bigint</code>/<code>bigserial</code> columns as <code>number</code> for safe-range values and as <code>string</code> for large values by default, so BigInt primitives only appear if the connection is configured with <code>bigint: true</code> or values are set manually. The safety net is in place regardless.
+
+Requires the <code>EncryptionProvider</code> to be booted (APP_KEY configured).
+
+<h2>Relationship loading</h2>
+
+Use <code>load()</code> to eagerly load relationships:
+
+<pre><code class="language-typescript">const profile = await Profile.findOrFail(1)
+await profile.load('user', 'reviewer')   // loads @reference relations
+
+const team = await Team.findOrFail(1)
+await team.load('members')              // loads @associate relation
+
+// Chaining
+const user = await User.findOrFail(userId)
+await user.load('teams')
+console.log(user.teams)                 // Team[]
+</code></pre>
+
+<code>load()</code> supports both <code>@reference</code> and <code>@associate</code> relationships and returns <code>this</code> for chaining.
+
+<h2>QueryBuilder</h2>
+
+The <code>query()</code> function creates a fluent query builder for typed SELECT queries. It accepts an optional transaction handle as the second argument:
+
+<pre><code class="language-typescript">import { query, transaction } from '@strav/database'
+</code></pre>
+
+> <strong>📖 Complete Reference</strong>: For comprehensive QueryBuilder documentation including all methods, advanced patterns, and performance tips, see the <a href="./query-builder.md">QueryBuilder Reference Guide</a>.
+
+<h3>Basic queries</h3>
+
+<pre><code class="language-typescript">const users = await query(User)
+  .where('role', UserRole.Admin)
+  .all()
+
+const user = await query(User)
+  .where('email', 'alice@example.com')
+  .first()
+
+const user = await query(User)
+  .where('email', 'alice@example.com')
+  .firstOrFail()  // throws if not found
+</code></pre>
+
+<h3>Where clauses</h3>
+
+<pre><code class="language-typescript">query(User).where('age', '>=', 18)
+query(User).whereIn('role', [UserRole.Admin, UserRole.Staff])
+query(User).whereNotIn('status', ['banned'])
+query(User).whereNull('deletedAt')
+query(User).whereNotNull('username')
+query(User).whereBetween('age', 18, 65)
+query(User).whereRaw('"email" ILIKE $1', ['%@example.com'])
+</code></pre>
+
+<h3>Joins</h3>
+
+<pre><code class="language-typescript">const results = await query(User)
+  .innerJoin(Profile).on('User.pid', '=', 'Profile.userPid')
+  .select('User.username', 'Profile.name')
+  .all()
+</code></pre>
+
+Join types: <code>leftJoin()</code>, <code>innerJoin()</code>, <code>rightJoin()</code>.
+
+<h3>Ordering, pagination, grouping</h3>
+
+<pre><code class="language-typescript">query(User)
+  .orderBy('createdAt', 'desc')
+  .limit(20)
+  .offset(40)
+  .all()
+
+query(User)
+  .groupBy('role')
+  .select('role', 'COUNT(*) AS count')
+  .all()
+
+query(User).distinct().all()
+</code></pre>
+
+<h3>Soft delete control</h3>
+
+<pre><code class="language-typescript">query(User).withTrashed().all()    // include soft-deleted records
+query(User).onlyTrashed().all()   // only soft-deleted records
+</code></pre>
+
+<h3>Aggregates and inspection</h3>
+
+<pre><code class="language-typescript">const count = await query(User).where('role', 'admin').count()
+const exists = await query(User).where('email', 'x@y.com').exists()
+
+// Inspect generated SQL without executing
+const { sql, params } = query(User).where('role', 'admin').toSQL()
+</code></pre>
+
+<h3>Pagination</h3>
+
+The <code>paginate()</code> method returns a structured result with data and metadata:
+
+<pre><code class="language-typescript">import { query, type PaginationResult } from '@strav/database'
+
+const result: PaginationResult<User> = await query(User)
+  .where('organizationId', orgId)
+  .orderBy('createdAt', 'desc')
+  .paginate(page, 20)
+
+result.data       // User[]
+result.meta.page      // current page (1-based)
+result.meta.perPage   // items per page
+result.meta.total     // total matching records
+result.meta.lastPage  // last available page number
+result.meta.from      // 1-based index of first item (0 when empty)
+result.meta.to        // 1-based index of last item (0 when empty)
+</code></pre>
+
+Signature: <code>paginate(page = 1, perPage = 15)</code>. The page number is clamped to a minimum of 1. Requesting a page beyond <code>lastPage</code> returns empty <code>data</code> with accurate <code>meta</code>.
+
+Where clauses, joins, ordering, and soft-delete filters all apply normally — <code>paginate()</code> simply adds the correct <code>LIMIT</code> and <code>OFFSET</code> and runs a <code>COUNT(*)</code> query for the total.
+
+<h3>Column resolution</h3>
+
+<p>Column references are automatically resolved:</p>
+
+<ul>
+<li><code>'email'</code> resolves to <code>"user"."email"</code> (primary table + snake_case).</li>
+<li><code>'User.email'</code> resolves to <code>"user"."email"</code> (explicit model reference).</li>
+<li><code>'Profile.userId'</code> resolves to <code>"profile"."user_id"</code> (cross-table with case conversion).</li>
+</ul>
+
+<h2>Transactions</h2>
+
+The <code>transaction()</code> helper runs a callback inside a database transaction that auto-commits on success and rolls back on error. Pass the <code>trx</code> handle to <code>query()</code>, <code>create()</code>, <code>save()</code>, <code>delete()</code>, and <code>forceDelete()</code> so they all run on the same connection:
+
+<pre><code class="language-typescript">import { query, transaction } from '@strav/database'
+
+const user = await transaction(async (trx) => {
+  const u = await User.create({ name: 'Alice', email: 'alice@example.com' }, trx)
+  await Profile.create({ userId: u.id, bio: 'Hello' }, trx)
+  return u
+})
+</code></pre>
+
+<p>QueryBuilder operations also accept the transaction handle:</p>
+
+<pre><code class="language-typescript">await transaction(async (trx) => {
+  const user = await query(User, trx).where('email', 'alice@example.com').firstOrFail()
+  user.role = 'admin'
+  await user.save(trx)
+  await query(AuditLog, trx).where('userId', user.id).delete()
+})
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

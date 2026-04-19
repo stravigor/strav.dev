@@ -1,0 +1,532 @@
+@layout('layouts/docs')
+
+@set('title', '@strav/spring - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>@strav/spring</h1>
+
+<p>The flagship framework scaffolding tool for the Strav ecosystem - the Laravel of the Bun ecosystem.</p>
+
+<h2>Overview</h2>
+
+<strong>@strav/spring</strong> is Strav's answer to Laravel's <code>laravel new</code> command. It creates a complete, production-ready application structure that showcases all of Strav's unique strengths:
+
+<ul>
+<li><strong>Schema-driven database design</strong> with TypeScript DSL</li>
+<li><strong>Vue islands architecture</strong> for interactive components</li>
+<li><strong>Multi-domain PostgreSQL support</strong> with complete tenant isolation</li>
+<li><strong>Snake case conventions</strong> throughout the codebase</li>
+<li><strong>TypeScript-first</strong> development experience</li>
+</ul>
+
+<h2>Quick Start</h2>
+
+<pre><code class="language-bash"><h1>Interactive prompt (recommended for first-time users)</h1>
+bunx @strav/spring my-app
+
+<h1>Full-stack application with Vue islands</h1>
+bunx @strav/spring my-blog --web
+
+<h1>Headless REST API</h1>
+bunx @strav/spring my-api --api
+</code></pre>
+
+<h2>Philosophy</h2>
+
+<p>Spring embodies Strav's core philosophy:</p>
+
+<li><strong>Convention over Configuration</strong> - Predictable directory structure and naming</li>
+<li><strong>Schema-driven Development</strong> - Database schemas as the single source of truth</li>
+<li><strong>Vue Islands</strong> - Progressive enhancement with server-side templates + client-side interactivity</li>
+<li><strong>Type Safety</strong> - Full TypeScript integration from database to frontend</li>
+<li><strong>Developer Experience</strong> - Rich tooling and instant productivity</li>
+
+<h2>Directory Structure</h2>
+
+<p>Spring creates a Laravel-inspired directory structure adapted for Strav conventions:</p>
+
+<pre><code>my-app/
+├── app/                      # Application logic
+│   ├── controllers/          # HTTP controllers (snake_case)
+│   ├── models/               # Database models (generated from schemas)
+│   ├── middleware/           # Custom middleware
+│   ├── providers/            # Service providers
+│   ├── policies/             # Authorization policies
+│   ├── jobs/                 # Queue jobs
+│   ├── mail/                 # Mail templates
+│   └── services/             # Business logic services
+├── config/                   # Configuration files
+│   ├── app.ts                # Application settings
+│   ├── database.ts           # Database configuration
+│   ├── view.ts               # View engine settings
+│   └── session.ts            # Session configuration
+├── database/                 # Database layer
+│   ├── schemas/              # Schema definitions (TypeScript DSL)
+│   │   └── public/           # Main application schemas
+│   ├── migrations/           # Generated migrations
+│   │   └── public/           # Generated from schemas
+│   ├── seeders/              # Database seeders
+│   └── factories/            # Model factories for testing
+├── resources/                # Frontend resources
+│   ├── views/                # Server-side templates (.strav files)
+│   ├── css/                  # Stylesheets
+│   └── ts/                   # TypeScript assets
+│       └── islands/          # Vue.js islands
+├── routes/                   # Route definitions
+├── storage/                  # Application storage
+│   ├── logs/                 # Application logs
+│   ├── cache/                # File cache
+│   └── uploads/              # User uploads
+├── tests/                    # Test files
+├── public/                   # Static files (web template only)
+├── index.ts                  # Application entry point
+├── strav.ts                  # CLI tool (like artisan)
+├── .env                      # Environment variables
+├── package.json              # Dependencies and scripts
+└── tsconfig.json             # TypeScript configuration
+</code></pre>
+
+<h2>Template Types</h2>
+
+<h3>Web Template (<code>--web</code>)</h3>
+
+The <strong>web</strong> template creates a full-stack application with:
+
+<ul>
+<li><strong>Server-side rendering</strong> with <code>.strav</code> templates</li>
+<li><strong>Vue islands</strong> for interactive components</li>
+<li><strong>Session management</strong> and authentication scaffolding</li>
+<li><strong>Static file serving</strong> from <code>public/</code> directory</li>
+<li><strong>Asset versioning</strong> for cache busting</li>
+<li><strong>Complete UI examples</strong> demonstrating all features</li>
+</ul>
+
+<strong>Perfect for:</strong>
+<ul>
+<li>Traditional web applications</li>
+<li>Content management systems</li>
+<li>E-commerce platforms</li>
+<li>Admin dashboards</li>
+<li>Any app requiring server-side rendering + interactivity</li>
+</ul>
+
+<h3>API Template (<code>--api</code>)</h3>
+
+The <strong>api</strong> template creates a headless REST API with:
+
+<ul>
+<li><strong>JSON-only responses</strong> with proper error handling</li>
+<li><strong>CORS configuration</strong> for frontend consumption</li>
+<li><strong>RESTful controllers</strong> with full CRUD operations</li>
+<li><strong>No view layer</strong> - pure API endpoints</li>
+<li><strong>Optimized for performance</strong> - minimal dependencies</li>
+</ul>
+
+<strong>Perfect for:</strong>
+<ul>
+<li>Mobile app backends</li>
+<li>Microservices</li>
+<li>SPA backends</li>
+<li>Third-party integrations</li>
+<li>Headless CMS backends</li>
+</ul>
+
+<h2>Getting Started</h2>
+
+<h3>1. Create Your Application</h3>
+
+<pre><code class="language-bash"><h1>Interactive mode - recommended for beginners</h1>
+bunx @strav/spring my-app
+
+<h1>Or specify template directly</h1>
+bunx @strav/spring my-blog --web --db=blog_database
+</code></pre>
+
+<h3>2. Navigate and Install</h3>
+
+<pre><code class="language-bash">cd my-app
+bun install  # Install dependencies
+</code></pre>
+
+<h3>3. Configure Database</h3>
+
+Edit <code>.env</code> with your database credentials:
+
+<pre><code class="language-env">DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_USER=your_username
+DB_PASSWORD=your_password
+DB_DATABASE=my_app
+</code></pre>
+
+<h3>4. Run Migrations and Seed</h3>
+
+<pre><code class="language-bash"><h1>Generate and run migrations from schemas</h1>
+bun strav generate:migration --scope=public --message="initial schema"
+bun strav migrate --scope=public
+
+<h1>Seed with sample data</h1>
+bun strav seed
+</code></pre>
+
+<h3>5. Start Development Server</h3>
+
+<pre><code class="language-bash">bun run dev  # Starts server with hot reload
+</code></pre>
+
+Visit <code>http://localhost:3000</code> to see your application!
+
+<h2>Development Workflow</h2>
+
+<h3>Schema-Driven Development</h3>
+
+<li><strong>Define schemas</strong> in <code>database/schemas/public/</code>:</li>
+
+<pre><code class="language-typescript">// database/schemas/public/post.ts
+import { defineSchema, t, Archetype } from '@strav/database'
+
+export default defineSchema('post', {
+  archetype: Archetype.Entity,
+  fields: {
+    id: t.uuid().primaryKey(),
+    title: t.string().required(),
+    slug: t.string().unique().required(),
+    content: t.text().required(),
+    status: t.enum(['draft', 'published', 'archived']).default('draft'),
+    author: t.reference('user'),
+  },
+})
+</code></pre>
+
+<li><strong>Generate migrations</strong>:</li>
+
+<pre><code class="language-bash">bun strav generate:migration --scope=public --message="add post schema"
+</code></pre>
+
+<li><strong>Run migrations</strong>:</li>
+
+<pre><code class="language-bash">bun strav migrate --scope=public
+</code></pre>
+
+<li><strong>Generate models</strong> (optional - can be auto-generated):</li>
+
+<pre><code class="language-bash">bun strav generate:models --scope=public
+</code></pre>
+
+<h3>Vue Islands Development</h3>
+
+<li><strong>Create island components</strong> in <code>resources/ts/islands/</code>:</li>
+
+<pre><code class="language-vue"><!-- resources/ts/islands/post_editor.vue -->
+<template>
+  <div class="post-editor">
+    <input v-model="title" placeholder="Post title" />
+    <textarea v-model="content" placeholder="Write your post..."></textarea>
+    <button @click="save" :disabled="saving">
+      {{ saving ? 'Saving...' : 'Save Post' }}
+    </button>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+
+const props = defineProps({
+  initialTitle: { type: String, default: '' },
+  initialContent: { type: String, default: '' }
+})
+
+const title = ref(props.initialTitle)
+const content = ref(props.initialContent)
+const saving = ref(false)
+
+async function save() {
+  saving.value = true
+  // API call to save post
+  await fetch('/api/posts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: title.value, content: content.value })
+  })
+  saving.value = false
+}
+</script>
+</code></pre>
+
+<li><strong>Use in templates</strong>:</li>
+
+<pre><code class="language-html"><!-- resources/views/pages/create_post.strav -->
+@layout('layouts/app')
+
+@section('content')
+  <h1>Create New Post</h1>
+  <vue:post-editor />
+@end
+</code></pre>
+
+<h3>Controller Development</h3>
+
+<pre><code class="language-typescript">// app/controllers/post_controller.ts
+import type { Context } from '@strav/http'
+import { query } from '@strav/database'
+import { Controller } from './controller.ts'
+import Post from '../models/post.ts'
+
+export default class PostController extends Controller {
+  async index(ctx: Context) {
+    const posts = await query(Post)
+      .where('status', 'published')
+      .orderBy('created_at', 'DESC')
+      .limit(10)
+      .all()
+
+    return ctx.view('pages/posts/index', { posts })
+  }
+
+  async show(ctx: Context) {
+    const { slug } = ctx.params
+    const post = await query(Post)
+      .where('slug', slug)
+      .where('status', 'published')
+      .first()
+
+    if (!post) {
+      return this.notFound(ctx, 'Post not found')
+    }
+
+    return ctx.view('pages/posts/show', { post })
+  }
+}
+</code></pre>
+
+<h2>CLI Commands</h2>
+
+Once your application is created, you can use the built-in <code>strav.ts</code> CLI:
+
+<pre><code class="language-bash"><h1>Schema and database</h1>
+bun strav make:schema post --archetype=entity
+bun strav generate:migration --scope=public --message="add post schema"
+bun strav migrate --scope=public
+bun strav rollback --scope=public
+
+<h1>Code generation</h1>
+bun strav make:controller post_controller
+bun strav make:middleware auth_middleware
+bun strav make:policy post_policy
+bun strav make:job send_notification_job
+bun strav make:mail welcome_mail
+bun strav make:service payment_service
+bun strav make:factory post_factory
+
+<h1>Vue islands</h1>
+bun strav make:island post_editor
+bun strav make:island comment_form
+
+<h1>Database operations</h1>
+bun strav seed
+bun strav seed --class=PostSeeder
+
+<h1>Development helpers</h1>
+bun strav route:list
+bun strav compare  # Compare schemas vs database
+</code></pre>
+
+<h2>Best Practices</h2>
+
+<h3>1. Schema Design</h3>
+
+<ul>
+<li>Use appropriate <strong>archetypes</strong> for your models</li>
+<li>Define <strong>relationships</strong> clearly with <code>t.reference()</code></li>
+<li>Add <strong>validation</strong> at the schema level</li>
+<li>Use <strong>enums</strong> for constrained values</li>
+</ul>
+
+<h3>2. Vue Islands</h3>
+
+<ul>
+<li>Keep islands <strong>focused</strong> on single responsibilities</li>
+<li>Use <strong>TypeScript</strong> for props definitions</li>
+<li>Handle <strong>loading states</strong> and errors gracefully</li>
+<li>Implement <strong>accessibility</strong> features</li>
+</ul>
+
+<h3>3. Controllers</h3>
+
+<ul>
+<li>Extend the base <code>Controller</code> class</li>
+<li>Use <strong>snake_case</strong> for file names</li>
+<li>Keep controllers <strong>thin</strong> - move logic to services</li>
+<li>Return proper <strong>HTTP status codes</strong></li>
+</ul>
+
+<h3>4. Testing</h3>
+
+<ul>
+<li>Use the provided <strong>factory</strong> patterns</li>
+<li>Test <strong>both API and UI</strong> functionality</li>
+<li>Mock external services in tests</li>
+<li>Write <strong>integration tests</strong> for critical paths</li>
+</ul>
+
+<h2>Configuration</h2>
+
+<h3>Environment Variables</h3>
+
+Common <code>.env</code> variables for Spring applications:
+
+<pre><code class="language-env"><h1>Application</h1>
+APP_ENV=local
+APP_KEY=your-secret-key
+APP_DEBUG=true
+APP_URL=http://localhost:3000
+APP_PORT=3000
+
+<h1>Database</h1>
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_USER=your_username
+DB_PASSWORD=your_password
+DB_DATABASE=your_database
+
+<h1>Sessions (web template)</h1>
+SESSION_SECRET=your-session-secret
+SESSION_COOKIE_NAME=session
+
+<h1>Views (web template)</h1>
+VIEW_CACHE=false
+VIEW_DIRECTORY=resources/views
+</code></pre>
+
+<h3>Package Scripts</h3>
+
+<p>Spring applications come with these npm scripts:</p>
+
+<pre><code class="language-json">{
+  "scripts": {
+    "dev": "bun --hot index.ts",      // Development with hot reload
+    "start": "bun index.ts",          // Production server
+    "test": "bun test tests/",        // Run tests
+    "typecheck": "tsc --noEmit"       // Type checking
+  }
+}
+</code></pre>
+
+<h2>Deployment</h2>
+
+<h3>Building for Production</h3>
+
+<li><strong>Set production environment</strong>:</li>
+
+<pre><code class="language-env">APP_ENV=production
+APP_DEBUG=false
+VIEW_CACHE=true
+</code></pre>
+
+<li><strong>Build Vue islands</strong>:</li>
+
+<pre><code class="language-bash"><h1>Islands are auto-built on server start, or manually:</h1>
+bun strav build:islands
+</code></pre>
+
+<li><strong>Run migrations</strong>:</li>
+
+<pre><code class="language-bash">bun strav migrate --scope=public
+</code></pre>
+
+<li><strong>Start the server</strong>:</li>
+
+<pre><code class="language-bash">bun start
+</code></pre>
+
+<h2>Examples</h2>
+
+<h3>Blog Application</h3>
+
+<pre><code class="language-bash">bunx @strav/spring my-blog --web --db=blog_db
+cd my-blog
+
+<h1>Add post schema</h1>
+<h1>Create post_controller.ts</h1>
+<h1>Add blog routes</h1>
+<h1>Create post templates with Vue islands for comments</h1>
+</code></pre>
+
+<h3>API for Mobile App</h3>
+
+<pre><code class="language-bash">bunx @strav/spring mobile-api --api --db=mobile_app_db
+cd mobile-api
+
+<h1>Add user authentication</h1>
+<h1>Create resource controllers</h1>
+<h1>Set up proper CORS</h1>
+<h1>Add API documentation</h1>
+</code></pre>
+
+<h3>E-commerce Platform</h3>
+
+<pre><code class="language-bash">bunx @strav/spring shop --web --db=shop_db
+cd shop
+
+<h1>Add product, order, customer schemas</h1>
+<h1>Create shopping cart Vue islands</h1>
+<h1>Set up payment processing</h1>
+<h1>Add admin dashboard</h1>
+</code></pre>
+
+<h2>Migration from Laravel</h2>
+
+<p>If you're coming from Laravel, here's how Strav concepts map:</p>
+
+<p>| Laravel | Strav Spring |</p>
+<p>|---------|--------------|</p>
+| <code>php artisan make:model</code> | <code>bun strav make:schema</code> |
+| Blade templates | <code>.strav</code> templates |
+<p>| Laravel Mix | Built-in asset processing |</p>
+<p>| Eloquent ORM | Strav ORM with decorators |</p>
+| Artisan commands | <code>strav.ts</code> CLI |
+<p>| Service providers | Service providers |</p>
+<p>| Middleware | Middleware |</p>
+
+<h2>Troubleshooting</h2>
+
+<h3>Common Issues</h3>
+
+<strong>"Workspace dependency not found"</strong>
+<ul>
+<li>Ensure you're running commands inside a Strav workspace</li>
+<li>Check that all <code>@strav/*</code> packages are available</li>
+</ul>
+
+<strong>"Vue islands not rendering"</strong>
+<ul>
+<li>Check that <code>@islands</code> directive is in your layout</li>
+<li>Verify islands are being built (<code>public/islands.js</code> exists)</li>
+<li>Ensure Vue is installed as a dependency</li>
+</ul>
+
+<strong>"Database connection failed"</strong>
+<ul>
+<li>Verify database credentials in <code>.env</code></li>
+<li>Ensure PostgreSQL is running</li>
+<li>Check database exists and user has permissions</li>
+</ul>
+
+<h3>Getting Help</h3>
+
+<ul>
+<li>Check the <a href="../README.md">Strav documentation</a></li>
+<li>Review example applications in the templates</li>
+<li>Join the Strav community discussions</li>
+</ul>
+
+<p>Spring represents the best of Laravel's developer experience adapted for the modern TypeScript and Bun ecosystem. Happy building! 🚀</p>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

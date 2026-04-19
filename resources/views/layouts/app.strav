@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strav Spring</title>
+  @include('layouts/head')
+  <link rel="stylesheet" href="{{ asset('/css/app.css') }}">
+</head>
+<body>
+  @include('partials/navbar')
+  <main>
+    <div class="container">
+    @show('content')
+    </div>
+  </main>
+  @include('partials/footer')
+  @islands
+</body>
+</html>

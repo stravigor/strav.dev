@@ -1,0 +1,57 @@
+@layout('layouts/app')
+
+@section('content')
+  <div class="hero">
+    <h1>Strav Framework</h1>
+    <h3>The Modern, AI-First Backend Framework for Bun</h3>
+    <p>
+      Strav is a comprehensive, modular framework built from the ground up for the Bun runtime. 
+      Designed for modern applications that need enterprise-grade features, AI capabilities, and exceptional developer experience.
+    </p>
+  </div>
+  <div class="features">
+    <div class="feature">
+      <h3>AI Integration</h3>
+      <p>
+        Multi-provider AI support with agents, tool use, and structured output
+      </p>
+      <a href="/docs/ai-brain-core" class="read-more">Read more →</a>
+    </div>
+    <div class="feature">
+      <h3>OAuth2 Server</h3>
+      <p>
+        Complete authorization server implementation
+      </p>
+      <a href="/docs/oauth2-server" class="read-more">Read more →</a>
+    </div>
+    <div class="feature">
+      <h3>Billing Integration</h3>
+      <p>
+       Stripe subscriptions, payments, and webhooks
+      </p>
+      <a href="/docs/stripe-payment-integration" class="read-more">Read more →</a>
+    </div>
+    <div class="feature">
+      <h3>Full-Text Search</h3>
+      <p>
+       Unified API for Meilisearch, Typesense, and Algolia
+      </p>
+      <a href="/docs/full-text-search" class="read-more">Read more →</a>
+    </div>
+    <div class="feature">
+      <h3>Social Authentication</h3>
+      <p>
+       OAuth providers (Google, GitHub, Discord, Facebook, LinkedIn)
+      </p>
+      <a href="/docs/social-login-integration" class="read-more">Read more →</a>
+    </div>
+    <div class="feature">
+      <h3>Workflow Orchestration</h3>
+      <p>
+       Multi-step processes with saga-style compensation
+      </p>
+      <a href="/docs/workflow-automation" class="read-more">Read more →</a>
+    </div>
+  </div>
+@end
+ 

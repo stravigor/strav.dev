@@ -1,0 +1,433 @@
+@layout('layouts/docs')
+
+@set('title', 'Getting Started with Strav - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+  <h1>Getting Started with Strav</h1>
+
+  <p class="lead">
+    This guide walks you through creating your first Strav application using <strong>@strav/spring</strong>, from installation to deployment.
+  </p>
+
+  <h2>Prerequisites</h2>
+
+  <p>Before you begin, ensure you have:</p>
+
+  <ul>
+    <li><strong>Bun</strong> installed (latest version)</li>
+    <li><strong>PostgreSQL</strong> running locally</li>
+    <li><strong>Basic TypeScript/JavaScript</strong> knowledge</li>
+    <li><strong>Git</strong> for version control (recommended)</li>
+  </ul>
+
+  <h3>System Requirements</h3>
+
+  <pre><code class="language-bash"># Check Bun version
+bun --version  # Should be 1.0+
+
+# Check PostgreSQL
+psql --version  # Should be 12+</code></pre>
+
+  <h2>Quick Start (5 Minutes)</h2>
+
+  <h3>1. Create Your First Application</h3>
+
+  <pre><code class="language-bash"># Create a new web application
+bunx @strav/spring my-blog --web --db=blog_db
+
+# Navigate to the project
+cd my-blog
+
+# Install dependencies
+bun install</code></pre>
+
+  <h3>2. Configure Database</h3>
+
+  <p>Create a PostgreSQL database and update your <code>.env</code> file:</p>
+
+  <pre><code class="language-bash"># Create database (using psql)
+createdb blog_db
+
+# Or using SQL
+psql -c "CREATE DATABASE blog_db;"</code></pre>
+
+  <p>Update <code>.env</code>:</p>
+
+  <pre><code class="language-bash">DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_USER=your_username
+DB_PASSWORD=your_password
+DB_DATABASE=blog_db</code></pre>
+
+  <h3>3. Run Initial Setup</h3>
+
+  <pre><code class="language-bash"># Generate and run migrations
+bun strav generate:migration --scope=public --message="initial schema"
+bun strav migrate --scope=public
+
+# Seed with sample data
+bun strav seed</code></pre>
+
+  <h3>4. Start Development Server</h3>
+
+  <pre><code class="language-bash">bun run dev</code></pre>
+
+  <p>Visit <code>http://localhost:3000</code> - you should see your Strav application running with:</p>
+  <ul>
+    <li>A welcome page with user count</li>
+    <li>Interactive Vue island demos</li>
+    <li>Working user management</li>
+  </ul>
+
+  <div class="success-banner">
+    🎉 <strong>Congratulations!</strong> You've created your first Strav application.
+  </div>
+
+  <h2>Detailed Walkthrough</h2>
+
+  <h3>Understanding the Generated Structure</h3>
+
+  <p>Let's explore what Spring created for you:</p>
+
+  <pre><code>my-blog/
+├── app/                     # Your application code
+├── config/                  # Configuration files
+├── database/                # Schemas, migrations, seeders
+├── resources/               # Templates and frontend assets
+├── routes/                  # Route definitions
+├── tests/                   # Test files
+├── index.ts                 # Server entry point
+└── strav.ts                 # CLI tool</code></pre>
+
+  <h3>Key Files Explained</h3>
+
+  <h4>Server Entry Point (<code>index.ts</code>)</h4>
+
+  <pre><code class="language-typescript">import 'reflect-metadata'
+import { app } from '@strav/kernel'
+import { router } from '@strav/http'
+
+// Service providers registration
+app
+  .use(new ConfigProvider())
+  .use(new DatabaseProvider())
+  .use(new ViewProvider())
+  // ... other providers
+
+// Boot the application
+await app.start()
+
+// Start the server
+server.start(router)</code></pre>
+
+  <p>This file orchestrates your entire application startup.</p>
+
+  <h4>CLI Tool (<code>strav.ts</code>)</h4>
+
+  <pre><code class="language-typescript">#!/usr/bin/env bun
+// Your personal "artisan" command for development tasks</code></pre>
+
+  <p>Use it for migrations, code generation, and more:</p>
+
+  <pre><code class="language-bash">bun strav migrate
+bun strav make:controller post_controller</code></pre>
+
+  <h4>Configuration (<code>config/</code>)</h4>
+
+  <p>All configuration is centralized and environment-aware:</p>
+
+  <pre><code class="language-typescript">// config/app.ts
+export default {
+  name: env('APP_NAME', 'my-blog'),
+  env: env('APP_ENV', 'production'),
+  debug: env.bool('APP_DEBUG', false),
+  // ...
+}</code></pre>
+
+  <h2>Your First Feature: Blog Posts</h2>
+
+  <p>Let's add a blog post feature to understand the development workflow:</p>
+
+  <h3>1. Create the Schema</h3>
+
+  <pre><code class="language-bash">bun strav make:schema post --archetype=entity</code></pre>
+
+  <p>This creates <code>database/schemas/public/post.ts</code>:</p>
+
+  <pre><code class="language-typescript">import { defineSchema, t, Archetype } from '@strav/database'
+
+export default defineSchema('post', {
+  archetype: Archetype.Entity,
+  fields: {
+    id: t.uuid().primaryKey(),
+    title: t.string().required(),
+    slug: t.string().unique().required(),
+    content: t.text().required(),
+    status: t.enum(['draft', 'published']).default('draft'),
+    author_id: t.reference('user'),
+  },
+})</code></pre>
+
+  <h3>2. Generate and Run Migration</h3>
+
+  <pre><code class="language-bash">bun strav generate:migration --scope=public --message="add post schema"
+bun strav migrate --scope=public</code></pre>
+
+  <h3>3. Create the Controller</h3>
+
+  <pre><code class="language-bash">bun strav make:controller post_controller --resource</code></pre>
+
+  <p>Edit <code>app/controllers/post_controller.ts</code>:</p>
+
+  <pre><code class="language-typescript">import type { Context } from '@strav/http'
+import { query } from '@strav/database'
+import { Controller } from './controller.ts'
+import Post from '../models/post.ts'
+
+export default class PostController extends Controller {
+  async index(ctx: Context) {
+    const posts = await query(Post)
+      .where('status', 'published')
+      .orderBy('created_at', 'DESC')
+      .all()
+
+    return ctx.view('posts/index', { posts })
+  }
+
+  async show(ctx: Context) {
+    const { slug } = ctx.params
+    const post = await query(Post)
+      .where('slug', slug)
+      .where('status', 'published')
+      .first()
+
+    if (!post) {
+      return this.notFound(ctx, 'Post not found')
+    }
+
+    return ctx.view('posts/show', { post })
+  }
+}</code></pre>
+
+  <h3>4. Add Routes</h3>
+
+  <p>Edit <code>routes/routes.ts</code>:</p>
+
+  <pre><code class="language-typescript">import PostController from '../app/controllers/post_controller.ts'
+
+export default function (router: Router) {
+  // ... existing routes
+
+  // Blog routes
+  router.get('/posts', [PostController, 'index'])
+  router.get('/posts/:slug', [PostController, 'show'])
+}</code></pre>
+
+  <h3>5. Create Templates</h3>
+
+  <p>Create <code>resources/views/posts/index.strav</code>:</p>
+
+  <pre><code class="language-html">@layout('layouts/app')
+
+@section('content')
+  <h1>Blog Posts</h1>
+
+  <div class="posts">
+    @each(post in posts)
+      <article class="post-preview">
+        <h2>
+          <a href="/posts/{{ post.slug }}">{{ post.title }}</a>
+        </h2>
+        <div class="excerpt">
+          {{ post.content.slice(0, 200) }}...
+        </div>
+      </article>
+    @end
+  </div>
+@end</code></pre>
+
+  <h3>6. Test Your Feature</h3>
+
+  <p>Visit <code>http://localhost:3000/posts</code> to see your blog posts!</p>
+
+  <h2>Adding Vue Islands</h2>
+
+  <p>Let's add interactivity to our blog with Vue islands:</p>
+
+  <h3>1. Create a Comment System</h3>
+
+  <pre><code class="language-bash">bun strav make:island comment_form</code></pre>
+
+  <p>Edit <code>resources/ts/islands/comment_form.vue</code>:</p>
+
+  <pre><code class="language-html"><template>
+  <div class="comment-form">
+    <h3>Leave a Comment</h3>
+
+    <form @submit.prevent="submitComment" v-if="!submitted">
+      <div class="field">
+        <input
+          v-model="form.name"
+          type="text"
+          placeholder="Your name"
+          required
+        />
+      </div>
+
+      <div class="field">
+        <textarea
+          v-model="form.comment"
+          placeholder="Your comment"
+          required
+        ></textarea>
+      </div>
+
+      <button type="submit" :disabled="submitting">
+        {{ submitting ? 'Posting...' : 'Post Comment' }}
+      </button>
+    </form>
+
+    <div v-else class="success">
+      <p>Thanks for your comment!</p>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive } from 'vue'
+
+const props = defineProps({
+  postSlug: { type: String, required: true }
+})
+
+const form = reactive({
+  name: '',
+  comment: ''
+})
+
+const submitting = ref(false)
+const submitted = ref(false)
+
+async function submitComment() {
+  submitting.value = true
+
+  try {
+    await fetch(`/api/posts/${props.postSlug}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form)
+    })
+
+    submitted.value = true
+  } catch (error) {
+    console.error('Failed to submit comment:', error)
+  }
+
+  submitting.value = false
+}
+</script></code></pre>
+
+  <h3>2. Use in Templates</h3>
+
+  <p>Edit <code>resources/views/posts/show.strav</code>:</p>
+
+  <pre><code class="language-html">@layout('layouts/app')
+
+@section('content')
+  <article class="post">
+    <h1>{{ post.title }}</h1>
+    <div class="content">
+      {{ post.content }}
+    </div>
+  </article>
+
+  {{-- Interactive comment form --}}
+  <vue:comment-form :postSlug="'{{ post.slug }}'" />
+@end</code></pre>
+
+  <h2>Development Workflow</h2>
+
+  <h3>Daily Development Commands</h3>
+
+  <pre><code class="language-bash"># Start development server with hot reload
+bun run dev
+
+# Generate new migration after schema changes
+bun strav generate:migration -m "add comments table"
+
+# Run migrations
+bun strav migrate
+
+# Create new controller
+bun strav make:controller comment_controller
+
+# Create new island
+bun strav make:island like_button
+
+# Run tests
+bun test
+
+# Check types
+bun run typecheck</code></pre>
+
+  <h3>Schema Evolution Workflow</h3>
+
+  <ol>
+    <li><strong>Modify schema files</strong> in <code>database/schemas/</code></li>
+    <li><strong>Generate migration</strong>: <code>bun strav generate:migration</code></li>
+    <li><strong>Review generated SQL</strong> in <code>database/migrations/</code></li>
+    <li><strong>Run migration</strong>: <code>bun strav migrate</code></li>
+    <li><strong>Update models</strong> if needed</li>
+  </ol>
+
+  <h2>Deployment Checklist</h2>
+
+  <h3>Pre-deployment</h3>
+
+  <ul class="checklist">
+    <li>Set <code>APP_ENV=production</code></li>
+    <li>Set <code>APP_DEBUG=false</code></li>
+    <li>Set <code>VIEW_CACHE=true</code></li>
+    <li>Configure production database</li>
+    <li>Set secure <code>APP_KEY</code> and <code>SESSION_SECRET</code></li>
+    <li>Run <code>bun run typecheck</code></li>
+    <li>Run <code>bun test</code></li>
+  </ul>
+
+  <h3>Deployment Steps</h3>
+
+  <pre><code class="language-bash"># 1. Build application
+bun install --production
+
+# 2. Run migrations
+bun strav migrate --scope=public
+
+# 3. Build islands for production
+bun strav build:islands
+
+# 4. Start production server
+bun start</code></pre>
+
+  <h2>Next Steps</h2>
+
+  <p>Now that you have a working Strav application:</p>
+
+  <ol>
+    <li><strong>Explore the ecosystem</strong> - Try other Strav packages</li>
+    <li><strong>Build real features</strong> - Add authentication, file uploads, etc.</li>
+    <li><strong>Learn Vue islands</strong> - Master progressive enhancement</li>
+    <li><strong>Deploy to production</strong> - Try different hosting platforms</li>
+    <li><strong>Contribute back</strong> - Share your experience with the community</li>
+  </ol>
+
+  <p>Welcome to the Strav ecosystem! 🚀</p>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <a href="/docs" class="prev">← Documentation Home</a>
+    <a href="/docs/installation" class="next">Installation →</a>
+  </div>
+</article>
+
+@end

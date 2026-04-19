@@ -1,0 +1,500 @@
+@layout('layouts/docs')
+
+@set('title', 'Mail - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Mail</h1>
+
+Transactional email with pluggable transports (SMTP, Resend, SendGrid, Mailgun, Alibaba DirectMail), <code>.strav</code> templates, automatic CSS inlining, and optional Tailwind support.
+
+<h2>Quick start</h2>
+
+<pre><code class="language-typescript">import { mail } from '@strav/signal'
+
+// Fluent builder
+await mail.to('user@example.com')
+  .subject('Welcome!')
+  .template('welcome', { name: 'Alice' })
+  .send()
+
+// Convenience method
+await mail.send({
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  template: 'welcome',
+  data: { name: 'Alice' },
+})
+
+// Raw HTML (no template)
+await mail.raw({
+  to: 'user@example.com',
+  subject: 'Alert',
+  html: '<p>Something happened</p>',
+  text: 'Something happened',
+})
+</code></pre>
+
+<h2>Setup</h2>
+
+<h3>Using a service provider (recommended)</h3>
+
+<pre><code class="language-typescript">import { MailProvider } from '@strav/signal'
+
+app.use(new MailProvider())
+</code></pre>
+
+The <code>MailProvider</code> registers <code>MailManager</code> as a singleton. It depends on the <code>config</code> provider.
+
+<p>To enable async sending via the queue, register the queue handler separately:</p>
+
+<pre><code class="language-typescript">import { mail } from '@strav/signal'
+
+mail.registerQueueHandler()
+</code></pre>
+
+<h3>Manual setup</h3>
+
+<pre><code class="language-typescript">import { MailManager } from '@strav/signal'
+import { mail } from '@strav/signal'
+
+app.singleton(MailManager)
+app.resolve(MailManager)
+
+// Register queue handler for async sending (optional)
+mail.registerQueueHandler()
+</code></pre>
+
+Create <code>config/mail.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  default: env('MAIL_DRIVER', 'log'),
+  from: env('MAIL_FROM', 'noreply@localhost'),
+  templatePrefix: env('MAIL_TEMPLATE_PREFIX', 'emails'),
+  inlineCss: env.bool('MAIL_INLINE_CSS', true),
+  tailwind: env.bool('MAIL_TAILWIND', false),
+
+  smtp: {
+    host: env('SMTP_HOST', '127.0.0.1'),
+    port: env.int('SMTP_PORT', 587),
+    secure: env.bool('SMTP_SECURE', false),
+    auth: {
+      user: env('SMTP_USER', ''),
+      pass: env('SMTP_PASS', ''),
+    },
+  },
+
+  resend: {
+    apiKey: env('RESEND_API_KEY', ''),
+  },
+
+  sendgrid: {
+    apiKey: env('SENDGRID_API_KEY', ''),
+  },
+
+  mailgun: {
+    apiKey: env('MAILGUN_API_KEY', ''),
+    domain: env('MAILGUN_DOMAIN', ''),
+  },
+
+  alibaba: {
+    accessKeyId: env('ALIBABA_ACCESS_KEY_ID', ''),
+    accessKeySecret: env('ALIBABA_ACCESS_KEY_SECRET', ''),
+    accountName: env('ALIBABA_MAIL_ACCOUNT', ''),
+  },
+
+  log: {
+    output: env('MAIL_LOG_OUTPUT', 'console'),
+  },
+}
+</code></pre>
+
+<h2>Fluent builder</h2>
+
+<code>mail.to()</code> returns a <code>PendingMail</code> with chainable methods:
+
+<pre><code class="language-typescript">await mail.to('user@example.com')           // required
+  .from('support@app.com')                  // overrides config default
+  .cc('manager@app.com')                    // string or string[]
+  .bcc(['audit@app.com', 'log@app.com'])
+  .replyTo('support@app.com')
+  .subject('Your invoice is ready')
+  .template('invoice', { amount, items })   // .strav template + data
+  .attach({ filename: 'invoice.pdf', content: pdfBuffer, contentType: 'application/pdf' })
+  .send()
+</code></pre>
+
+<h3>Template rendering</h3>
+
+<code>.template(name, data)</code> renders a <code>.strav</code> template via the existing <code>ViewEngine</code>. The <code>name</code> is prefixed with the configured <code>templatePrefix</code> (default <code>'emails'</code>), so <code>.template('welcome', data)</code> renders <code>views/emails/welcome.strav</code>.
+
+Templates support full <code>.strav</code> syntax — <code>@layout</code>, <code>@block</code>, <code>@include</code>, <code>@if</code>, <code>@each</code>, <code>{{ expr }}</code>, <code>{!! raw !!}</code>.
+
+<h3>Raw content</h3>
+
+Use <code>.html()</code> and <code>.text()</code> instead of <code>.template()</code> for raw content:
+
+<pre><code class="language-typescript">await mail.to('user@example.com')
+  .subject('Quick note')
+  .html('<p>Hello <strong>world</strong></p>')
+  .text('Hello world')
+  .send()
+</code></pre>
+
+<h3>Inspecting before send</h3>
+
+Call <code>.build()</code> to get the finalized <code>MailMessage</code> without sending:
+
+<pre><code class="language-typescript">const message = await mail.to('test@example.com')
+  .subject('Test')
+  .template('welcome', { name: 'Alice' })
+  .build()
+
+console.log(message.html) // rendered + CSS-inlined HTML
+</code></pre>
+
+<h2>Email templates</h2>
+
+Templates live under <code>views/emails/</code> (or wherever <code>templatePrefix</code> points). They support layout inheritance for consistent branding.
+
+<h3>Email layout</h3>
+
+<pre><code class="language-html">{{-- views/emails/layout.strav --}}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #4f46e5; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+    .footer { color: #6b7280; font-size: 12px; text-align: center; padding: 20px; }
+    .btn { display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header"><h1>{{ appName }}</h1></div>
+    <div class="content">{!! content !!}</div>
+    <div class="footer">&amp;copy; {{ year }} {{ appName }}</div>
+  </div>
+</body>
+</html>
+</code></pre>
+
+<h3>Email template</h3>
+
+<pre><code class="language-html">{{-- views/emails/welcome.strav --}}
+@layout('emails.layout')
+
+@block('content')
+<h2>Welcome, {{ name }}!</h2>
+<p>Thanks for signing up. Your account is ready.</p>
+<p><a class="btn" href="{{ verifyUrl }}">Verify Email</a></p>
+@end
+</code></pre>
+
+<h3>Sending</h3>
+
+<pre><code class="language-typescript">await mail.to(user.email)
+  .subject('Welcome!')
+  .template('welcome', {
+    appName: 'My App',
+    year: new Date().getFullYear(),
+    name: user.name,
+    verifyUrl: <code>https://app.example.com/verify/${token}</code>,
+  })
+  .send()
+</code></pre>
+
+The <code><style></code> block in the layout is automatically inlined into <code>style=""</code> attributes on each element before sending, so the email renders correctly in all clients.
+
+<h2>CSS inlining</h2>
+
+Most email clients strip <code><style></code> blocks and ignore external stylesheets. The mail module automatically inlines CSS using <a href="https://github.com/Automattic/juice">juice</a> after template rendering.
+
+This is enabled by default (<code>inlineCss: true</code> in config). The inliner:
+
+<ul>
+<li>Converts <code><style></code> rules to inline <code>style=""</code> attributes</li>
+<li>Preserves <code>@media</code> queries (for responsive email)</li>
+<li>Preserves <code>@font-face</code> and <code>@keyframes</code></li>
+<li>Applies <code>width</code>/<code>height</code> as HTML attributes (Outlook compatibility)</li>
+<li>Removes <code><style></code> tags after inlining</li>
+</ul>
+
+<p>To disable:</p>
+
+<pre><code class="language-typescript">// config/mail.ts
+export default {
+  inlineCss: false,
+  // ...
+}
+</code></pre>
+
+<h3>Tailwind CSS support</h3>
+
+<p>If your email templates use Tailwind utility classes, enable Tailwind compilation:</p>
+
+<pre><code class="language-typescript">// config/mail.ts
+export default {
+  tailwind: true,
+  // ...
+}
+</code></pre>
+
+When enabled, the mail module extracts class names from the rendered HTML, compiles them to CSS via Tailwind's programmatic API, injects a <code><style></code> block, then inlines everything with juice.
+
+Tailwind is <strong>not</strong> a dependency of the framework — it is dynamically imported. Install it in your project if you want this feature:
+
+<pre><code class="language-bash">bun add tailwindcss
+</code></pre>
+
+If <code>tailwindcss</code> is not installed, the Tailwind step is silently skipped and only regular <code><style></code> blocks are inlined.
+
+<h2>Transports</h2>
+
+<h3>SMTP</h3>
+
+Uses <a href="https://nodemailer.com/">nodemailer</a> under the hood.
+
+<pre><code class="language-bash">MAIL_DRIVER=smtp
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=apikey
+SMTP_PASS=your-password
+</code></pre>
+
+<p>Works with any SMTP provider: Amazon SES, Postmark, Mailgun, Mailtrap, etc.</p>
+
+<h3>Resend</h3>
+
+Uses the <a href="https://resend.com/docs">Resend HTTP API</a> via <code>fetch</code> — no SDK needed.
+
+<pre><code class="language-bash">MAIL_DRIVER=resend
+RESEND_API_KEY=re_...
+</code></pre>
+
+<h3>SendGrid</h3>
+
+Uses the <a href="https://docs.sendgrid.com/api-reference/mail-send/mail-send">SendGrid v3 Mail Send API</a> via <code>fetch</code> — no SDK needed.
+
+<pre><code class="language-bash">MAIL_DRIVER=sendgrid
+SENDGRID_API_KEY=SG....
+</code></pre>
+
+<h3>Mailgun</h3>
+
+Uses the <a href="https://documentation.mailgun.com/docs/mailgun/api-reference/openapi-final/tag/Messages/">Mailgun HTTP API</a> via <code>fetch</code> — no SDK needed.
+
+<pre><code class="language-bash">MAIL_DRIVER=mailgun
+MAILGUN_API_KEY=key-...
+MAILGUN_DOMAIN=mg.example.com
+</code></pre>
+
+For EU regions, add a <code>baseUrl</code> in your config:
+
+<pre><code class="language-typescript">mailgun: {
+  apiKey: env('MAILGUN_API_KEY', ''),
+  domain: env('MAILGUN_DOMAIN', ''),
+  baseUrl: 'https://api.eu.mailgun.net',
+},
+</code></pre>
+
+<h3>Alibaba DirectMail</h3>
+
+Uses the <a href="https://www.alibabacloud.com/help/en/directmail/latest/SingleSendMail">Alibaba Cloud DirectMail API</a> via <code>fetch</code> with HMAC-SHA1 signature — no SDK needed.
+
+<pre><code class="language-bash">MAIL_DRIVER=alibaba
+ALIBABA_ACCESS_KEY_ID=LTAI...
+ALIBABA_ACCESS_KEY_SECRET=...
+ALIBABA_MAIL_ACCOUNT=noreply@example.com
+</code></pre>
+
+For non-default regions, add a <code>region</code> in your config:
+
+<pre><code class="language-typescript">alibaba: {
+  accessKeyId: env('ALIBABA_ACCESS_KEY_ID', ''),
+  accessKeySecret: env('ALIBABA_ACCESS_KEY_SECRET', ''),
+  accountName: env('ALIBABA_MAIL_ACCOUNT', ''),
+  region: 'ap-southeast-1',
+},
+</code></pre>
+
+> <strong>Note:</strong> The Alibaba DirectMail <code>SingleSendMail</code> API does not support CC, BCC, or attachments. Use the SMTP transport with Alibaba's SMTP endpoint if you need those features.
+
+<h3>Log</h3>
+
+<p>Logs email details to the console or a file. Useful for development and testing.</p>
+
+<pre><code class="language-bash">MAIL_DRIVER=log
+MAIL_LOG_OUTPUT=console        # or a file path like 'logs/mail.log'
+</code></pre>
+
+<h3>Custom transport</h3>
+
+Implement the <code>MailTransport</code> interface and swap it in:
+
+<pre><code class="language-typescript">import type { MailTransport, MailMessage, MailResult } from '@strav/signal'
+import { MailManager } from '@strav/signal'
+
+class PostmarkTransport implements MailTransport {
+  async send(message: MailMessage): Promise<MailResult> {
+    const response = await fetch('https://api.postmarkapp.com/email', {
+      method: 'POST',
+      headers: {
+        'X-Postmark-Server-Token': 'your-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        From: message.from,
+        To: Array.isArray(message.to) ? message.to.join(',') : message.to,
+        Subject: message.subject,
+        HtmlBody: message.html,
+        TextBody: message.text,
+      }),
+    })
+
+    const data = await response.json() as { MessageID: string }
+    return { messageId: data.MessageID }
+  }
+}
+
+// In bootstrap
+MailManager.useTransport(new PostmarkTransport())
+</code></pre>
+
+<h2>Queue integration</h2>
+
+Use <code>.queue()</code> instead of <code>.send()</code> to push the email onto the job queue for async delivery:
+
+<pre><code class="language-typescript">await mail.to(user.email)
+  .subject('Weekly Report')
+  .template('report', { stats })
+  .queue()
+
+// With options
+await mail.to(user.email)
+  .subject('Reminder')
+  .template('reminder', { task })
+  .queue({ queue: 'emails', delay: 60_000 })
+</code></pre>
+
+The template is rendered and CSS is inlined at enqueue time — the queue worker only needs to call the transport's <code>send()</code> method.
+
+<p>Register the queue handler in your bootstrap:</p>
+
+<pre><code class="language-typescript">import { mail } from '@strav/signal'
+
+mail.registerQueueHandler()
+</code></pre>
+
+For multi-channel delivery (email + in-app + webhook + Discord) triggered by domain events, see the <a href="./notification.md">Notification module</a> which reuses the Mail module for its email channel.
+
+<h2>Attachments</h2>
+
+<pre><code class="language-typescript">await mail.to('user@example.com')
+  .subject('Your report')
+  .template('report', data)
+  .attach({
+    filename: 'report.pdf',
+    content: pdfBuffer,
+    contentType: 'application/pdf',
+  })
+  .send()
+</code></pre>
+
+For inline images (CID), set the <code>cid</code> field:
+
+<pre><code class="language-typescript">await mail.to('user@example.com')
+  .subject('Photo')
+  .html('<p>See this: <img src="cid:photo123"></p>')
+  .attach({
+    filename: 'photo.jpg',
+    content: imageBuffer,
+    contentType: 'image/jpeg',
+    cid: 'photo123',
+  })
+  .send()
+</code></pre>
+
+<h2>Testing</h2>
+
+Swap in a mock transport with <code>MailManager.useTransport()</code>:
+
+<pre><code class="language-typescript">import { test, expect, beforeEach } from 'bun:test'
+import { MailManager } from '@strav/signal'
+import { mail } from '@strav/signal'
+import type { MailTransport, MailMessage, MailResult } from '@strav/signal'
+
+class MockTransport implements MailTransport {
+  sent: MailMessage[] = []
+
+  async send(message: MailMessage): Promise<MailResult> {
+    this.sent.push(message)
+    return { messageId: <code>mock-${this.sent.length}</code> }
+  }
+}
+
+let mockTransport: MockTransport
+
+beforeEach(() => {
+  mockTransport = new MockTransport()
+  MailManager.useTransport(mockTransport)
+})
+
+test('sends welcome email', async () => {
+  await mail.to('user@example.com')
+    .subject('Welcome')
+    .html('<h1>Hi</h1>')
+    .send()
+
+  expect(mockTransport.sent).toHaveLength(1)
+  expect(mockTransport.sent[0].subject).toBe('Welcome')
+})
+</code></pre>
+
+<h2>Controller example</h2>
+
+<pre><code class="language-typescript">import { mail } from '@strav/signal'
+
+export default class InvitationController {
+  async create(ctx: Context) {
+    const [session, user, org] = ctx.get<Session, User, Organization>('session', 'user', 'organization')
+    const { email, role } = await ctx.body<{ email: string; role: string }>()
+
+    const token = randomHex(32)
+
+    await BaseModel.db.sql<code>
+      INSERT INTO "invitation" ("organization_id", "email", "role", "token", "invited_by")
+      VALUES (${org.id}, ${email}, ${role}, ${token}, ${user.id})
+    </code>
+
+    await mail.to(email)
+      .subject(<code>You're invited to ${org.name}</code>)
+      .template('invitation', {
+        appName: 'My App',
+        year: new Date().getFullYear(),
+        orgName: org.name,
+        inviterName: user.name,
+        acceptUrl: <code>https://app.example.com/invite/${token}</code>,
+      })
+      .send()
+
+    session.flash('success', <code>Invitation sent to ${email}.</code>)
+    return ctx.redirect(<code>/org/${org.slug}/members</code>)
+  }
+}
+</code></pre>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

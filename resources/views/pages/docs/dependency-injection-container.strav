@@ -1,0 +1,515 @@
+@layout('layouts/docs')
+
+@set('title', 'Core — Application, Service Providers & DI Container - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+  <h1>Core — Application, Service Providers & DI Container</h1>
+
+  <p>The core module provides the Application lifecycle manager, the Service Provider pattern, the IoC container, and the <code>@inject</code> decorator. Together they form the backbone of Strav's dependency injection and bootstrap system.</p>
+
+  <h2>The Container</h2>
+
+  <p>The <code>Container</code> class manages service registration and resolution. Services can be registered as <strong>singletons</strong> (one shared instance) or <strong>transient</strong> (new instance per resolution).</p>
+
+  <pre><code class="language-typescript">import { Container } from '@strav/kernel'
+
+const app = new Container()</code></pre>
+
+  <h3>Registering services</h3>
+
+  <pre><code class="language-typescript">// Singleton — same instance every time
+app.singleton(Database)
+app.singleton(Logger)
+app.singleton(UserService)
+
+// Transient — new instance every time
+app.register(RequestContext)
+
+// String-keyed with factory function
+app.singleton('mailer', (container) => {
+  const config = container.resolve(Configuration)
+  return new Mailer(config.get('mail.host'))
+})
+
+// Chaining
+const app = new Container()
+  .singleton(Database)
+  .singleton(Logger)
+  .singleton(UserService)</code></pre>
+
+  <h3>Resolving services</h3>
+
+  <pre><code class="language-typescript">// By class
+const db = app.resolve(Database)
+
+// By string name
+const mailer = app.resolve<Mailer>('mailer')
+
+// Check existence
+app.has(Database)    // true
+app.has('missing')   // false</code></pre>
+
+  <h3>Auto-wiring</h3>
+
+  <p>When a class is decorated with <code>@inject</code>, the container reads its constructor parameter types via <code>reflect-metadata</code> and automatically resolves them. No manual wiring needed:</p>
+
+  <pre><code class="language-typescript">@inject
+class UserService {
+  constructor(
+    private db: Database,      // auto-resolved
+    private logger: Logger,    // auto-resolved
+  ) {}
+}
+
+app.singleton(Database)
+app.singleton(Logger)
+app.singleton(UserService)
+
+const svc = app.resolve(UserService) // db and logger are injected</code></pre>
+
+  <h2>The @inject decorator</h2>
+
+  <p>Mark any class with <code>@inject</code> to make it eligible for auto-wiring:</p>
+
+  <pre><code class="language-typescript">import { inject } from '@strav/kernel'
+
+@inject
+class PaymentService {
+  constructor(private db: Database) {}
+}</code></pre>
+
+  <p>The decorator works both as <code>@inject</code> and <code>@inject()</code>. It sets internal metadata that the container checks during resolution.</p>
+
+  <h2>The global app container</h2>
+
+  <p>A pre-created singleton container is exported for convenience:</p>
+
+  <pre><code class="language-typescript">import { app } from '@strav/kernel'
+
+app.singleton(Database)
+const db = app.resolve(Database)</code></pre>
+
+  <h2>Instantiating without registration</h2>
+
+  <p><code>make()</code> creates an instance with full DI auto-wiring but without requiring prior registration. Dependencies are resolved recursively: registered services come from the container, unregistered <code>@inject</code> classes are instantiated via <code>make()</code> as well.</p>
+
+  <pre><code class="language-typescript">@inject
+class NotificationService {
+  constructor(private mailer: Mailer) {}
+}
+
+// Mailer is registered, NotificationService is not
+app.singleton(Mailer)
+
+// make() resolves Mailer from the container, instantiates NotificationService
+const svc = app.make(NotificationService)</code></pre>
+
+  <p>This is used internally by <code>router.resource()</code> and <code>[Controller, 'method']</code> tuples to resolve controllers without explicit registration.</p>
+
+  <h2>Key rules</h2>
+
+  <ul>
+    <li>All constructor dependencies must themselves be registered in the container (or be <code>make()</code>-able) before the dependent service is resolved.</li>
+    <li>Singleton instances are created lazily — on first <code>resolve()</code>, not on <code>singleton()</code>.</li>
+    <li>Circular dependencies are not handled — they will cause a stack overflow.</li>
+  </ul>
+
+  <h2>Application</h2>
+
+  <p>The <code>Application</code> class extends <code>Container</code> with service provider lifecycle management. It is the primary way to bootstrap a Strav application — registering providers, booting them in dependency order, and handling graceful shutdown.</p>
+
+  <pre><code class="language-typescript">import { app } from '@strav/kernel'
+import {
+  ConfigProvider, DatabaseProvider, AuthProvider,
+  SessionProvider, CacheProvider, MailProvider,
+  QueueProvider, HttpProvider,
+} from '@strav/kernel'
+import User from './app/models/user'
+
+app
+  .use(new ConfigProvider())
+  .use(new DatabaseProvider())
+  .use(new AuthProvider({ resolver: (id) => User.find(id) }))
+  .use(new SessionProvider())
+  .use(new CacheProvider())
+  .use(new MailProvider())
+  .use(new QueueProvider())
+  .use(new HttpProvider())
+
+await app.start()
+// Server is running. Graceful shutdown on SIGINT/SIGTERM is automatic.</code></pre>
+
+  <p>Since <code>Application</code> extends <code>Container</code>, all DI methods (<code>singleton</code>, <code>resolve</code>, <code>register</code>, <code>make</code>, <code>has</code>) continue to work unchanged.</p>
+
+  <h3>Registration order doesn't matter</h3>
+
+  <p>Providers declare their dependencies via the <code>dependencies</code> property. The application uses topological sort (Kahn's algorithm) to boot them in the correct order — regardless of the order you call <code>use()</code>:</p>
+
+  <pre><code class="language-typescript">// These two are equivalent:
+app.use(new AuthProvider()).use(new DatabaseProvider()).use(new ConfigProvider())
+app.use(new ConfigProvider()).use(new DatabaseProvider()).use(new AuthProvider())
+// Both boot in order: config → database → auth</code></pre>
+
+  <h3>Lifecycle</h3>
+
+  <p><code>app.start()</code> runs two phases in dependency order:</p>
+
+  <ol>
+    <li><strong>Register</strong> — calls <code>provider.register(app)</code> on all providers (synchronous, binds factories into the container)</li>
+    <li><strong>Boot</strong> — calls <code>provider.boot(app)</code> on all providers (async, initializes services)</li>
+  </ol>
+
+  <p>If a provider's <code>boot()</code> throws, all previously booted providers are shut down in reverse order (rollback), and the error is re-thrown.</p>
+
+  <h3>Graceful shutdown</h3>
+
+  <p><code>app.start()</code> installs <code>SIGINT</code> and <code>SIGTERM</code> signal handlers automatically. On signal:</p>
+
+  <ol>
+    <li><code>app.shutdown()</code> is called</li>
+    <li>Providers are shut down in <strong>reverse boot order</strong> (e.g., HTTP server stops first, database closes last)</li>
+    <li>A 30-second timeout forces exit if providers don't finish</li>
+  </ol>
+
+  <p>Lifecycle events are emitted via <code>Emitter</code>:</p>
+
+  <table class="doc-table">
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>When</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>app:starting</code></td>
+        <td>Before the register phase</td>
+      </tr>
+      <tr>
+        <td><code>app:booted</code></td>
+        <td>After all providers are booted</td>
+      </tr>
+      <tr>
+        <td><code>app:shutdown</code></td>
+        <td>Shutdown initiated</td>
+      </tr>
+      <tr>
+        <td><code>app:terminated</code></td>
+        <td>After all providers are shut down</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Application API</h3>
+
+  <pre><code class="language-typescript">app.use(provider)     // add a provider (before start)
+await app.start()     // register + boot all providers
+await app.shutdown()  // graceful shutdown (reverse order)
+app.isBooted          // true after start() completes
+app.isShuttingDown    // true during shutdown</code></pre>
+
+  <h2>Service Providers</h2>
+
+  <p>A service provider encapsulates the full lifecycle of a framework service: registration (binding into the container), booting (async initialization), and shutdown (cleanup).</p>
+
+  <pre><code class="language-typescript">import { ServiceProvider } from '@strav/kernel'
+import type { Application } from '@strav/kernel'</code></pre>
+
+  <h3>Anatomy of a provider</h3>
+
+  <pre><code class="language-typescript">class MyProvider extends ServiceProvider {
+  readonly name = 'my-service'              // unique identifier
+  readonly dependencies = ['config']         // boot after these providers
+
+  register(app: Application): void {
+    app.singleton(MyService)                 // bind into container
+  }
+
+  async boot(app: Application): Promise<void> {
+    const svc = app.resolve(MyService)       // resolve and initialize
+    await svc.connect()
+  }
+
+  async shutdown(app: Application): Promise<void> {
+    const svc = app.resolve(MyService)
+    await svc.disconnect()                   // clean up
+  }
+}</code></pre>
+
+  <table class="doc-table">
+    <thead>
+      <tr>
+        <th>Method</th>
+        <th>Phase</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>register()</code></td>
+        <td>Synchronous</td>
+        <td>Bind factories/singletons into the container</td>
+      </tr>
+      <tr>
+        <td><code>boot()</code></td>
+        <td>Async</td>
+        <td>Resolve services, run async initialization (load config, create tables, connect)</td>
+      </tr>
+      <tr>
+        <td><code>shutdown()</code></td>
+        <td>Async</td>
+        <td>Clean up resources (close connections, stop servers)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Writing a custom provider</h3>
+
+  <p>Extend <code>ServiceProvider</code>, set <code>name</code> and optionally <code>dependencies</code>, and implement the lifecycle methods you need:</p>
+
+  <pre><code class="language-typescript">import { ServiceProvider } from '@strav/kernel'
+import type { Application } from '@strav/kernel'
+
+class RedisProvider extends ServiceProvider {
+  readonly name = 'redis'
+  readonly dependencies = ['config']
+
+  register(app: Application): void {
+    app.singleton('redis', () => new Redis(app.resolve(Configuration).get('redis')))
+  }
+
+  boot(app: Application): void {
+    app.resolve('redis') // trigger lazy creation
+  }
+
+  async shutdown(app: Application): Promise<void> {
+    await app.resolve('redis').quit()
+  }
+}</code></pre>
+
+  <h3>Built-in providers</h3>
+
+  <p>All built-in providers are exported from <code>@strav/kernel</code>:</p>
+
+  <table class="doc-table">
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Name</th>
+        <th>Dependencies</th>
+        <th>What it does</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>ConfigProvider</code></td>
+        <td><code>config</code></td>
+        <td>—</td>
+        <td>Loads <code>Configuration</code> from config directory</td>
+      </tr>
+      <tr>
+        <td><code>DatabaseProvider</code></td>
+        <td><code>database</code></td>
+        <td><code>config</code></td>
+        <td>Registers <code>Database</code>, closes on shutdown</td>
+      </tr>
+      <tr>
+        <td><code>EncryptionProvider</code></td>
+        <td><code>encryption</code></td>
+        <td><code>config</code></td>
+        <td>Registers <code>EncryptionManager</code></td>
+      </tr>
+      <tr>
+        <td><code>LoggerProvider</code></td>
+        <td><code>logger</code></td>
+        <td><code>config</code></td>
+        <td>Registers <code>Logger</code></td>
+      </tr>
+      <tr>
+        <td><code>CacheProvider</code></td>
+        <td><code>cache</code></td>
+        <td><code>config</code></td>
+        <td>Registers <code>CacheManager</code></td>
+      </tr>
+      <tr>
+        <td><code>StorageProvider</code></td>
+        <td><code>storage</code></td>
+        <td><code>config</code></td>
+        <td>Registers <code>StorageManager</code></td>
+      </tr>
+      <tr>
+        <td><code>AuthProvider</code></td>
+        <td><code>auth</code></td>
+        <td><code>database</code></td>
+        <td>Registers <code>Auth</code>, sets user resolver, creates tables</td>
+      </tr>
+      <tr>
+        <td><code>SessionProvider</code></td>
+        <td><code>session</code></td>
+        <td><code>database</code></td>
+        <td>Registers <code>SessionManager</code>, creates table</td>
+      </tr>
+      <tr>
+        <td><code>MailProvider</code></td>
+        <td><code>mail</code></td>
+        <td><code>config</code></td>
+        <td>Registers <code>MailManager</code></td>
+      </tr>
+      <tr>
+        <td><code>QueueProvider</code></td>
+        <td><code>queue</code></td>
+        <td><code>database</code></td>
+        <td>Registers <code>Queue</code>, creates tables</td>
+      </tr>
+      <tr>
+        <td><code>NotificationProvider</code></td>
+        <td><code>notification</code></td>
+        <td><code>database</code></td>
+        <td>Registers <code>NotificationManager</code>, creates table</td>
+      </tr>
+      <tr>
+        <td><code>I18nProvider</code></td>
+        <td><code>i18n</code></td>
+        <td><code>config</code></td>
+        <td>Registers <code>I18nManager</code>, loads translations</td>
+      </tr>
+      <tr>
+        <td><code>BroadcastProvider</code></td>
+        <td><code>broadcast</code></td>
+        <td>—</td>
+        <td>Boots <code>BroadcastManager</code> on the router</td>
+      </tr>
+      <tr>
+        <td><code>HttpProvider</code></td>
+        <td><code>http</code></td>
+        <td><code>config</code></td>
+        <td>Registers <code>Server</code>, starts HTTP server, stops on shutdown</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>External packages provide their own providers:</p>
+
+  <table class="doc-table">
+    <thead>
+      <tr>
+        <th>Package</th>
+        <th>Provider</th>
+        <th>Name</th>
+        <th>Dependencies</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>@strav/search</code></td>
+        <td><code>SearchProvider</code></td>
+        <td><code>search</code></td>
+        <td><code>config</code></td>
+      </tr>
+      <tr>
+        <td><code>@strav/devtools</code></td>
+        <td><code>DevtoolsProvider</code></td>
+        <td><code>devtools</code></td>
+        <td><code>database</code></td>
+      </tr>
+      <tr>
+        <td><code>@strav/brain</code></td>
+        <td><code>BrainProvider</code></td>
+        <td><code>brain</code></td>
+        <td><code>config</code></td>
+      </tr>
+      <tr>
+        <td><code>@strav/stripe</code></td>
+        <td><code>StripeProvider</code></td>
+        <td><code>stripe</code></td>
+        <td><code>database</code></td>
+      </tr>
+      <tr>
+        <td><code>@strav/social</code></td>
+        <td><code>SocialProvider</code></td>
+        <td><code>social</code></td>
+        <td><code>database</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Provider options</h3>
+
+  <p>Providers that need user input accept options in their constructor:</p>
+
+  <pre><code class="language-typescript">new ConfigProvider({ directory: './config' })
+new AuthProvider({ resolver: (id) => User.find(id), ensureTables: true })
+new SessionProvider({ ensureTable: true })
+new QueueProvider({ ensureTables: true })
+new NotificationProvider({ ensureTable: true })
+new BroadcastProvider({ middleware: [session()], path: '/_broadcast' })</code></pre>
+
+  <h2>Full bootstrap example</h2>
+
+  <pre><code class="language-typescript">// index.ts
+import { app } from '@strav/kernel'
+import { router } from '@strav/http'
+import {
+  ConfigProvider, DatabaseProvider, EncryptionProvider,
+  LoggerProvider, CacheProvider, StorageProvider,
+  AuthProvider, SessionProvider, MailProvider,
+  QueueProvider, NotificationProvider, I18nProvider,
+  BroadcastProvider, HttpProvider,
+} from '@strav/kernel'
+import { SearchProvider } from '@strav/search'
+import { DevtoolsProvider } from '@strav/devtools'
+import { session } from '@strav/http'
+import { auth } from '@strav/http'
+import User from './app/models/user'
+
+// Register providers
+app
+  .use(new ConfigProvider())
+  .use(new DatabaseProvider())
+  .use(new EncryptionProvider())
+  .use(new LoggerProvider())
+  .use(new CacheProvider())
+  .use(new StorageProvider())
+  .use(new AuthProvider({ resolver: (id) => User.find(id) }))
+  .use(new SessionProvider())
+  .use(new MailProvider())
+  .use(new QueueProvider())
+  .use(new NotificationProvider())
+  .use(new I18nProvider())
+  .use(new BroadcastProvider({ middleware: [session()] }))
+  .use(new SearchProvider())
+  .use(new DevtoolsProvider())
+  .use(new HttpProvider())
+
+// Define routes
+router.get('/health', (ctx) => ctx.json({ status: 'ok' }))
+
+router.group({ prefix: '/api', middleware: [session(), auth()] }, (r) => {
+  r.get('/users', listUsers)
+})
+
+// Boot everything
+await app.start()</code></pre>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <a href="/docs" class="prev">← Documentation Home</a>
+    <a href="/docs/core/kernel/configuration" class="next">Configuration →</a>
+  </div>
+</article>
+
+<script>
+// Highlight active link in sidebar
+document.addEventListener('DOMContentLoaded', function() {
+  const currentPath = window.location.pathname;
+  const sidebarLinks = document.querySelectorAll('.sidebar-links a');
+
+  sidebarLinks.forEach(link => {
+    if (link.getAttribute('href') === currentPath) {
+      link.classList.add('active');
+    }
+  });
+});
+</script>
+@end

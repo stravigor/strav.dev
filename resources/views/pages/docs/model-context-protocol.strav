@@ -1,0 +1,374 @@
+@layout('layouts/docs')
+
+@set('title', 'MCP - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>MCP</h1>
+
+Model Context Protocol (MCP) server for the Strav framework. Expose your application's capabilities to AI clients like Claude Desktop through <strong>tools</strong>, <strong>resources</strong>, and <strong>prompts</strong>. Supports both <strong>stdio</strong> (local AI clients) and <strong>HTTP</strong> (hosted deployments) transports.
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/mcp
+bun strav install mcp
+</code></pre>
+
+The <code>install</code> command copies <code>config/mcp.ts</code> into your project. The file is yours to edit.
+
+<h2>Setup</h2>
+
+<h3>1. Register McpManager</h3>
+
+<h4>Using a service provider (recommended)</h4>
+
+<pre><code class="language-typescript">import { McpProvider } from '@strav/mcp'
+
+app.use(new McpProvider())
+</code></pre>
+
+The <code>McpProvider</code> registers <code>McpManager</code> as a singleton. It depends on the <code>config</code> provider, loads your registration file, and auto-mounts the HTTP transport on the router.
+
+<p>To disable HTTP transport auto-mounting:</p>
+
+<pre><code class="language-typescript">app.use(new McpProvider({ mountHttp: false }))
+</code></pre>
+
+<h4>Manual setup</h4>
+
+<pre><code class="language-typescript">import McpManager from '@strav/mcp'
+
+app.singleton(McpManager)
+app.resolve(McpManager)
+</code></pre>
+
+<h3>2. Configure</h3>
+
+Edit <code>config/mcp.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  name: env('MCP_NAME', undefined),
+  version: env('MCP_VERSION', '1.0.0'),
+  register: 'mcp/server.ts',
+  http: {
+    enabled: env('MCP_HTTP', 'true').bool(),
+    path: env('MCP_PATH', '/mcp'),
+  },
+}
+</code></pre>
+
+<h3>3. Register tools, resources, and prompts</h3>
+
+Create the registration file referenced in your config (e.g. <code>mcp/server.ts</code>):
+
+<pre><code class="language-typescript">import { mcp } from '@strav/mcp'
+import { z } from 'zod'
+import Database from '@strav/database'
+
+// Tool — an action the AI can invoke
+mcp.tool('get-user', {
+  description: 'Fetch a user by ID',
+  input: { id: z.number() },
+  handler: async ({ id }, { app }) => {
+    const db = app.resolve(Database)
+    const [user] = await db.sql<code>SELECT * FROM users WHERE id = ${id}</code>
+    return { content: [{ type: 'text', text: JSON.stringify(user) }] }
+  },
+})
+
+// Resource — data the AI can read
+mcp.resource('strav://schema', {
+  name: 'Database schema',
+  description: 'Current database schema overview',
+  mimeType: 'application/json',
+  handler: async (uri, params, { app }) => {
+    return { contents: [{ uri: uri.href, text: '{ "tables": [...] }' }] }
+  },
+})
+
+// Prompt — a reusable prompt template
+mcp.prompt('summarize', {
+  description: 'Summarize a topic',
+  args: { topic: z.string() },
+  handler: async ({ topic }) => ({
+    messages: [{
+      role: 'user',
+      content: { type: 'text', text: <code>Summarize: ${topic}</code> },
+    }],
+  }),
+})
+</code></pre>
+
+<h2>Tools</h2>
+
+<p>Tools are functions that AI clients can call. Define typed inputs with Zod schemas.</p>
+
+<pre><code class="language-typescript">import { mcp } from '@strav/mcp'
+import { z } from 'zod'
+
+mcp.tool('create-post', {
+  description: 'Create a new blog post',
+  input: {
+    title: z.string().describe('Post title'),
+    body: z.string().describe('Post body in markdown'),
+    published: z.boolean().optional().describe('Publish immediately'),
+  },
+  handler: async ({ title, body, published }, { app }) => {
+    const post = await Post.create({ title, body, published })
+    return {
+      content: [{ type: 'text', text: <code>Created post #${post.id}: ${post.title}</code> }],
+    }
+  },
+})
+</code></pre>
+
+<p>Tools without input schemas are also supported:</p>
+
+<pre><code class="language-typescript">mcp.tool('list-posts', {
+  description: 'List all published posts',
+  handler: async (params, { app }) => {
+    const posts = await Post.where('published', true).get()
+    return {
+      content: [{ type: 'text', text: JSON.stringify(posts) }],
+    }
+  },
+})
+</code></pre>
+
+<h2>Resources</h2>
+
+<p>Resources expose data via URIs. Use URI templates for dynamic resources.</p>
+
+<pre><code class="language-typescript">// Static resource
+mcp.resource('strav://config', {
+  name: 'App configuration',
+  description: 'Current application configuration',
+  mimeType: 'application/json',
+  handler: async (uri) => ({
+    contents: [{ uri: uri.href, text: JSON.stringify({ env: 'production' }) }],
+  }),
+})
+
+// Dynamic resource with URI template
+mcp.resource('strav://posts/{id}', {
+  name: 'Blog post',
+  description: 'A blog post by ID',
+  mimeType: 'application/json',
+  handler: async (uri, { id }, { app }) => {
+    const post = await Post.find(Number(id))
+    return {
+      contents: [{ uri: uri.href, text: JSON.stringify(post) }],
+    }
+  },
+})
+</code></pre>
+
+<h2>Prompts</h2>
+
+<p>Prompts are reusable templates with typed arguments.</p>
+
+<pre><code class="language-typescript">mcp.prompt('code-review', {
+  description: 'Review code and suggest improvements',
+  args: {
+    language: z.string(),
+    code: z.string(),
+  },
+  handler: async ({ language, code }) => ({
+    messages: [{
+      role: 'user',
+      content: {
+        type: 'text',
+        text: <code>Review this ${language} code and suggest improvements:\n\n${code}</code>,
+      },
+    }],
+  }),
+})
+</code></pre>
+
+<h2>Transports</h2>
+
+<h3>Stdio (Claude Desktop)</h3>
+
+<p>For local AI clients that communicate over stdin/stdout. Start with the CLI:</p>
+
+<pre><code class="language-bash">bun strav mcp:serve
+</code></pre>
+
+Add to your Claude Desktop config (<code>claude_desktop_config.json</code>):
+
+<pre><code class="language-json">{
+  "mcpServers": {
+    "my-app": {
+      "command": "bun",
+      "args": ["strav", "mcp:serve"],
+      "cwd": "/path/to/your/app"
+    }
+  }
+}
+</code></pre>
+
+<h3>HTTP (hosted deployments)</h3>
+
+For web-based AI clients. Enabled by default when using the provider. Mounts <code>POST</code>, <code>GET</code>, and <code>DELETE</code> handlers at the configured path (default: <code>/mcp</code>).
+
+<pre><code class="language-typescript">import { mountHttpTransport } from '@strav/mcp'
+import { router } from '@strav/http'
+
+const transport = mountHttpTransport(router)
+</code></pre>
+
+<h2>Handler context</h2>
+
+Every handler receives a <code>ToolHandlerContext</code> with access to the DI container:
+
+<pre><code class="language-typescript">mcp.tool('send-email', {
+  description: 'Send an email to a user',
+  input: { userId: z.number(), subject: z.string(), body: z.string() },
+  handler: async ({ userId, subject, body }, { app }) => {
+    const db = app.resolve(Database)
+    const mailer = app.resolve(MailManager)
+
+    const [user] = await db.sql<code>SELECT * FROM users WHERE id = ${userId}</code>
+    await mailer.to(user.email).subject(subject).text(body).send()
+
+    return { content: [{ type: 'text', text: <code>Email sent to ${user.email}</code> }] }
+  },
+})
+</code></pre>
+
+<h2>Inspection</h2>
+
+<p>List what's registered:</p>
+
+<pre><code class="language-typescript">import { mcp } from '@strav/mcp'
+
+mcp.registeredTools()      // ['get-user', 'create-post', ...]
+mcp.registeredResources()  // ['strav://config', 'strav://posts/{id}', ...]
+mcp.registeredPrompts()    // ['summarize', 'code-review', ...]
+
+// Get a specific registration
+const tool = mcp.getToolRegistration('get-user')
+// { name: 'get-user', description: '...', input: {...}, handler: [Function] }
+</code></pre>
+
+<h2>Events</h2>
+
+MCP operations emit events through the <code>Emitter</code>:
+
+<p>| Event | Payload | When |</p>
+<p>|---|---|---|</p>
+| <code>mcp:tool-registered</code> | <code>{ name }</code> | Tool registered |
+| <code>mcp:resource-registered</code> | <code>{ uri }</code> | Resource registered |
+| <code>mcp:prompt-registered</code> | <code>{ name }</code> | Prompt registered |
+| <code>mcp:tool-called</code> | <code>{ name, params }</code> | Tool invoked by AI client |
+| <code>mcp:resource-read</code> | <code>{ uri }</code> | Resource read by AI client |
+| <code>mcp:prompt-called</code> | <code>{ name, args }</code> | Prompt used by AI client |
+| <code>mcp:stdio-starting</code> | — | Stdio transport starting |
+| <code>mcp:stdio-connected</code> | — | Stdio transport connected |
+| <code>mcp:stdio-closed</code> | — | Stdio transport closed |
+| <code>mcp:http-mounted</code> | <code>{ path }</code> | HTTP transport mounted |
+| <code>mcp:http-request</code> | <code>{ method, path }</code> | HTTP request received |
+
+<pre><code class="language-typescript">import Emitter from '@strav/kernel'
+
+Emitter.on('mcp:tool-called', ({ name, params }) => {
+  console.log(<code>Tool "${name}" called with</code>, params)
+})
+</code></pre>
+
+<h2>CLI commands</h2>
+
+<p>| Command | Description |</p>
+<p>|---|---|</p>
+| <code>bun strav mcp:serve</code> | Start the MCP server in stdio mode |
+| <code>bun strav mcp:list</code> | List all registered tools, resources, and prompts |
+
+<h2>Testing</h2>
+
+Call <code>McpManager.reset()</code> in test teardown to clear all registrations:
+
+<pre><code class="language-typescript">import { beforeEach, test, expect } from 'bun:test'
+import McpManager, { mcp } from '@strav/mcp'
+
+beforeEach(() => {
+  McpManager.reset()
+})
+
+test('registers a tool', () => {
+  mcp.tool('test-tool', {
+    description: 'A test tool',
+    handler: async () => ({ content: [{ type: 'text', text: 'ok' }] }),
+  })
+
+  expect(mcp.registeredTools()).toEqual(['test-tool'])
+})
+</code></pre>
+
+<h2>Full example</h2>
+
+<pre><code class="language-typescript">// mcp/server.ts
+import { mcp } from '@strav/mcp'
+import { z } from 'zod'
+import Database from '@strav/database'
+
+mcp.tool('list-users', {
+  description: 'List all users with optional role filter',
+  input: { role: z.string().optional() },
+  handler: async ({ role }, { app }) => {
+    const db = app.resolve(Database)
+    const users = role
+      ? await db.sql<code>SELECT id, name, email FROM users WHERE role = ${role}</code>
+      : await db.sql<code>SELECT id, name, email FROM users</code>
+    return { content: [{ type: 'text', text: JSON.stringify(users) }] }
+  },
+})
+
+mcp.tool('update-user', {
+  description: 'Update a user field',
+  input: {
+    id: z.number(),
+    field: z.enum(['name', 'email', 'role']),
+    value: z.string(),
+  },
+  handler: async ({ id, field, value }, { app }) => {
+    const db = app.resolve(Database)
+    await db.sql<code>UPDATE users SET ${db.sql(field)} = ${value} WHERE id = ${id}</code>
+    return { content: [{ type: 'text', text: <code>Updated user #${id}</code> }] }
+  },
+})
+
+mcp.resource('strav://users/{id}', {
+  name: 'User profile',
+  description: 'User details by ID',
+  handler: async (uri, { id }, { app }) => {
+    const db = app.resolve(Database)
+    const [user] = await db.sql<code>SELECT * FROM users WHERE id = ${Number(id)}</code>
+    return { contents: [{ uri: uri.href, text: JSON.stringify(user) }] }
+  },
+})
+
+mcp.prompt('onboard-user', {
+  description: 'Generate an onboarding email for a new user',
+  args: { name: z.string(), role: z.string() },
+  handler: async ({ name, role }) => ({
+    messages: [{
+      role: 'user',
+      content: {
+        type: 'text',
+        text: <code>Write a friendly onboarding email for ${name} who joined as ${role}.</code>,
+      },
+    }],
+  }),
+})
+</code></pre>
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

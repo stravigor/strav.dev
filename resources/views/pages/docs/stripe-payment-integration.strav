@@ -1,0 +1,576 @@
+@layout('layouts/docs')
+
+@set('title', 'Stripe - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Stripe</h1>
+
+The stripe module (<code>@strav/stripe</code>) provides Stripe billing integration — subscriptions, one-time charges, checkout sessions, invoices, payment methods, and webhooks. Attach billing capabilities directly to your user model with the <code>billable()</code> mixin, or use the <code>stripe</code> helper object for a standalone API.
+
+<p>Stripe-only. Uses the official Stripe SDK under the hood.</p>
+
+<h2>Installation</h2>
+
+<pre><code class="language-bash">bun add @strav/stripe
+bun strav install stripe
+</code></pre>
+
+The <code>install</code> command copies files into your project:
+
+<ul>
+<li><code>config/stripe.ts</code> — Stripe keys, currency, webhook secret, checkout URLs.</li>
+<li><code>database/schemas/customer.ts</code> — the <code>customer</code> table schema.</li>
+<li><code>database/schemas/subscription.ts</code> — the <code>subscription</code> table schema.</li>
+<li><code>database/schemas/subscription_item.ts</code> — the <code>subscription_item</code> table schema.</li>
+<li><code>database/schemas/receipt.ts</code> — the <code>receipt</code> table schema.</li>
+</ul>
+
+All files are yours to edit. If a file already exists, the command skips it (use <code>--force</code> to overwrite).
+
+<h2>Setup</h2>
+
+<h3>1. Register StripeManager</h3>
+
+<h4>Using a service provider (recommended)</h4>
+
+<pre><code class="language-typescript">import { StripeProvider } from '@strav/stripe'
+
+app.use(new StripeProvider())
+</code></pre>
+
+The <code>StripeProvider</code> registers <code>StripeManager</code> as a singleton. It depends on the <code>database</code> provider.
+
+<h4>Manual setup</h4>
+
+<pre><code class="language-typescript">import StripeManager from '@strav/stripe'
+
+app.singleton(StripeManager)
+app.resolve(StripeManager)
+</code></pre>
+
+<h3>2. Configure Stripe credentials</h3>
+
+Edit <code>config/stripe.ts</code>:
+
+<pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  secret: env('STRIPE_SECRET', ''),
+  key: env('STRIPE_KEY', ''),
+  webhookSecret: env('STRIPE_WEBHOOK_SECRET', ''),
+  currency: 'usd',
+  userKey: 'id',
+  urls: {
+    success: env('APP_URL', 'http://localhost:3000') + '/billing/success',
+    cancel: env('APP_URL', 'http://localhost:3000') + '/billing/cancel',
+  },
+}
+</code></pre>
+
+The <code>userKey</code> option controls which field on your user table is used as the foreign key in billing tables. It defaults to <code>'id'</code>, which produces a <code>user_id</code> FK column. If your user table uses a custom primary key (e.g. <code>uuid</code>), set <code>userKey: 'uuid'</code> and the FK column becomes <code>user_uuid</code>.
+
+<h3>3. Run the migration</h3>
+
+<pre><code class="language-bash">bun strav generate:migration -m "add billing tables"
+bun strav migrate
+</code></pre>
+
+<h3>4. Add environment variables</h3>
+
+<pre><code class="language-env">STRIPE_SECRET=sk_test_...
+STRIPE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+</code></pre>
+
+<h2>Billable mixin</h2>
+
+The <code>billable()</code> mixin adds billing methods directly to your user model. This is the recommended API for most applications.
+
+<pre><code class="language-typescript">import { BaseModel } from '@strav/database'
+import { billable } from '@strav/stripe'
+
+class User extends billable(BaseModel) {
+  declare id: number
+  declare email: string
+}
+</code></pre>
+
+Works with <code>compose()</code> for combining multiple mixins:
+
+<pre><code class="language-typescript">import { compose } from '@strav/kernel'
+import { billable } from '@strav/stripe'
+
+class User extends compose(BaseModel, softDeletes, billable) {
+  declare id: number
+  declare email: string
+}
+</code></pre>
+
+<p>Once applied, the user instance gains all the methods documented below.</p>
+
+<h2>Customers</h2>
+
+Every billable user is linked to a Stripe customer through the local <code>customer</code> table.
+
+<pre><code class="language-typescript">// Get or create the Stripe customer
+const customer = await user.createOrGetStripeCustomer()
+
+// Check if the user has a Stripe customer record
+await user.hasStripeId()  // true
+
+// Get the Stripe customer ID
+await user.stripeId()  // 'cus_xxx'
+
+// Get the local customer record
+const customer = await user.customer()
+// customer.stripeId, customer.pmType, customer.pmLastFour, customer.trialEndsAt
+</code></pre>
+
+The <code>createOrGetStripeCustomer()</code> method is idempotent — if a customer already exists, it returns the existing record. Otherwise it creates one on Stripe and stores it locally.
+
+<h2>Subscriptions</h2>
+
+<h3>Creating subscriptions</h3>
+
+<pre><code class="language-typescript">// Simple subscription
+await user.subscribe('default', 'price_xxx')
+
+// With a trial period
+await user.newSubscription('pro', 'price_xxx')
+  .trialDays(14)
+  .create()
+
+// With a coupon
+await user.newSubscription('pro', 'price_xxx')
+  .coupon('LAUNCH20')
+  .create()
+
+// Multi-plan subscription
+await user.newSubscription('enterprise', 'price_base')
+  .plan('price_addon', 3)
+  .create()
+
+// Full builder API
+await user.newSubscription('pro', 'price_xxx')
+  .quantity(5)
+  .trialDays(14)
+  .coupon('LAUNCH20')
+  .promotionCode('promo_abc')
+  .metadata({ team: 'alpha' })
+  .paymentBehavior('allow_incomplete')
+  .anchorBillingCycleOn(timestamp)
+  .create()
+</code></pre>
+
+The <code>subscribe()</code> method is a shorthand for <code>newSubscription(name, price).create()</code>. Use <code>newSubscription()</code> when you need to configure the subscription before creating it.
+
+<h3>Checking subscription status</h3>
+
+<pre><code class="language-typescript">// Is the user subscribed? (active, trialing, or on grace period)
+await user.subscribed('pro')        // true
+await user.subscribed()             // checks 'default'
+
+// Is the user on a trial?
+await user.onTrial('pro')           // true if trial_ends_at is in the future
+
+// Is the subscription on a grace period? (canceled but not yet expired)
+await user.onGracePeriod('pro')     // true
+
+// Is the user subscribed to a specific price?
+await user.subscribedToPrice('price_xxx')  // true
+
+// Get subscription details
+const sub = await user.subscription('pro')
+sub.name            // 'pro'
+sub.stripeId        // 'sub_xxx'
+sub.stripeStatus    // 'active'
+sub.stripePriceId   // 'price_xxx'
+sub.quantity        // 1
+sub.trialEndsAt     // Date | null
+sub.endsAt          // Date | null
+
+// Get all subscriptions
+const subs = await user.subscriptions()
+</code></pre>
+
+<h3>Status checks on SubscriptionData</h3>
+
+The <code>Subscription</code> class also provides pure status-check functions that operate on <code>SubscriptionData</code> objects directly:
+
+<pre><code class="language-typescript">import Subscription from '@strav/stripe/subscription'
+
+const sub = await user.subscription('pro')
+Subscription.active(sub)        // active, trialing, or past_due
+Subscription.onTrial(sub)       // trial_ends_at in the future
+Subscription.onGracePeriod(sub) // ends_at in the future
+Subscription.canceled(sub)      // ends_at is set
+Subscription.ended(sub)         // canceled and past grace period
+Subscription.pastDue(sub)       // stripe_status === 'past_due'
+Subscription.recurring(sub)     // not on trial, not canceled
+Subscription.valid(sub)         // active OR onTrial OR onGracePeriod
+</code></pre>
+
+<h3>Canceling subscriptions</h3>
+
+<pre><code class="language-typescript">import Subscription from '@strav/stripe/subscription'
+
+const sub = await user.subscription('pro')
+
+// Cancel at period end (grace period)
+await Subscription.cancel(sub)
+
+// Cancel immediately (no grace period)
+await Subscription.cancelNow(sub)
+</code></pre>
+
+After canceling at period end, <code>onGracePeriod()</code> returns <code>true</code> until the current billing period expires. The user retains access during this time.
+
+<h3>Resuming subscriptions</h3>
+
+<p>Resume a subscription that was canceled but is still within its grace period:</p>
+
+<pre><code class="language-typescript">await Subscription.resume(sub)
+</code></pre>
+
+<p>Throws if the subscription is not on a grace period.</p>
+
+<h3>Swapping plans</h3>
+
+<p>Switch a subscription to a different price (prorates by default):</p>
+
+<pre><code class="language-typescript">await Subscription.swap(sub, 'price_new')
+</code></pre>
+
+<h3>Updating quantity</h3>
+
+<pre><code class="language-typescript">await Subscription.updateQuantity(sub, 10)
+</code></pre>
+
+<h2>One-time charges</h2>
+
+<pre><code class="language-typescript">// Charge a payment method
+const paymentIntent = await user.charge(2500, 'pm_xxx')
+// amount is in the smallest currency unit (e.g. cents)
+
+// With options
+const paymentIntent = await user.charge(2500, 'pm_xxx', {
+  currency: 'eur',
+  description: 'Add-on purchase',
+  metadata: { product: 'widget' },
+})
+
+// Refund a charge (full)
+const refund = await user.refund('pi_xxx')
+
+// Partial refund
+const refund = await user.refund('pi_xxx', 1000)
+</code></pre>
+
+<h2>Payment methods</h2>
+
+<pre><code class="language-typescript">// List all payment methods
+const methods = await user.paymentMethods()
+
+// Set a payment method as default
+await user.setDefaultPaymentMethod('pm_xxx')
+
+// Create a SetupIntent (for collecting card details without charging)
+const intent = await user.createSetupIntent()
+// Pass intent.client_secret to Stripe.js on the frontend
+</code></pre>
+
+<h2>Checkout sessions</h2>
+
+<p>Create Stripe Checkout sessions for one-time payments or subscriptions.</p>
+
+<h3>Quick checkout</h3>
+
+<pre><code class="language-typescript">// One-time payment
+const session = await user.checkout([
+  { price: 'price_xxx', quantity: 1 },
+  { price: 'price_yyy', quantity: 2 },
+])
+// Redirect to session.url
+</code></pre>
+
+<h3>Checkout builder</h3>
+
+<pre><code class="language-typescript">const session = await user.newCheckout()
+  .item('price_xxx', 2)
+  .item('price_yyy')
+  .mode('subscription')
+  .subscriptionName('pro')
+  .trialDays(14)
+  .successUrl('/billing/success')
+  .cancelUrl('/billing/cancel')
+  .allowPromotionCodes()
+  .metadata({ campaign: 'launch' })
+  .create()
+</code></pre>
+
+The <code>subscriptionName()</code> method automatically sets <code>mode</code> to <code>'subscription'</code> and stores the name in metadata so the webhook handler can create the local record with the correct name.
+
+<h3>Guest checkout</h3>
+
+<p>For users without a Stripe customer (not logged in):</p>
+
+<pre><code class="language-typescript">const session = await new CheckoutBuilder()
+  .item('price_xxx')
+  .email('guest@example.com')
+  .create()
+</code></pre>
+
+When no user is passed to <code>.create()</code>, the session is created without attaching a Stripe customer. Use <code>.email()</code> to pre-fill the customer email.
+
+<h2>Invoices</h2>
+
+<pre><code class="language-typescript">// List recent invoices
+const invoices = await user.invoices()
+
+// Preview the next invoice (prorations, upcoming charges)
+const upcoming = await user.upcomingInvoice()
+</code></pre>
+
+<p>For direct access to invoice operations:</p>
+
+<pre><code class="language-typescript">import Invoice from '@strav/stripe/invoice'
+
+const invoice = await Invoice.find('in_xxx')
+const pdfUrl = await Invoice.pdfUrl('in_xxx')
+const hostedUrl = await Invoice.hostedUrl('in_xxx')
+await Invoice.void_('in_xxx')
+</code></pre>
+
+<h2>Billing portal</h2>
+
+<p>Create a Stripe Customer Portal session URL so users can manage their subscriptions, payment methods, and invoices:</p>
+
+<pre><code class="language-typescript">const url = await user.billingPortalUrl()
+// Redirect to url
+
+// With a custom return URL
+const url = await user.billingPortalUrl('/account')
+</code></pre>
+
+<h2>Webhooks</h2>
+
+<p>Register a route handler to receive Stripe webhook events. The handler verifies signatures, keeps local database records in sync, and dispatches custom event handlers.</p>
+
+<h3>Route setup</h3>
+
+<pre><code class="language-typescript">import { router } from '@strav/http'
+import { stripeWebhook } from '@strav/stripe/webhook'
+
+router.post('/stripe/webhook', stripeWebhook())
+</code></pre>
+
+> Note: Webhook routes should not use the <code>session()</code> or <code>csrf()</code> middleware. Stripe sends raw POST requests that won't have a session cookie or CSRF token.
+
+<h3>Built-in event handling</h3>
+
+<p>The webhook handler automatically processes these events to keep local records in sync:</p>
+
+<p>| Event | Action |</p>
+<p>|-------|--------|</p>
+| <code>customer.updated</code> | Syncs default payment method to local <code>customer</code> record |
+| <code>customer.deleted</code> | Deletes local customer and all subscription records |
+| <code>customer.subscription.created</code> | Creates local subscription + items (for externally created subs) |
+| <code>customer.subscription.updated</code> | Syncs status, ends_at, price, quantity, trial, and items |
+| <code>customer.subscription.deleted</code> | Marks local subscription as canceled |
+
+<h3>Custom event handlers</h3>
+
+<p>Register handlers for any Stripe event type:</p>
+
+<pre><code class="language-typescript">import { onWebhookEvent } from '@strav/stripe/webhook'
+
+onWebhookEvent('invoice.payment_failed', async (event) => {
+  const invoice = event.data.object as Stripe.Invoice
+  // Send a notification to the user...
+})
+
+onWebhookEvent('checkout.session.completed', async (event) => {
+  const session = event.data.object as Stripe.Checkout.Session
+  // Fulfill the order...
+})
+</code></pre>
+
+<p>Custom handlers run after the built-in handlers.</p>
+
+<h3>Stripe CLI for local testing</h3>
+
+<p>Forward webhook events to your local server during development:</p>
+
+<pre><code class="language-bash">stripe listen --forward-to localhost:3000/stripe/webhook
+</code></pre>
+
+Copy the webhook signing secret from the CLI output into your <code>.env</code>:
+
+<pre><code class="language-env">STRIPE_WEBHOOK_SECRET=whsec_...
+</code></pre>
+
+<h2>stripe helper</h2>
+
+The <code>stripe</code> helper provides the same functionality as the billable mixin but without requiring a model instance. Useful for standalone operations or when you don't want to use the mixin.
+
+<pre><code class="language-typescript">import { stripe } from '@strav/stripe'
+
+// Customer
+const customer = await stripe.createOrGetCustomer(user)
+const customer = await stripe.findCustomer(user)
+
+// Subscriptions
+const sub = await stripe.newSubscription('pro', 'price_xxx')
+  .trialDays(14)
+  .create(user)
+
+const sub = await stripe.subscription(user, 'pro')
+const isSubscribed = await stripe.subscribed(user, 'pro')
+
+// Checkout
+const session = await stripe.newCheckout()
+  .item('price_xxx')
+  .mode('subscription')
+  .subscriptionName('pro')
+  .create(user)
+
+// Invoices &amp; payment methods
+const invoices = await stripe.invoices(user)
+const upcoming = await stripe.upcomingInvoice(user)
+const methods = await stripe.paymentMethods(user)
+await stripe.setDefaultPaymentMethod(user, 'pm_xxx')
+
+// Receipts
+const receipts = await stripe.receipts(user)
+
+// Direct Stripe SDK access
+stripe.stripe.customers.list({ limit: 10 })
+stripe.key       // publishable key for frontend
+stripe.currency  // configured default currency
+</code></pre>
+
+<h2>Error handling</h2>
+
+<p>The module throws these error types:</p>
+
+<ul>
+<li><strong><code>StripeError</code></strong> — general billing errors (extends <code>StravError</code>)</li>
+<li><strong><code>CustomerNotFoundError</code></strong> — no local customer record found for a user</li>
+<li><strong><code>SubscriptionNotFoundError</code></strong> — no subscription found with the given name</li>
+<li><strong><code>PaymentMethodError</code></strong> — a payment method operation failed on Stripe (attach, detach, etc.)</li>
+<li><strong><code>SubscriptionCreationError</code></strong> — subscription creation failed on Stripe</li>
+<li><strong><code>WebhookSignatureError</code></strong> — Stripe webhook signature verification failed</li>
+</ul>
+
+<pre><code class="language-typescript">import { StripeError, PaymentMethodError, SubscriptionCreationError } from '@strav/stripe'
+
+try {
+  await user.subscribe('pro', 'price_xxx')
+} catch (error) {
+  if (error instanceof SubscriptionCreationError) {
+    // Stripe rejected the subscription creation
+  } else if (error instanceof StripeError) {
+    // Other billing error
+  }
+}
+</code></pre>
+
+<h2>Database tables</h2>
+
+<p>The module uses four tables, defined by the schema stubs:</p>
+
+<h3>customer</h3>
+
+<p>| Column | Type | Description |</p>
+<p>|--------|------|-------------|</p>
+| <code>id</code> | <code>serial</code> | Primary key |
+| <code>user_id</code> | <code>integer</code> | FK to user table |
+| <code>stripe_id</code> | <code>varchar</code> | Stripe customer ID (<code>cus_xxx</code>) |
+| <code>pm_type</code> | <code>varchar</code> | Default payment method type |
+| <code>pm_last_four</code> | <code>varchar(4)</code> | Last 4 digits of default card |
+| <code>trial_ends_at</code> | <code>timestamp</code> | Customer-level trial expiry |
+| <code>created_at</code> | <code>timestamp</code> | Row creation time |
+| <code>updated_at</code> | <code>timestamp</code> | Last update time |
+
+<h3>subscription</h3>
+
+<p>| Column | Type | Description |</p>
+<p>|--------|------|-------------|</p>
+| <code>id</code> | <code>serial</code> | Primary key |
+| <code>user_id</code> | <code>integer</code> | FK to user table |
+| <code>name</code> | <code>varchar</code> | Subscription name (<code>'default'</code>, <code>'pro'</code>, etc.) |
+| <code>stripe_id</code> | <code>varchar</code> | Stripe subscription ID (<code>sub_xxx</code>) |
+| <code>stripe_status</code> | <code>varchar</code> | Stripe status (active, trialing, canceled, etc.) |
+| <code>stripe_price_id</code> | <code>varchar</code> | Primary price ID |
+| <code>quantity</code> | <code>integer</code> | Seat count or unit quantity |
+| <code>trial_ends_at</code> | <code>timestamp</code> | Trial expiry |
+| <code>ends_at</code> | <code>timestamp</code> | Set when canceled (grace period end) |
+| <code>created_at</code> | <code>timestamp</code> | Row creation time |
+| <code>updated_at</code> | <code>timestamp</code> | Last update time |
+
+<h3>subscription_item</h3>
+
+<p>| Column | Type | Description |</p>
+<p>|--------|------|-------------|</p>
+| <code>id</code> | <code>serial</code> | Primary key |
+| <code>subscription_id</code> | <code>integer</code> | FK to subscription table |
+| <code>stripe_id</code> | <code>varchar</code> | Stripe subscription item ID (<code>si_xxx</code>) |
+| <code>stripe_product_id</code> | <code>varchar</code> | Stripe product ID |
+| <code>stripe_price_id</code> | <code>varchar</code> | Stripe price ID |
+| <code>quantity</code> | <code>integer</code> | Item quantity |
+| <code>created_at</code> | <code>timestamp</code> | Row creation time |
+| <code>updated_at</code> | <code>timestamp</code> | Last update time |
+
+<h3>receipt</h3>
+
+<p>| Column | Type | Description |</p>
+<p>|--------|------|-------------|</p>
+| <code>id</code> | <code>serial</code> | Primary key |
+| <code>user_id</code> | <code>integer</code> | FK to user table |
+| <code>stripe_id</code> | <code>varchar</code> | Stripe payment intent ID (<code>pi_xxx</code>) |
+| <code>amount</code> | <code>integer</code> | Amount in smallest currency unit |
+| <code>currency</code> | <code>varchar</code> | Currency code |
+| <code>description</code> | <code>text</code> | Charge description |
+| <code>receipt_url</code> | <code>text</code> | Stripe receipt URL |
+| <code>created_at</code> | <code>timestamp</code> | Row creation time |
+
+<h2>SubscriptionData</h2>
+
+All subscription methods return or accept a <code>SubscriptionData</code> object:
+
+<p>| Field | Type | Description |</p>
+<p>|-------|------|-------------|</p>
+| <code>id</code> | <code>number</code> | Local primary key |
+| <code>userId</code> | <code>string \| number</code> | Foreign key to user table |
+| <code>name</code> | <code>string</code> | Subscription name |
+| <code>stripeId</code> | <code>string</code> | Stripe subscription ID |
+| <code>stripeStatus</code> | <code>string</code> | Stripe status |
+| <code>stripePriceId</code> | <code>string \| null</code> | Primary price ID |
+| <code>quantity</code> | <code>number \| null</code> | Quantity |
+| <code>trialEndsAt</code> | <code>Date \| null</code> | Trial expiry |
+| <code>endsAt</code> | <code>Date \| null</code> | Grace period end |
+| <code>createdAt</code> | <code>Date</code> | Row creation time |
+| <code>updatedAt</code> | <code>Date</code> | Last update time |
+
+<h2>CustomerData</h2>
+
+<p>| Field | Type | Description |</p>
+<p>|-------|------|-------------|</p>
+| <code>id</code> | <code>number</code> | Local primary key |
+| <code>userId</code> | <code>string \| number</code> | Foreign key to user table |
+| <code>stripeId</code> | <code>string</code> | Stripe customer ID |
+| <code>pmType</code> | <code>string \| null</code> | Default payment method type |
+| <code>pmLastFour</code> | <code>string \| null</code> | Last 4 digits |
+| <code>trialEndsAt</code> | <code>Date \| null</code> | Customer-level trial expiry |
+| <code>createdAt</code> | <code>Date</code> | Row creation time |
+| <code>updatedAt</code> | <code>Date</code> | Last update time |
+
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end

@@ -1,0 +1,468 @@
+@layout('layouts/docs')
+
+@set('title', 'Configuration - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+  <h1>Configuration</h1>
+
+  <p>Learn how to configure your Strav application for different environments and customize its behavior.</p>
+
+  <h2>Configuration Files</h2>
+
+  <p>Strav uses a centralized configuration system. All configuration files are stored in the <code>config/</code> directory:</p>
+
+  <pre><code>config/
+├── app.ts         # Application settings
+├── database.ts    # Database connections
+├── cache.ts       # Cache stores
+├── mail.ts        # Mail drivers
+├── queue.ts       # Queue connections
+├── storage.ts     # File storage
+├── session.ts     # Session configuration
+├── auth.ts        # Authentication settings
+└── services.ts    # Third-party services</code></pre>
+
+  <h2>Environment Variables</h2>
+
+  <p>Strav uses environment variables for sensitive data and environment-specific settings. The <code>.env</code> file in your project root contains these variables.</p>
+
+  <h3>Loading Environment Variables</h3>
+
+  <p>Environment variables are loaded automatically when the application starts. Use the <code>env()</code> helper in config files:</p>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  name: env('APP_NAME', 'My App'),           // With default value
+  debug: env.bool('APP_DEBUG', false),       // Boolean casting
+  port: env.int('APP_PORT', 3000),          // Integer casting
+  rate: env.float('RATE_LIMIT', 0.5),       // Float casting
+  features: env.array('FEATURES', []),       // Array from comma-separated
+  apiKey: env.required('API_KEY'),          // Required (throws if missing)
+}</code></pre>
+
+  <h3>Environment File Priority</h3>
+
+  <p>Strav loads environment files in this order (later files override earlier ones):</p>
+
+  <ol>
+    <li><code>.env</code> - Default values</li>
+    <li><code>.env.local</code> - Local overrides (gitignored)</li>
+    <li><code>.env.[environment]</code> - Environment-specific (e.g., <code>.env.production</code>)</li>
+    <li><code>.env.[environment].local</code> - Local environment overrides (gitignored)</li>
+  </ol>
+
+  <h2>Application Configuration</h2>
+
+  <h3>config/app.ts</h3>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  // Application name
+  name: env('APP_NAME', 'Strav Application'),
+
+  // Environment (local, development, staging, production)
+  env: env('APP_ENV', 'production'),
+
+  // Debug mode
+  debug: env.bool('APP_DEBUG', false),
+
+  // Application URL
+  url: env('APP_URL', 'http://localhost:3000'),
+
+  // Server port
+  port: env.int('APP_PORT', 3000),
+
+  // Encryption key for cookies and sessions
+  key: env.required('APP_KEY'),
+
+  // Timezone
+  timezone: 'UTC',
+
+  // Locale
+  locale: 'en',
+
+  // Available locales
+  locales: ['en', 'es', 'fr', 'de'],
+
+  // Logging
+  log: {
+    level: env('LOG_LEVEL', 'info'),
+    channels: ['file', 'console'],
+  },
+}</code></pre>
+
+  <h2>Database Configuration</h2>
+
+  <h3>config/database.ts</h3>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  // Default connection
+  default: env('DB_CONNECTION', 'postgres'),
+
+  // Connection configurations
+  connections: {
+    postgres: {
+      driver: 'postgres',
+      host: env('DB_HOST', '127.0.0.1'),
+      port: env.int('DB_PORT', 5432),
+      database: env('DB_DATABASE', 'strav'),
+      username: env('DB_USER', 'postgres'),
+      password: env('DB_PASSWORD', ''),
+
+      // Connection pool settings
+      pool: {
+        min: env.int('DB_POOL_MIN', 2),
+        max: env.int('DB_POOL_MAX', 10),
+      },
+
+      // SSL configuration
+      ssl: env.bool('DB_SSL', false) ? {
+        rejectUnauthorized: false,
+        ca: env('DB_SSL_CA'),
+      } : false,
+    },
+
+    // Read replica configuration
+    read: {
+      driver: 'postgres',
+      host: env('DB_READ_HOST', '127.0.0.1'),
+      port: env.int('DB_READ_PORT', 5432),
+      database: env('DB_DATABASE', 'strav'),
+      username: env('DB_READ_USER', 'postgres'),
+      password: env('DB_READ_PASSWORD', ''),
+    },
+  },
+
+  // Migration settings
+  migrations: {
+    table: '_strav_migrations',
+    directory: './database/migrations',
+  },
+}</code></pre>
+
+  <h2>Cache Configuration</h2>
+
+  <h3>config/cache.ts</h3>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  // Default cache store
+  default: env('CACHE_DRIVER', 'memory'),
+
+  // Cache stores
+  stores: {
+    memory: {
+      driver: 'memory',
+      max: 100,  // Maximum items
+      ttl: 3600, // Default TTL in seconds
+    },
+
+    redis: {
+      driver: 'redis',
+      connection: 'cache',
+    },
+
+    database: {
+      driver: 'database',
+      table: 'cache',
+      connection: 'postgres',
+    },
+
+    file: {
+      driver: 'file',
+      path: './storage/cache',
+    },
+  },
+
+  // Cache key prefix
+  prefix: env('CACHE_PREFIX', 'strav_cache_'),
+}</code></pre>
+
+  <h2>Session Configuration</h2>
+
+  <h3>config/session.ts</h3>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  // Session driver (cookie, database, redis, memory)
+  driver: env('SESSION_DRIVER', 'cookie'),
+
+  // Session cookie name
+  name: 'strav_session',
+
+  // Session lifetime in seconds
+  lifetime: env.int('SESSION_LIFETIME', 7200), // 2 hours
+
+  // Expire on browser close
+  expire_on_close: false,
+
+  // Encrypt session data
+  encrypt: true,
+
+  // Session cookie path
+  path: '/',
+
+  // Session cookie domain
+  domain: env('SESSION_DOMAIN'),
+
+  // HTTPS only cookies
+  secure: env('APP_ENV') === 'production',
+
+  // HTTP only (no JavaScript access)
+  httpOnly: true,
+
+  // Same-site cookie attribute
+  sameSite: 'lax',
+
+  // Database table (when using database driver)
+  table: 'sessions',
+
+  // Redis connection (when using redis driver)
+  connection: 'session',
+}</code></pre>
+
+  <h2>Mail Configuration</h2>
+
+  <h3>config/mail.ts</h3>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  // Default mailer
+  default: env('MAIL_DRIVER', 'smtp'),
+
+  // Mailer configurations
+  mailers: {
+    smtp: {
+      transport: 'smtp',
+      host: env('MAIL_HOST', 'smtp.mailgun.org'),
+      port: env.int('MAIL_PORT', 587),
+      encryption: env('MAIL_ENCRYPTION', 'tls'),
+      username: env('MAIL_USERNAME'),
+      password: env('MAIL_PASSWORD'),
+    },
+
+    sendmail: {
+      transport: 'sendmail',
+      path: '/usr/sbin/sendmail -bs',
+    },
+
+    log: {
+      transport: 'log',
+      channel: 'mail',
+    },
+
+    array: {
+      transport: 'array',
+    },
+  },
+
+  // Global "from" address
+  from: {
+    address: env('MAIL_FROM_ADDRESS', 'hello@example.com'),
+    name: env('MAIL_FROM_NAME', 'Example'),
+  },
+
+  // Markdown mail settings
+  markdown: {
+    theme: 'default',
+    paths: ['./resources/views/emails'],
+  },
+}</code></pre>
+
+  <h2>Storage Configuration</h2>
+
+  <h3>config/storage.ts</h3>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  // Default disk
+  default: env('STORAGE_DISK', 'local'),
+
+  // Storage disks
+  disks: {
+    local: {
+      driver: 'local',
+      root: './storage/app',
+      url: '/storage',
+      visibility: 'private',
+    },
+
+    public: {
+      driver: 'local',
+      root: './storage/app/public',
+      url: '/storage',
+      visibility: 'public',
+    },
+
+    s3: {
+      driver: 's3',
+      key: env('AWS_ACCESS_KEY_ID'),
+      secret: env('AWS_SECRET_ACCESS_KEY'),
+      region: env('AWS_DEFAULT_REGION', 'us-east-1'),
+      bucket: env('AWS_BUCKET'),
+      url: env('AWS_URL'),
+      endpoint: env('AWS_ENDPOINT'),
+    },
+
+    temp: {
+      driver: 'local',
+      root: './storage/temp',
+      visibility: 'private',
+      // Auto-delete files older than 24 hours
+      cleanup: true,
+      cleanupAge: 86400,
+    },
+  },
+
+  // File upload settings
+  uploads: {
+    maxSize: '10MB',
+    allowedTypes: ['image/jpeg', 'image/png', 'application/pdf'],
+    directory: 'uploads',
+  },
+}</code></pre>
+
+  <h2>Custom Configuration Files</h2>
+
+  <p>You can create custom configuration files for your application:</p>
+
+  <h3>config/payment.ts</h3>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+export default {
+  stripe: {
+    key: env('STRIPE_KEY'),
+    secret: env('STRIPE_SECRET'),
+    webhook: env('STRIPE_WEBHOOK_SECRET'),
+    currency: 'usd',
+  },
+
+  paypal: {
+    client: env('PAYPAL_CLIENT_ID'),
+    secret: env('PAYPAL_SECRET'),
+    mode: env('PAYPAL_MODE', 'sandbox'),
+  },
+}</code></pre>
+
+  <h2>Accessing Configuration</h2>
+
+  <p>Use the <code>Configuration</code> service to access config values:</p>
+
+  <pre><code class="language-typescript">import { config } from '@strav/kernel'
+
+// Get a config value
+const appName = config.get('app.name')
+const dbHost = config.get('database.connections.postgres.host')
+
+// Get with default value
+const timeout = config.get('app.timeout', 30)
+
+// Get entire config file
+const mailConfig = config.get('mail')
+
+// Check if config exists
+if (config.has('services.stripe')) {
+  // Stripe is configured
+}
+
+// Set config at runtime (not persisted)
+config.set('app.maintenance', true)</code></pre>
+
+  <h2>Configuration Caching</h2>
+
+  <p>In production, cache your configuration for better performance:</p>
+
+  <pre><code class="language-bash"># Cache configuration
+bun strav config:cache
+
+# Clear configuration cache
+bun strav config:clear</code></pre>
+
+  <p>When configuration is cached, changes to config files won't take effect until you clear the cache.</p>
+
+  <h2>Environment-Specific Configuration</h2>
+
+  <p>Load different configurations based on environment:</p>
+
+  <pre><code class="language-typescript">import { env } from '@strav/kernel'
+
+const environment = env('APP_ENV', 'production')
+
+export default {
+  features: {
+    registration: environment !== 'production',
+    api: ['production', 'staging'].includes(environment),
+    debug_toolbar: environment === 'local',
+  },
+
+  services: environment === 'production' ? {
+    cdn: 'https://cdn.example.com',
+    analytics: true,
+  } : {
+    cdn: '',
+    analytics: false,
+  },
+}</code></pre>
+
+  <h2>Security Best Practices</h2>
+
+  <ul>
+    <li>Never commit <code>.env</code> files with sensitive data to version control</li>
+    <li>Use <code>.env.example</code> as a template with dummy values</li>
+    <li>Rotate <code>APP_KEY</code> periodically</li>
+    <li>Use different database credentials for different environments</li>
+    <li>Enable SSL/TLS for production databases</li>
+    <li>Use secrets management services in production (AWS Secrets Manager, HashiCorp Vault)</li>
+  </ul>
+
+  <h2>Configuration Validation</h2>
+
+  <p>Validate your configuration at startup:</p>
+
+  <pre><code class="language-typescript">// app/providers/config_validator.ts
+import { ServiceProvider, ConfigurationException } from '@strav/kernel'
+
+export class ConfigValidatorProvider extends ServiceProvider {
+  name = 'config-validator'
+
+  boot(app) {
+    const config = app.resolve(Configuration)
+
+    // Validate required configurations
+    const required = [
+      'app.key',
+      'database.connections.postgres.host',
+      'mail.from.address',
+    ]
+
+    for (const key of required) {
+      if (!config.has(key)) {
+        throw new ConfigurationException(`Missing required config: ${key}`)
+      }
+    }
+
+    // Validate config values
+    const port = config.get('app.port')
+    if (port < 1 || port > 65535) {
+      throw new ConfigurationException('Invalid port number')
+    }
+  }
+}</code></pre>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <a href="/docs/installation" class="prev">← Installation</a>
+    <a href="/docs/core/kernel/core" class="next">Core Concepts →</a>
+  </div>
+</article>
+@end
