@@ -1,3 +1,57 @@
+<!-- SEO Meta Tags -->
+<meta name="description" content="Strav Framework - The Modern, AI-First Backend Framework for Bun. Build enterprise-grade applications with TypeScript, AI integration, OAuth2 server, and comprehensive developer tools.">
+<meta name="keywords" content="Strav Framework, TypeScript Framework, Bun Runtime, AI Integration, OAuth2 Server, Backend Framework, Web Development, Microservices, API Development">
+<meta name="author" content="Strav Framework Team">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://strav.dev/">
+
+<!-- Open Graph Meta Tags -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Strav Framework">
+<meta property="og:description" content="Strav Framework - The Modern, AI-First Backend Framework for Bun. Build enterprise-grade applications with TypeScript, AI integration, OAuth2 server, and comprehensive developer tools.">
+<meta property="og:image" content="{{ asset('/images/strav-og-image.png') }}">
+<meta property="og:url" content="https://strav.dev/">
+<meta property="og:site_name" content="Strav Framework">
+<meta property="og:locale" content="en_US">
+
+<!-- Twitter Card Meta Tags -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Strav Framework">
+<meta name="twitter:description" content="Strav Framework - The Modern, AI-First Backend Framework for Bun">
+<meta name="twitter:image" content="{{ asset('/images/strav-og-image.png') }}">
+<meta name="twitter:creator" content="stravframework">
+<meta name="twitter:site" content="stravframework">
+
+<!-- Additional SEO Meta -->
+<meta name="theme-color" content="#0F172A">
+<meta name="msapplication-TileColor" content="#0F172A">
+<link rel="icon" type="image/x-icon" href="{{ asset('/favicon.ico') }}">
+<link rel="apple-touch-icon" href="{{ asset('/images/apple-touch-icon.png') }}">
+
+<!-- JSON-LD Structured Data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Strav Framework",
+  "description": "Strav Framework - The Modern, AI-First Backend Framework for Bun",
+  "url": "https://strav.dev/",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Cross-platform",
+  "programmingLanguage": "TypeScript",
+  "author": {
+    "@type": "Organization",
+    "name": "Strav Framework Team"
+  },
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
+
+<!-- Font Preconnects -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Passero+One&display=swap" rel="stylesheet">
