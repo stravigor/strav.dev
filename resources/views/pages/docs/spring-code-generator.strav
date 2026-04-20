@@ -15,7 +15,7 @@
 <ul>
 <li><strong>Schema-driven database design</strong> with TypeScript DSL</li>
 <li><strong>Vue islands architecture</strong> for interactive components</li>
-<li><strong>Multi-domain PostgreSQL support</strong> with complete tenant isolation</li>
+<li><strong>Multi-domain database support</strong> with complete tenant isolation (using PostgreSQL schemas)</li>
 <li><strong>Snake case conventions</strong> throughout the codebase</li>
 <li><strong>TypeScript-first</strong> development experience</li>
 </ul>
@@ -310,7 +310,7 @@ bun strav generate:migration --scope=public --message="add post schema"
 bun strav migrate --scope=public
 bun strav rollback --scope=public
 
-<h1>Code generation</h1>
+# Code generation
 bun strav make:controller post_controller
 bun strav make:middleware auth_middleware
 bun strav make:policy post_policy
@@ -319,15 +319,15 @@ bun strav make:mail welcome_mail
 bun strav make:service payment_service
 bun strav make:factory post_factory
 
-<h1>Vue islands</h1>
+# Vue islands
 bun strav make:island post_editor
 bun strav make:island comment_form
 
-<h1>Database operations</h1>
+# Database operations
 bun strav seed
 bun strav seed --class=PostSeeder
 
-<h1>Development helpers</h1>
+# Development helpers
 bun strav route:list
 bun strav compare  # Compare schemas vs database
 </code></pre>
@@ -376,25 +376,26 @@ bun strav compare  # Compare schemas vs database
 
 Common <code>.env</code> variables for Spring applications:
 
-<pre><code class="language-env"><h1>Application</h1>
+<pre><code class="language-env">
+# Application
 APP_ENV=local
 APP_KEY=your-secret-key
 APP_DEBUG=true
 APP_URL=http://localhost:3000
 APP_PORT=3000
 
-<h1>Database</h1>
+# Database
 DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_USER=your_username
 DB_PASSWORD=your_password
 DB_DATABASE=your_database
 
-<h1>Sessions (web template)</h1>
+# Sessions (web template)
 SESSION_SECRET=your-session-secret
 SESSION_COOKIE_NAME=session
 
-<h1>Views (web template)</h1>
+# Views (web template)
 VIEW_CACHE=false
 VIEW_DIRECTORY=resources/views
 </code></pre>
@@ -447,10 +448,11 @@ bun strav build:islands
 <pre><code class="language-bash">bunx @strav/spring my-blog --web --db=blog_db
 cd my-blog
 
-<h1>Add post schema</h1>
-<h1>Create post_controller.ts</h1>
-<h1>Add blog routes</h1>
-<h1>Create post templates with Vue islands for comments</h1>
+# Add post schema
+# Create post_controller.ts
+
+# Add blog routes
+# Create post templates with Vue islands for comments
 </code></pre>
 
 <h3>API for Mobile App</h3>
@@ -458,10 +460,10 @@ cd my-blog
 <pre><code class="language-bash">bunx @strav/spring mobile-api --api --db=mobile_app_db
 cd mobile-api
 
-<h1>Add user authentication</h1>
-<h1>Create resource controllers</h1>
-<h1>Set up proper CORS</h1>
-<h1>Add API documentation</h1>
+# Add user authentication
+# Create resource controllers
+# Set up proper CORS
+# Add API documentation
 </code></pre>
 
 <h3>E-commerce Platform</h3>
@@ -469,25 +471,11 @@ cd mobile-api
 <pre><code class="language-bash">bunx @strav/spring shop --web --db=shop_db
 cd shop
 
-<h1>Add product, order, customer schemas</h1>
-<h1>Create shopping cart Vue islands</h1>
-<h1>Set up payment processing</h1>
-<h1>Add admin dashboard</h1>
+# Add product, order, customer schemas
+# Create shopping cart Vue islands
+# Set up payment processing
+# Add admin dashboard
 </code></pre>
-
-<h2>Migration from Laravel</h2>
-
-<p>If you're coming from Laravel, here's how Strav concepts map:</p>
-
-<p>| Laravel | Strav Spring |</p>
-<p>|---------|--------------|</p>
-| <code>php artisan make:model</code> | <code>bun strav make:schema</code> |
-| Blade templates | <code>.strav</code> templates |
-<p>| Laravel Mix | Built-in asset processing |</p>
-<p>| Eloquent ORM | Strav ORM with decorators |</p>
-| Artisan commands | <code>strav.ts</code> CLI |
-<p>| Service providers | Service providers |</p>
-<p>| Middleware | Middleware |</p>
 
 <h2>Troubleshooting</h2>
 
@@ -509,19 +497,11 @@ cd shop
 <strong>"Database connection failed"</strong>
 <ul>
 <li>Verify database credentials in <code>.env</code></li>
-<li>Ensure PostgreSQL is running</li>
+<li>Ensure your database server is running (PostgreSQL by default)</li>
 <li>Check database exists and user has permissions</li>
 </ul>
 
 <h3>Getting Help</h3>
-
-<ul>
-<li>Check the <a href="../README.md">Strav documentation</a></li>
-<li>Review example applications in the templates</li>
-<li>Join the Strav community discussions</li>
-</ul>
-
-<p>Spring represents the best of Laravel's developer experience adapted for the modern TypeScript and Bun ecosystem. Happy building! 🚀</p>
 
   <!-- Navigation -->
   <div class="doc-nav">

@@ -45,7 +45,7 @@ import User from './app/models/user'
 app.use(new AuthProvider({ resolver: (id) => User.find(id) }))
 </code></pre>
 
-The <code>AuthProvider</code> registers <code>Auth</code> as a singleton, sets the user resolver, and creates the <code>_stravigor_access_tokens</code> table automatically. It depends on the <code>database</code> provider.
+The <code>AuthProvider</code> registers <code>Auth</code> as a singleton, sets the user resolver, and creates the <code>_strav_access_tokens</code> table automatically. It depends on the <code>database</code> provider.
 
 <p>Options:</p>
 
@@ -142,12 +142,12 @@ import { csrf } from '@strav/http'
 router.group({ middleware: [session(), csrf()] }, (r) => {
   r.get('/form', (ctx) => {
     const csrfToken = ctx.get('csrfToken')
-    return ctx.html(<code>
-      <form method="POST" action="/submit">
-        <input type="hidden" name="_token" value="${csrfToken}">
-        <button type="submit">Submit</button>
-      </form>
-    </code>)
+    return ctx.html(`
+      &lt;form method="POST" action="/submit"&gt;
+        &lt;input type="hidden" name="_token" value="${csrfToken}"&gt;
+        &lt;button type="submit"&gt;Submit&lt;/button&gt;
+      &lt;/form&gt;
+    `)
   })
 
   r.post('/submit', (ctx) => {
@@ -274,7 +274,7 @@ await AccessToken.revokeAllFor(user)
 
 <h2>Database tables</h2>
 
-<strong>_stravigor_sessions</strong> — managed by the <a href="./session.md">session module</a>
+<strong>_strav_sessions</strong> — managed by the <a href="./session.md">session module</a>
 
 <table class="doc-table">
   <thead>
@@ -328,7 +328,7 @@ await AccessToken.revokeAllFor(user)
   </tbody>
 </table>
 
-<strong>_stravigor_access_tokens</strong> — managed by <code>Auth.ensureTables()</code>
+<strong>_strav_access_tokens</strong> — managed by <code>Auth.ensureTables()</code>
 
 <table class="doc-table">
   <thead>

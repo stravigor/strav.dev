@@ -555,7 +555,7 @@ class DatabaseThreadStore implements ThreadStore {
   async save(thread: SerializedMemoryThread): Promise<void> {
     await db.query(<code>
       INSERT INTO threads (id, data, updated_at)
-      VALUES ($1, $2, NOW())
+      VALUES ($1, $2, NOW())  -- PostgreSQL syntax
       ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()
     </code>, [thread.id, JSON.stringify(thread)])
   }

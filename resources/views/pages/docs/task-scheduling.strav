@@ -15,7 +15,7 @@ Define your tasks in <code>app/schedules.ts</code>:
 <pre><code class="language-typescript">import { Scheduler } from '@strav/queue'
 
 Scheduler.task('cleanup:sessions', async () => {
-  await db.sql<code>DELETE FROM "_stravigor_sessions" WHERE "expires_at" < NOW()</code>
+  await db.sql<code>DELETE FROM "_strav_sessions" WHERE "expires_at" < CURRENT_TIMESTAMP</code>
 }).hourly()
 
 Scheduler.task('reports:daily', async () => {
@@ -171,7 +171,7 @@ import { Queue } from '@strav/queue'
 // Cleanup expired sessions every hour
 Scheduler.task('cleanup:sessions', async () => {
   const result = await db.sql<code>
-    DELETE FROM "_stravigor_sessions" WHERE "expires_at" < NOW()
+    DELETE FROM "_strav_sessions" WHERE "expires_at" < CURRENT_TIMESTAMP
   </code>
   console.log(<code>Cleaned ${result.count} expired sessions</code>)
 }).hourly()

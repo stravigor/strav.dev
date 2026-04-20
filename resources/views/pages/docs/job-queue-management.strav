@@ -6,7 +6,7 @@
 <article class="doc-content">
 <h1>Queue</h1>
 
-<p>The queue module provides persistent, retryable background job processing backed by PostgreSQL. Jobs survive restarts and can be processed by multiple concurrent workers.</p>
+<p>The queue module provides persistent, retryable background job processing backed by a SQL database. Jobs survive restarts and can be processed by multiple concurrent workers.</p>
 
 <h2>Setup</h2>
 
@@ -34,7 +34,7 @@ app.resolve(Queue)
 await Queue.ensureTables()
 </code></pre>
 
-This creates <code>_stravigor_jobs</code> and <code>_stravigor_failed_jobs</code> if they don't exist.
+This creates <code>_strav_jobs</code> and <code>_strav_failed_jobs</code> if they don't exist.
 
 <h2>Configuration</h2>
 
@@ -99,7 +99,7 @@ await worker.start() // blocks until worker.stop() is called
 <li>Polls for available jobs using <code>SELECT ... FOR UPDATE SKIP LOCKED</code> — safe for multiple concurrent workers.</li>
 <li>Runs the job handler with a <code>Promise.race</code> timeout.</li>
 <li>On success, deletes the job.</li>
-<li>On failure, either retries (releases back with backoff) or moves to <code>_stravigor_failed_jobs</code>.</li>
+<li>On failure, either retries (releases back with backoff) or moves to <code>_strav_failed_jobs</code>.</li>
 <li>Periodically releases stale jobs from crashed workers.</li>
 
 <h3>Graceful shutdown</h3>
@@ -208,9 +208,9 @@ bun strav queue:flush --failed          # also clear failed jobs
 
 <h2>Database tables</h2>
 
-The queue module creates two internal tables (prefixed with <code>_stravigor_</code>):
+The queue module creates two internal tables (prefixed with <code>_strav_</code>):
 
-<strong>_stravigor_jobs</strong>
+<strong>_strav_jobs</strong>
 
 <p>| Column | Type | Notes |</p>
 <p>|--------|------|-------|</p>
@@ -227,7 +227,7 @@ The queue module creates two internal tables (prefixed with <code>_stravigor_</c
 
 A partial index on <code>(queue, available_at) WHERE reserved_at IS NULL</code> ensures only fetchable jobs are indexed.
 
-<strong>_stravigor_failed_jobs</strong>
+<strong>_strav_failed_jobs</strong>
 
 <p>| Column | Type | Notes |</p>
 <p>|--------|------|-------|</p>

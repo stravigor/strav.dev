@@ -15,6 +15,7 @@
     </div>
   </main>
   @include('partials/footer')
+  @include('layouts/google')
   @islands
 </body>
 </html>

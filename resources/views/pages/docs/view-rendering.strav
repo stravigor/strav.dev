@@ -157,7 +157,7 @@ The included template receives both the parent data and any additional data pass
 
 <h2>Vue islands</h2>
 
-For interactive components, use Vue islands. The server renders a placeholder <code><div></code> and Vue hydrates it on the client.
+For interactive components, use Vue islands. The server renders a placeholder <code>&lt;div&gt;</code> and Vue hydrates it on the client.
 
 <h3>In templates</h3>
 
@@ -198,7 +198,7 @@ const count = ref(props.initial)
 </style>
 </code></pre>
 
-Both <code><script setup></code> and Options API (<code><script></code>) are supported. <code><style scoped></code> works as expected.
+Both <code>&lt;script setup&gt;</code> and Options API (<code>&lt;script&gt;</code>) are supported. <code>&lt;style scoped&gt;</code> works as expected.
 
 <strong>2. Use <code>@islands</code> in your template:</strong>
 
@@ -215,7 +215,7 @@ Both <code><script setup></code> and Options API (<code><script></code>) are sup
 @end
 </code></pre>
 
-The <code>@islands</code> directive emits <code><script src="/islands.js"></script></code>. You can pass a custom path: <code>@islands('/assets/islands.js')</code>.
+The <code>@islands</code> directive emits <code>&lt;script src="/islands.js"&gt;&lt;/script&gt;</code>. You can pass a custom path: <code>@islands('/assets/islands.js')</code>.
 
 <strong>3. Build islands before server start:</strong>
 

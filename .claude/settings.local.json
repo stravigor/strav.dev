@@ -26,7 +26,14 @@
       "Bash(then echo \"Directory $dir exists:\")",
       "Bash(ls \"$dir\"/*.strav)",
       "Bash(test -f \"quick-start-guide.strav\")",
-      "Read(//Users/liva/Desktop/Screenshots/**)"
+      "Read(//Users/liva/Desktop/Screenshots/**)",
+      "Bash(for pkg in /Users/liva/Projects/Strav.dev/sources/strav/packages/*/package.json)",
+      "Bash(grep '\"\"\"\"name\"\"\"\"' \"$pkg\")",
+      "Bash(for dir in */)",
+      "Bash(do if [ -f \"$dir/package.json\" ])",
+      "Bash(then echo \"=== $dir ===\")",
+      "Bash(grep '\"\"\"\"name\"\"\"\"' \"$dir/package.json\")",
+      "Bash(git add -A)"
     ],
     "deny": [],
     "ask": []

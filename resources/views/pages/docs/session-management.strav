@@ -6,7 +6,7 @@
 <article class="doc-content">
 <h1>Session</h1>
 
-The session module provides a unified server-side session backed by a PostgreSQL database row and an HTTP-only cookie. A single <code>Session</code> class handles both anonymous visitors and authenticated users.
+The session module provides a unified server-side session backed by a database row and an HTTP-only cookie. A single <code>Session</code> class handles both anonymous visitors and authenticated users.
 
 <h2>Setup</h2>
 
@@ -17,7 +17,7 @@ The session module provides a unified server-side session backed by a PostgreSQL
 app.use(new SessionProvider())
 </code></pre>
 
-The <code>SessionProvider</code> registers <code>SessionManager</code> as a singleton and creates the <code>_stravigor_sessions</code> table automatically. It depends on the <code>database</code> provider.
+The <code>SessionProvider</code> registers <code>SessionManager</code> as a singleton and creates the <code>_strav_sessions</code> table automatically. It depends on the <code>database</code> provider.
 
 <p>Options:</p>
 
@@ -230,7 +230,7 @@ Login POST:    session() → csrf() → handler          (anonymous CSRF works!)
 
 <h2>Database table</h2>
 
-<strong>_stravigor_sessions</strong>
+<strong>_strav_sessions</strong>
 
 <table class="doc-table">
   <thead>

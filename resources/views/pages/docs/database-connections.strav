@@ -6,7 +6,7 @@
 <article class="doc-content">
 <h1>Database</h1>
 
-<p>The database module provides the PostgreSQL connection wrapper, database introspection, and the full migration system.</p>
+<p>The database module provides SQL database connectivity via Bun.sql (defaults to PostgreSQL), database introspection, and a full migration system. While PostgreSQL is the default and best-supported database, Bun.sql also supports other SQL databases like MySQL and SQLite.</p>
 
 <h2>Database connection</h2>
 
@@ -183,7 +183,7 @@ const statements = generator.generate(diff)
 // statements.down — SQL to revert the migration
 </code></pre>
 
-Important: serial columns (<code>serial</code>, <code>smallserial</code>, <code>bigserial</code>) are handled specially — no <code>NOT NULL</code> or <code>DEFAULT</code> is emitted for them, as PostgreSQL manages this automatically.
+Important: PostgreSQL serial columns (<code>serial</code>, <code>smallserial</code>, <code>bigserial</code>) are handled specially when using PostgreSQL — no <code>NOT NULL</code> or <code>DEFAULT</code> is emitted for them, as PostgreSQL manages this automatically.
 
 <h2>Seeding</h2>
 

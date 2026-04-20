@@ -41,7 +41,7 @@ router.put('/users/:id',
 
 <li>Reads the authenticated user from <code>ctx.get('user')</code> — returns <strong>401</strong> if missing.</li>
 <li>If <code>loadResource</code> is provided, calls it and stores the result in <code>ctx.set('resource', ...)</code>.</li>
-<li>Calls <code>policy<a href="user, resource?">method</a></code> — returns <strong>403</strong> if the method doesn't exist or returns falsy.</li>
+<li>Calls <code>policy[method](user, resource?)</code> — returns <strong>403</strong> if the method doesn't exist or returns falsy.</li>
 <li>Calls <code>next()</code> on success.</li>
 
 <h3>Without a resource</h3>

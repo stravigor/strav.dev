@@ -210,20 +210,20 @@ Templates live under <code>views/emails/</code> (or wherever <code>templatePrefi
   .send()
 </code></pre>
 
-The <code><style></code> block in the layout is automatically inlined into <code>style=""</code> attributes on each element before sending, so the email renders correctly in all clients.
+The <code>&lt;style&gt;</code> block in the layout is automatically inlined into <code>style=""</code> attributes on each element before sending, so the email renders correctly in all clients.
 
 <h2>CSS inlining</h2>
 
-Most email clients strip <code><style></code> blocks and ignore external stylesheets. The mail module automatically inlines CSS using <a href="https://github.com/Automattic/juice">juice</a> after template rendering.
+Most email clients strip <code>&lt;style&gt;</code> blocks and ignore external stylesheets. The mail module automatically inlines CSS using <a href="https://github.com/Automattic/juice">juice</a> after template rendering.
 
 This is enabled by default (<code>inlineCss: true</code> in config). The inliner:
 
 <ul>
-<li>Converts <code><style></code> rules to inline <code>style=""</code> attributes</li>
+<li>Converts <code>&lt;style&gt;</code> rules to inline <code>style=""</code> attributes</li>
 <li>Preserves <code>@media</code> queries (for responsive email)</li>
 <li>Preserves <code>@font-face</code> and <code>@keyframes</code></li>
 <li>Applies <code>width</code>/<code>height</code> as HTML attributes (Outlook compatibility)</li>
-<li>Removes <code><style></code> tags after inlining</li>
+<li>Removes <code>&lt;style&gt;</code> tags after inlining</li>
 </ul>
 
 <p>To disable:</p>
@@ -246,14 +246,14 @@ export default {
 }
 </code></pre>
 
-When enabled, the mail module extracts class names from the rendered HTML, compiles them to CSS via Tailwind's programmatic API, injects a <code><style></code> block, then inlines everything with juice.
+When enabled, the mail module extracts class names from the rendered HTML, compiles them to CSS via Tailwind's programmatic API, injects a <code>&lt;style&gt;</code> block, then inlines everything with juice.
 
 Tailwind is <strong>not</strong> a dependency of the framework — it is dynamically imported. Install it in your project if you want this feature:
 
 <pre><code class="language-bash">bun add tailwindcss
 </code></pre>
 
-If <code>tailwindcss</code> is not installed, the Tailwind step is silently skipped and only regular <code><style></code> blocks are inlined.
+If <code>tailwindcss</code> is not installed, the Tailwind step is silently skipped and only regular <code>&lt;style&gt;</code> blocks are inlined.
 
 <h2>Transports</h2>
 

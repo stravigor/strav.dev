@@ -11,11 +11,7 @@
   <p>Before installing Strav, ensure your system meets these requirements:</p>
 
   <ul>
-    <li><strong>Bun</strong> v1.0 or higher</li>
-    <li><strong>Node.js</strong> v18+ (for some development tools)</li>
-    <li><strong>PostgreSQL</strong> v12+ (for database features)</li>
-    <li><strong>Git</strong> (for version control)</li>
-    <li><strong>Operating System:</strong> macOS, Linux, or Windows with WSL2</li>
+    <li><strong>Bun</strong> v1.3.9+ or higher</li>
   </ul>
 
   <h2>Installing Bun</h2>
@@ -37,7 +33,7 @@ scoop install bun</code></pre>
   <h3>Verify Installation</h3>
 
   <pre><code class="language-bash">bun --version
-# Should output: 1.0.0 or higher</code></pre>
+# Should output: 1.3.9 or higher</code></pre>
 
   <h2>Installing Strav</h2>
 
@@ -72,45 +68,7 @@ bun add @strav/kernel @strav/http @strav/database @strav/view
 # Install development dependencies
 bun add -d @types/bun typescript</code></pre>
 
-  <h3>Option 3: Clone a Starter Template</h3>
 
-  <pre><code class="language-bash"># Clone the official starter template
-git clone https://github.com/stravphp/starter my-app
-cd my-app
-
-# Install dependencies
-bun install</code></pre>
-
-  <h2>Database Setup</h2>
-
-  <h3>Installing PostgreSQL</h3>
-
-  <h4>macOS</h4>
-
-  <pre><code class="language-bash"># Using Homebrew
-brew install postgresql@14
-brew services start postgresql@14
-
-# Using Postgres.app (recommended for development)
-# Download from: https://postgresapp.com/</code></pre>
-
-  <h4>Ubuntu/Debian</h4>
-
-  <pre><code class="language-bash">sudo apt update
-sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql</code></pre>
-
-  <h4>Windows</h4>
-
-  <p>Download the installer from <a href="https://www.postgresql.org/download/windows/">PostgreSQL official website</a></p>
-
-  <h3>Creating a Database</h3>
-
-  <pre><code class="language-bash"># Create a new database
-createdb my_app_db
-
-# Or using psql
-psql -U postgres -c "CREATE DATABASE my_app_db;"</code></pre>
 
   <h2>Environment Configuration</h2>
 
@@ -168,12 +126,9 @@ bun run dev
 bun add @strav/oauth2
 
 # Social authentication providers
-bun add @strav/social
+bun add @strav/social</code></pre>
 
-# Two-factor authentication
-bun add @strav/auth-2fa</code></pre>
-
-  <h3>AI & Machine Learning</h3>
+  <h3>AI</h3>
 
   <pre><code class="language-bash"># AI capabilities with multiple providers
 bun add @strav/brain
@@ -187,24 +142,12 @@ bun add @strav/rag</code></pre>
   <h3>Search & Data</h3>
 
   <pre><code class="language-bash"># Full-text search (Meilisearch, Typesense, Algolia)
-bun add @strav/search
-
-# Redis cache and session driver
-bun add @strav/redis
-
-# MongoDB support
-bun add @strav/mongo</code></pre>
+bun add @strav/search</code></pre>
 
   <h3>Communication</h3>
 
-  <pre><code class="language-bash"># Advanced mail features
-bun add @strav/mail-advanced
-
-# SMS notifications (Twilio, Vonage)
-bun add @strav/sms
-
-# Push notifications
-bun add @strav/push</code></pre>
+  <pre><code class="language-bash"># Email and notifications (mail, SMS via Twilio/Vonage, broadcasting)
+bun add @strav/signal</code></pre>
 
   <h3>Development Tools</h3>
 
@@ -260,42 +203,15 @@ bun add -d @strav/faker</code></pre>
   "exclude": ["node_modules"]
 }</code></pre>
 
-  <h2>Troubleshooting</h2>
-
-  <h3>Common Issues</h3>
-
-  <div class="troubleshooting-item">
-    <h4>Bun command not found</h4>
-    <p>Add Bun to your PATH:</p>
-    <pre><code class="language-bash">echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc</code></pre>
-  </div>
-
-  <div class="troubleshooting-item">
-    <h4>Database connection failed</h4>
-    <p>Check PostgreSQL is running:</p>
-    <pre><code class="language-bash"># macOS
-brew services list | grep postgresql
-
-# Linux
-systemctl status postgresql</code></pre>
-  </div>
-
-  <div class="troubleshooting-item">
-    <h4>Port 3000 already in use</h4>
-    <p>Change the port in your <code>.env</code> file:</p>
-    <pre><code class="language-bash">APP_PORT=3001</code></pre>
-  </div>
-
   <h2>Next Steps</h2>
 
   <p>Now that Strav is installed, you're ready to:</p>
 
   <ul>
     <li><a href="/docs/getting-started">Follow the Getting Started guide</a></li>
-    <li><a href="/docs/configuration">Learn about configuration</a></li>
-    <li><a href="/docs/core/kernel/core">Understand the core concepts</a></li>
-    <li><a href="/docs/tools/spring">Use the Spring generator</a></li>
+    <li><a href="/docs/application-configuration">Learn about configuration</a></li>
+    <li><a href="/docs/dependency-injection-container">Understand the core concepts</a></li>
+    <li><a href="/docs/spring-code-generator">Use the Spring generator</a></li>
   </ul>
 
   <!-- Navigation -->

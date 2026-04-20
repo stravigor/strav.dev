@@ -516,7 +516,7 @@ The default driver. Uses PostgreSQL with the pgvector extension. Stores all coll
   content TEXT NOT NULL,
   metadata JSONB DEFAULT '{}',
   embedding vector(1536),
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW()  -- PostgreSQL syntax
 );
 </code></pre>
 
