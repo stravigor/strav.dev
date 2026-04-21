@@ -16,19 +16,7 @@
 
   <h2>Installing Bun</h2>
 
-  <p>Strav is built for the Bun runtime. Install Bun using the official installer:</p>
-
-  <h3>macOS and Linux</h3>
-
-  <pre><code class="language-bash">curl -fsSL https://bun.sh/install | bash</code></pre>
-
-  <h3>Windows</h3>
-
-  <pre><code class="language-bash"># Using PowerShell (as Administrator)
-powershell -c "irm bun.sh/install.ps1 | iex"
-
-# Or using Scoop
-scoop install bun</code></pre>
+  <p>Strav is built for the Bun runtime. See the <a href="https://bun.com/docs/installation">official Bun installation guide</a> for instructions on your platform.</p>
 
   <h3>Verify Installation</h3>
 
@@ -116,108 +104,19 @@ bun run dev
 
   <p>Visit <code>http://localhost:3000</code> in your browser. You should see the Strav welcome page.</p>
 
-  <h2>Installing Additional Packages</h2>
-
-  <p>Strav has many optional packages you can install as needed:</p>
-
-  <h3>Authentication & Security</h3>
-
-  <pre><code class="language-bash"># OAuth2 server implementation
-bun add @strav/oauth2
-
-# Social authentication providers
-bun add @strav/social</code></pre>
-
-  <h3>AI</h3>
-
-  <pre><code class="language-bash"># AI capabilities with multiple providers
-bun add @strav/brain
-
-# Model Context Protocol support
-bun add @strav/mcp
-
-# RAG (Retrieval-Augmented Generation)
-bun add @strav/rag</code></pre>
-
-  <h3>Search & Data</h3>
-
-  <pre><code class="language-bash"># Full-text search (Meilisearch, Typesense, Algolia)
-bun add @strav/search</code></pre>
-
-  <h3>Communication</h3>
-
-  <pre><code class="language-bash"># Email and notifications (mail, SMS via Twilio/Vonage, broadcasting)
-bun add @strav/signal</code></pre>
-
-  <h3>Development Tools</h3>
-
-  <pre><code class="language-bash"># Development toolbar and debugging
-bun add -d @strav/devtools
-
-# Testing utilities and factories
-bun add -d @strav/testing
-
-# Faker data generation
-bun add -d @strav/faker</code></pre>
-
-  <h2>IDE Setup</h2>
-
-  <h3>VS Code</h3>
-
-  <p>Install recommended extensions for the best development experience:</p>
-
-  <pre><code class="language-json">{
-  "recommendations": [
-    "oven.bun-vscode",
-    "dbaeumer.vscode-eslint",
-    "esbenp.prettier-vscode",
-    "bradlc.vscode-tailwindcss",
-    "Vue.volar"
-  ]
-}</code></pre>
-
-  <h3>TypeScript Configuration</h3>
-
-  <p>Ensure your <code>tsconfig.json</code> is properly configured:</p>
-
-  <pre><code class="language-json">{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "lib": ["ES2022"],
-    "moduleResolution": "bundler",
-    "types": ["bun-types"],
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "esModuleInterop": true,
-    "paths": {
-      "@/*": ["./app/*"],
-      "@config/*": ["./config/*"],
-      "@routes/*": ["./routes/*"]
-    }
-  },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
-}</code></pre>
-
   <h2>Next Steps</h2>
 
   <p>Now that Strav is installed, you're ready to:</p>
 
   <ul>
-    <li><a href="/docs/getting-started">Follow the Getting Started guide</a></li>
-    <li><a href="/docs/application-configuration">Learn about configuration</a></li>
     <li><a href="/docs/dependency-injection-container">Understand the core concepts</a></li>
-    <li><a href="/docs/spring-code-generator">Use the Spring generator</a></li>
+    <li><a href="/docs/application-configuration">Learn about configuration</a></li>
   </ul>
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <a href="/docs/getting-started" class="prev">← Getting Started</a>
-    <a href="/docs/configuration" class="next">Configuration →</a>
+    <a href="/docs" class="prev">← Getting Started</a>
+    <a href="/docs/application-configuration" class="next">Configuration →</a>
   </div>
 </article>
 
