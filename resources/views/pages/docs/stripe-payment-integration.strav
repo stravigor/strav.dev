@@ -371,13 +371,36 @@ router.post('/stripe/webhook', stripeWebhook())
 
 <p>The webhook handler automatically processes these events to keep local records in sync:</p>
 
-<p>| Event | Action |</p>
-<p>|-------|--------|</p>
-| <code>customer.updated</code> | Syncs default payment method to local <code>customer</code> record |
-| <code>customer.deleted</code> | Deletes local customer and all subscription records |
-| <code>customer.subscription.created</code> | Creates local subscription + items (for externally created subs) |
-| <code>customer.subscription.updated</code> | Syncs status, ends_at, price, quantity, trial, and items |
-| <code>customer.subscription.deleted</code> | Marks local subscription as canceled |
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>customer.updated</code></td>
+<td>Syncs default payment method to local <code>customer</code> record</td>
+</tr>
+<tr>
+<td><code>customer.deleted</code></td>
+<td>Deletes local customer and all subscription records</td>
+</tr>
+<tr>
+<td><code>customer.subscription.created</code></td>
+<td>Creates local subscription + items (for externally created subs)</td>
+</tr>
+<tr>
+<td><code>customer.subscription.updated</code></td>
+<td>Syncs status, ends_at, price, quantity, trial, and items</td>
+</tr>
+<tr>
+<td><code>customer.subscription.deleted</code></td>
+<td>Marks local subscription as canceled</td>
+</tr>
+</tbody>
+</table>
 
 <h3>Custom event handlers</h3>
 
@@ -482,89 +505,359 @@ try {
 
 <h3>customer</h3>
 
-<p>| Column | Type | Description |</p>
-<p>|--------|------|-------------|</p>
-| <code>id</code> | <code>serial</code> | Primary key |
-| <code>user_id</code> | <code>integer</code> | FK to user table |
-| <code>stripe_id</code> | <code>varchar</code> | Stripe customer ID (<code>cus_xxx</code>) |
-| <code>pm_type</code> | <code>varchar</code> | Default payment method type |
-| <code>pm_last_four</code> | <code>varchar(4)</code> | Last 4 digits of default card |
-| <code>trial_ends_at</code> | <code>timestamp</code> | Customer-level trial expiry |
-| <code>created_at</code> | <code>timestamp</code> | Row creation time |
-| <code>updated_at</code> | <code>timestamp</code> | Last update time |
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>serial</code></td>
+<td>Primary key</td>
+</tr>
+<tr>
+<td><code>user_id</code></td>
+<td><code>integer</code></td>
+<td>FK to user table</td>
+</tr>
+<tr>
+<td><code>stripe_id</code></td>
+<td><code>varchar</code></td>
+<td>Stripe customer ID (<code>cus_xxx</code>)</td>
+</tr>
+<tr>
+<td><code>pm_type</code></td>
+<td><code>varchar</code></td>
+<td>Default payment method type</td>
+</tr>
+<tr>
+<td><code>pm_last_four</code></td>
+<td><code>varchar(4)</code></td>
+<td>Last 4 digits of default card</td>
+</tr>
+<tr>
+<td><code>trial_ends_at</code></td>
+<td><code>timestamp</code></td>
+<td>Customer-level trial expiry</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td><code>timestamp</code></td>
+<td>Row creation time</td>
+</tr>
+<tr>
+<td><code>updated_at</code></td>
+<td><code>timestamp</code></td>
+<td>Last update time</td>
+</tr>
+</tbody>
+</table>
 
 <h3>subscription</h3>
 
-<p>| Column | Type | Description |</p>
-<p>|--------|------|-------------|</p>
-| <code>id</code> | <code>serial</code> | Primary key |
-| <code>user_id</code> | <code>integer</code> | FK to user table |
-| <code>name</code> | <code>varchar</code> | Subscription name (<code>'default'</code>, <code>'pro'</code>, etc.) |
-| <code>stripe_id</code> | <code>varchar</code> | Stripe subscription ID (<code>sub_xxx</code>) |
-| <code>stripe_status</code> | <code>varchar</code> | Stripe status (active, trialing, canceled, etc.) |
-| <code>stripe_price_id</code> | <code>varchar</code> | Primary price ID |
-| <code>quantity</code> | <code>integer</code> | Seat count or unit quantity |
-| <code>trial_ends_at</code> | <code>timestamp</code> | Trial expiry |
-| <code>ends_at</code> | <code>timestamp</code> | Set when canceled (grace period end) |
-| <code>created_at</code> | <code>timestamp</code> | Row creation time |
-| <code>updated_at</code> | <code>timestamp</code> | Last update time |
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>serial</code></td>
+<td>Primary key</td>
+</tr>
+<tr>
+<td><code>user_id</code></td>
+<td><code>integer</code></td>
+<td>FK to user table</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td><code>varchar</code></td>
+<td>Subscription name (<code>'default'</code>, <code>'pro'</code>, etc.)</td>
+</tr>
+<tr>
+<td><code>stripe_id</code></td>
+<td><code>varchar</code></td>
+<td>Stripe subscription ID (<code>sub_xxx</code>)</td>
+</tr>
+<tr>
+<td><code>stripe_status</code></td>
+<td><code>varchar</code></td>
+<td>Stripe status (active, trialing, canceled, etc.)</td>
+</tr>
+<tr>
+<td><code>stripe_price_id</code></td>
+<td><code>varchar</code></td>
+<td>Primary price ID</td>
+</tr>
+<tr>
+<td><code>quantity</code></td>
+<td><code>integer</code></td>
+<td>Seat count or unit quantity</td>
+</tr>
+<tr>
+<td><code>trial_ends_at</code></td>
+<td><code>timestamp</code></td>
+<td>Trial expiry</td>
+</tr>
+<tr>
+<td><code>ends_at</code></td>
+<td><code>timestamp</code></td>
+<td>Set when canceled (grace period end)</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td><code>timestamp</code></td>
+<td>Row creation time</td>
+</tr>
+<tr>
+<td><code>updated_at</code></td>
+<td><code>timestamp</code></td>
+<td>Last update time</td>
+</tr>
+</tbody>
+</table>
 
 <h3>subscription_item</h3>
 
-<p>| Column | Type | Description |</p>
-<p>|--------|------|-------------|</p>
-| <code>id</code> | <code>serial</code> | Primary key |
-| <code>subscription_id</code> | <code>integer</code> | FK to subscription table |
-| <code>stripe_id</code> | <code>varchar</code> | Stripe subscription item ID (<code>si_xxx</code>) |
-| <code>stripe_product_id</code> | <code>varchar</code> | Stripe product ID |
-| <code>stripe_price_id</code> | <code>varchar</code> | Stripe price ID |
-| <code>quantity</code> | <code>integer</code> | Item quantity |
-| <code>created_at</code> | <code>timestamp</code> | Row creation time |
-| <code>updated_at</code> | <code>timestamp</code> | Last update time |
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>serial</code></td>
+<td>Primary key</td>
+</tr>
+<tr>
+<td><code>subscription_id</code></td>
+<td><code>integer</code></td>
+<td>FK to subscription table</td>
+</tr>
+<tr>
+<td><code>stripe_id</code></td>
+<td><code>varchar</code></td>
+<td>Stripe subscription item ID (<code>si_xxx</code>)</td>
+</tr>
+<tr>
+<td><code>stripe_product_id</code></td>
+<td><code>varchar</code></td>
+<td>Stripe product ID</td>
+</tr>
+<tr>
+<td><code>stripe_price_id</code></td>
+<td><code>varchar</code></td>
+<td>Stripe price ID</td>
+</tr>
+<tr>
+<td><code>quantity</code></td>
+<td><code>integer</code></td>
+<td>Item quantity</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td><code>timestamp</code></td>
+<td>Row creation time</td>
+</tr>
+<tr>
+<td><code>updated_at</code></td>
+<td><code>timestamp</code></td>
+<td>Last update time</td>
+</tr>
+</tbody>
+</table>
 
 <h3>receipt</h3>
 
-<p>| Column | Type | Description |</p>
-<p>|--------|------|-------------|</p>
-| <code>id</code> | <code>serial</code> | Primary key |
-| <code>user_id</code> | <code>integer</code> | FK to user table |
-| <code>stripe_id</code> | <code>varchar</code> | Stripe payment intent ID (<code>pi_xxx</code>) |
-| <code>amount</code> | <code>integer</code> | Amount in smallest currency unit |
-| <code>currency</code> | <code>varchar</code> | Currency code |
-| <code>description</code> | <code>text</code> | Charge description |
-| <code>receipt_url</code> | <code>text</code> | Stripe receipt URL |
-| <code>created_at</code> | <code>timestamp</code> | Row creation time |
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>serial</code></td>
+<td>Primary key</td>
+</tr>
+<tr>
+<td><code>user_id</code></td>
+<td><code>integer</code></td>
+<td>FK to user table</td>
+</tr>
+<tr>
+<td><code>stripe_id</code></td>
+<td><code>varchar</code></td>
+<td>Stripe payment intent ID (<code>pi_xxx</code>)</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td><code>integer</code></td>
+<td>Amount in smallest currency unit</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td><code>varchar</code></td>
+<td>Currency code</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td><code>text</code></td>
+<td>Charge description</td>
+</tr>
+<tr>
+<td><code>receipt_url</code></td>
+<td><code>text</code></td>
+<td>Stripe receipt URL</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td><code>timestamp</code></td>
+<td>Row creation time</td>
+</tr>
+</tbody>
+</table>
 
 <h2>SubscriptionData</h2>
 
 All subscription methods return or accept a <code>SubscriptionData</code> object:
 
-<p>| Field | Type | Description |</p>
-<p>|-------|------|-------------|</p>
-| <code>id</code> | <code>number</code> | Local primary key |
-| <code>userId</code> | <code>string \| number</code> | Foreign key to user table |
-| <code>name</code> | <code>string</code> | Subscription name |
-| <code>stripeId</code> | <code>string</code> | Stripe subscription ID |
-| <code>stripeStatus</code> | <code>string</code> | Stripe status |
-| <code>stripePriceId</code> | <code>string \| null</code> | Primary price ID |
-| <code>quantity</code> | <code>number \| null</code> | Quantity |
-| <code>trialEndsAt</code> | <code>Date \| null</code> | Trial expiry |
-| <code>endsAt</code> | <code>Date \| null</code> | Grace period end |
-| <code>createdAt</code> | <code>Date</code> | Row creation time |
-| <code>updatedAt</code> | <code>Date</code> | Last update time |
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>number</code></td>
+<td>Local primary key</td>
+</tr>
+<tr>
+<td><code>userId</code></td>
+<td><code>string | number</code></td>
+<td>Foreign key to user table</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td><code>string</code></td>
+<td>Subscription name</td>
+</tr>
+<tr>
+<td><code>stripeId</code></td>
+<td><code>string</code></td>
+<td>Stripe subscription ID</td>
+</tr>
+<tr>
+<td><code>stripeStatus</code></td>
+<td><code>string</code></td>
+<td>Stripe status</td>
+</tr>
+<tr>
+<td><code>stripePriceId</code></td>
+<td><code>string | null</code></td>
+<td>Primary price ID</td>
+</tr>
+<tr>
+<td><code>quantity</code></td>
+<td><code>number | null</code></td>
+<td>Quantity</td>
+</tr>
+<tr>
+<td><code>trialEndsAt</code></td>
+<td><code>Date | null</code></td>
+<td>Trial expiry</td>
+</tr>
+<tr>
+<td><code>endsAt</code></td>
+<td><code>Date | null</code></td>
+<td>Grace period end</td>
+</tr>
+<tr>
+<td><code>createdAt</code></td>
+<td><code>Date</code></td>
+<td>Row creation time</td>
+</tr>
+<tr>
+<td><code>updatedAt</code></td>
+<td><code>Date</code></td>
+<td>Last update time</td>
+</tr>
+</tbody>
+</table>
 
 <h2>CustomerData</h2>
 
-<p>| Field | Type | Description |</p>
-<p>|-------|------|-------------|</p>
-| <code>id</code> | <code>number</code> | Local primary key |
-| <code>userId</code> | <code>string \| number</code> | Foreign key to user table |
-| <code>stripeId</code> | <code>string</code> | Stripe customer ID |
-| <code>pmType</code> | <code>string \| null</code> | Default payment method type |
-| <code>pmLastFour</code> | <code>string \| null</code> | Last 4 digits |
-| <code>trialEndsAt</code> | <code>Date \| null</code> | Customer-level trial expiry |
-| <code>createdAt</code> | <code>Date</code> | Row creation time |
-| <code>updatedAt</code> | <code>Date</code> | Last update time |
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>number</code></td>
+<td>Local primary key</td>
+</tr>
+<tr>
+<td><code>userId</code></td>
+<td><code>string | number</code></td>
+<td>Foreign key to user table</td>
+</tr>
+<tr>
+<td><code>stripeId</code></td>
+<td><code>string</code></td>
+<td>Stripe customer ID</td>
+</tr>
+<tr>
+<td><code>pmType</code></td>
+<td><code>string | null</code></td>
+<td>Default payment method type</td>
+</tr>
+<tr>
+<td><code>pmLastFour</code></td>
+<td><code>string | null</code></td>
+<td>Last 4 digits</td>
+</tr>
+<tr>
+<td><code>trialEndsAt</code></td>
+<td><code>Date | null</code></td>
+<td>Customer-level trial expiry</td>
+</tr>
+<tr>
+<td><code>createdAt</code></td>
+<td><code>Date</code></td>
+<td>Row creation time</td>
+</tr>
+<tr>
+<td><code>updatedAt</code></td>
+<td><code>Date</code></td>
+<td>Last update time</td>
+</tr>
+</tbody>
+</table>
 
 
   <!-- Navigation -->
