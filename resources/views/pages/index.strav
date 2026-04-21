@@ -5,9 +5,21 @@
     <h1>Strav Framework</h1>
     <h3>The Modern, AI-First Backend Framework for Bun</h3>
     <p>
-      Strav is a comprehensive, modular framework built from the ground up for the Bun runtime. 
+      Strav is a comprehensive, modular framework built from the ground up for the Bun runtime.
       Designed for modern applications that need enterprise-grade features, AI capabilities, and exceptional developer experience.
     </p>
+
+    <div class="install-section">
+      <h4>Quick Start</h4>
+      <div class="install-command">
+        <code>bunx @strav/spring my-app</code>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText('bunx @strav/spring my-app')">Copy</button>
+      </div>
+      <p class="install-note">
+        Creates a new Strav project with interactive template selection.
+        <a href="/docs/quick-start-guide">View full guide →</a>
+      </p>
+    </div>
   </div>
   <div class="features">
     <div class="feature">
