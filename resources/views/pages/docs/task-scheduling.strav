@@ -15,7 +15,7 @@ Define your tasks in <code>app/schedules.ts</code>:
 <pre><code class="language-typescript">import { Scheduler } from '@strav/queue'
 
 Scheduler.task('cleanup:sessions', async () => {
-  await db.sql<code>DELETE FROM "_strav_sessions" WHERE "expires_at" < CURRENT_TIMESTAMP</code>
+  await db.sql`DELETE FROM "_strav_sessions" WHERE "expires_at" < CURRENT_TIMESTAMP`
 }).hourly()
 
 Scheduler.task('reports:daily', async () => {
@@ -44,12 +44,12 @@ Scheduler.task('task-name', async () => {
 
 <h3>Minute-based</h3>
 
-<pre><code class="language-typescript">.everyMinute()            // <em> </em> <em> </em> *
-.everyTwoMinutes()        // <em>/2 </em> <em> </em> *
-.everyFiveMinutes()       // <em>/5 </em> <em> </em> *
-.everyTenMinutes()        // <em>/10 </em> <em> </em> *
-.everyFifteenMinutes()    // <em>/15 </em> <em> </em> *
-.everyThirtyMinutes()     // <em>/30 </em> <em> </em> *
+<pre><code class="language-typescript">.everyMinute()            // * * * * *
+.everyTwoMinutes()        // */2 * * * *
+.everyFiveMinutes()       // */5 * * * *
+.everyTenMinutes()        // */10 * * * *
+.everyFifteenMinutes()    // */15 * * * *
+.everyThirtyMinutes()     // */30 * * * *
 </code></pre>
 
 <h3>Hourly</h3>
@@ -84,11 +84,11 @@ Day names are case-insensitive and accept full names or abbreviations: <code>mon
 
 <p>For complex schedules, use a standard 5-field cron expression:</p>
 
-<pre><code class="language-typescript">.cron('<em>/10 8-17 </em> * 1-5')   // every 10 min, 8am–5pm, weekdays
-.cron('0 0 1,15 <em> </em>')        // 1st and 15th at midnight
+<pre><code class="language-typescript">.cron('*/10 8-17 * * 1-5')   // every 10 min, 8am–5pm, weekdays
+.cron('0 0 1,15 * *')        // 1st and 15th at midnight
 </code></pre>
 
-Supported syntax: <code><em></code>, exact (<code>5</code>), range (<code>1-5</code>), list (<code>1,3,5</code>), step (<code></em>/10</code>), range+step (<code>1-30/5</code>).
+Supported syntax: <code>*</code>, exact (<code>5</code>), range (<code>1-5</code>), list (<code>1,3,5</code>), step (<code>*/10</code>), range+step (<code>1-30/5</code>).
 
 <h3>Sporadic (human-like)</h3>
 
@@ -130,6 +130,33 @@ console.log(schedule.nextRunAt)  // Date
 
 <p>If the task is still running at the next tick, it is skipped.</p>
 
+<h3>Immediate execution</h3>
+
+<p>Execute a task immediately upon registration, then follow the configured schedule:</p>
+
+<pre><code class="language-typescript">Scheduler.task('cache:warm', async () => {
+  await warmApplicationCache()
+}).everyFifteenMinutes()
+  .runImmediately()
+
+Scheduler.task('bootstrap:data', async () => {
+  await ensureRequiredData()
+}).daily()
+  .runImmediately()
+  .withoutOverlapping()
+</code></pre>
+
+<p>The task executes immediately when <code>runImmediately()</code> is called, then runs according to its schedule. Useful for:</p>
+
+<ul>
+<li>Bootstrap tasks that need to run on deployment</li>
+<li>Cache warming to ensure good performance from start</li>
+<li>Data initialization or health checks</li>
+<li>Any task that should run at startup, then periodically</li>
+</ul>
+
+<p>Errors during immediate execution are caught and logged but won't crash the application.</p>
+
 <h2>Running the scheduler</h2>
 
 <h3>CLI</h3>
@@ -141,12 +168,55 @@ console.log(schedule.nextRunAt)  // Date
 
 <h3>How it works</h3>
 
+<ul>
 <li>The runner sleeps until the next minute boundary (<code>XX:XX:00</code>).</li>
 <li>Checks which tasks are due using <code>Scheduler.due(now)</code>.</li>
 <li>Executes all due tasks concurrently via <code>Promise.allSettled</code> — one failing task doesn't block others.</li>
 <li>Repeats until stopped.</li>
+</ul>
 
 <p>Errors are logged to stderr but never crash the scheduler process.</p>
+
+<h2>Manual execution</h2>
+
+<p>Execute any registered task immediately by name, outside the scheduled times:</p>
+
+<pre><code class="language-typescript">// Execute a task manually
+await Scheduler.runNow('cleanup:sessions')
+
+// Execute multiple tasks
+await Scheduler.runNow('reports:daily')
+await Scheduler.runNow('cache:prune')
+</code></pre>
+
+<h3>Error handling</h3>
+
+<p>The <code>runNow</code> method throws errors for debugging and control flow:</p>
+
+<pre><code class="language-typescript">try {
+  await Scheduler.runNow('nonexistent-task')
+} catch (error) {
+  console.error(error.message)
+  // "Task "nonexistent-task" not found. Available tasks: cleanup:sessions, reports:daily, cache:prune"
+}
+
+try {
+  await Scheduler.runNow('reports:daily')
+} catch (error) {
+  console.error('Report generation failed:', error.message)
+  // Handle the failure (retry, alert, etc.)
+}
+</code></pre>
+
+<h3>Use cases</h3>
+
+<ul>
+<li><strong>Debugging:</strong> Test tasks during development</li>
+<li><strong>Manual operations:</strong> Run reports or cleanup on demand</li>
+<li><strong>Emergency tasks:</strong> Execute critical tasks outside schedule</li>
+<li><strong>Testing:</strong> Verify task behavior in tests</li>
+<li><strong>Deployment:</strong> Run tasks after deployments or configuration changes</li>
+</ul>
 
 <h2>Cron parser</h2>
 
@@ -154,7 +224,7 @@ console.log(schedule.nextRunAt)  // Date
 
 <pre><code class="language-typescript">import { parseCron, cronMatches, nextCronDate } from '@strav/queue'
 
-const cron = parseCron('0 2 <em> </em> 1')           // Mondays at 2am
+const cron = parseCron('0 2 * * 1')           // Mondays at 2am
 cronMatches(cron, new Date())                  // true/false
 const next = nextCronDate(cron, new Date())    // next matching Date (UTC)
 </code></pre>
@@ -170,10 +240,10 @@ import { Queue } from '@strav/queue'
 
 // Cleanup expired sessions every hour
 Scheduler.task('cleanup:sessions', async () => {
-  const result = await db.sql<code>
+  const result = await db.sql`
     DELETE FROM "_strav_sessions" WHERE "expires_at" < CURRENT_TIMESTAMP
-  </code>
-  console.log(<code>Cleaned ${result.count} expired sessions</code>)
+  `
+  console.log(`Cleaned ${result.count} expired sessions`)
 }).hourly()
 
 // Generate reports at 2am, prevent overlap
@@ -186,7 +256,7 @@ Scheduler.task('reports:daily', async () => {
 // Prune cache every 6 hours
 Scheduler.task('cache:prune', async () => {
   await cache.flush()
-}).cron('0 <em>/6 </em> <em> </em>')
+}).cron('0 */6 * * *')
 
 // Send weekly digest on Monday mornings
 Scheduler.task('emails:digest', async () => {
@@ -200,6 +270,22 @@ Scheduler.task('emails:digest', async () => {
 Scheduler.task('scrape:competitors', async () => {
   await scrapeCompetitorPrices()
 }).sporadically(10, 45, TimeUnit.Minutes)
+  .withoutOverlapping()
+
+// Warm cache immediately on startup, then every 4 hours
+Scheduler.task('cache:warm', async () => {
+  await cache.set('app:config', await loadConfiguration())
+  await cache.set('app:features', await loadFeatureFlags())
+  console.log('Application cache warmed')
+}).cron('0 */4 * * *')
+  .runImmediately()
+
+// Bootstrap essential data on startup
+Scheduler.task('bootstrap:essential', async () => {
+  await ensureDefaultUsers()
+  await ensureRequiredSettings()
+}).daily()
+  .runImmediately()
   .withoutOverlapping()
 </code></pre>
 
@@ -225,6 +311,26 @@ Scheduler.task('test', handler).dailyAt('02:00')
 const due = Scheduler.due(new Date('2024-06-15T02:00:00Z'))
 expect(due).toHaveLength(1)
 expect(due[0].name).toBe('test')
+
+// Test manual execution
+await Scheduler.runNow('test')
+
+// Test task behavior
+let executed = false
+Scheduler.task('test-execution', () => {
+  executed = true
+}).daily()
+
+await Scheduler.runNow('test-execution')
+expect(executed).toBe(true)
+
+// Test error handling
+try {
+  await Scheduler.runNow('nonexistent')
+  throw new Error('Should have thrown')
+} catch (error) {
+  expect(error.message).toContain('not found')
+}
 </code></pre>
 
 
