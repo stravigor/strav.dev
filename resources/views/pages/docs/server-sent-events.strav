@@ -1,0 +1,628 @@
+@layout('layouts/docs')
+
+@set('title', 'Server-Sent Events - Strav Documentation')
+
+@section('content')
+<article class="doc-content">
+<h1>Server-Sent Events</h1>
+
+<p>Real-time server-to-client communication with SSE (Server-Sent Events). Channel-based broadcasting, client auto-reconnection, pattern authorization, and full TypeScript support.</p>
+
+<p>SSE provides a lightweight alternative to WebSockets for one-way communication from server to client. Perfect for notifications, live updates, progress tracking, and real-time data streaming.</p>
+
+<h2>Quick Start</h2>
+
+<h3>Server-side</h3>
+
+<pre><code class="language-typescript">import { sse } from '@strav/signal'
+import { session } from '@strav/http'
+
+// Bootstrap SSE endpoint
+sse.boot(router, {
+  middleware: [session()],
+  path: '/_sse'
+})
+
+// Define channels
+sse.channel('notifications')
+sse.channel('users/:id', async (ctx, { id }) => {
+  return ctx.get('user')?.id === id
+})
+
+// Broadcast events
+sse.to('notifications').send('alert', {
+  level: 'info',
+  message: 'System maintenance in 5 minutes'
+})
+
+sse.to(`users/${userId}`).send('message', {
+  text: 'You have a new message',
+  from: 'admin'
+})
+</code></pre>
+
+<h3>Client-side</h3>
+
+<pre><code class="language-typescript">import { SSEClient } from '@strav/signal/sse'
+
+const client = new SSEClient()
+
+// Subscribe to channels
+const notifications = client.subscribe('notifications')
+notifications.on('alert', (data) => {
+  console.log(`Alert: ${data.message}`)
+})
+
+const userChannel = client.subscribe(`users/${userId}`)
+userChannel.on('message', (data) => {
+  console.log(`New message: ${data.text}`)
+})
+
+// Handle connection events
+client.on('connected', () => console.log('SSE connected'))
+client.on('error', (err) => console.error('SSE error:', err))
+</code></pre>
+
+<h2>Installation</h2>
+
+<p>SSE support is built into <code>@strav/signal</code>:</p>
+
+<pre><code class="language-bash">bun add @strav/signal
+</code></pre>
+
+<h2>Server Setup</h2>
+
+<h3>Using a service provider (recommended)</h3>
+
+<p>The recommended way is to configure SSE in your application bootstrap:</p>
+
+<pre><code class="language-typescript">import { app, router } from '@strav/http'
+import { session } from '@strav/http'
+import { sse } from '@strav/signal'
+
+// Bootstrap SSE with middleware
+sse.boot(router, {
+  middleware: [session()],
+  defaultHeartbeat: 30000,
+  cors: ['https://yourdomain.com']
+})
+</code></pre>
+
+<h3>Configuration options</h3>
+
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td><code>'/_sse'</code></td>
+<td>SSE endpoint path</td>
+</tr>
+<tr>
+<td><code>middleware</code></td>
+<td><code>[]</code></td>
+<td>Middleware to run on SSE connections</td>
+</tr>
+<tr>
+<td><code>defaultHeartbeat</code></td>
+<td><code>30000</code></td>
+<td>Default heartbeat interval in ms</td>
+</tr>
+<tr>
+<td><code>cors</code></td>
+<td><code>'*'</code></td>
+<td>CORS origins (string or array)</td>
+</tr>
+</tbody>
+</table>
+
+<h2>Channels</h2>
+
+<p>Define channels to control which topics clients can subscribe to. Channel patterns support parameters like route patterns.</p>
+
+<h3>Public channel</h3>
+
+<p>Anyone can subscribe — no authorization required:</p>
+
+<pre><code class="language-typescript">sse.channel('announcements')
+sse.channel('public/news')
+</code></pre>
+
+<h3>Authorized channel with parameters</h3>
+
+<p>Use authorization callbacks to control access:</p>
+
+<pre><code class="language-typescript">// User-specific channel
+sse.channel('users/:id', async (ctx, { id }) => {
+  const user = ctx.get('user')
+  return user?.id === id
+})
+
+// Team-specific channel
+sse.channel('teams/:teamId/updates', async (ctx, { teamId }) => {
+  const user = ctx.get('user')
+  return user?.teams.includes(teamId)
+})
+
+// Role-based channel
+sse.channel('admin/logs', async (ctx) => {
+  const user = ctx.get('user')
+  return user?.role === 'admin'
+})
+</code></pre>
+
+<h3>Channel with custom configuration</h3>
+
+<pre><code class="language-typescript">sse.channel('live-metrics', {
+  authorize: async (ctx) => {
+    return ctx.get('user')?.subscription === 'premium'
+  },
+  heartbeat: 5000  // More frequent heartbeat for live data
+})
+</code></pre>
+
+<h2>Broadcasting Events</h2>
+
+<h3>Basic broadcasting</h3>
+
+<pre><code class="language-typescript">// Send typed event with data
+sse.to('notifications').send('alert', {
+  level: 'warning',
+  message: 'Server will restart in 2 minutes',
+  timestamp: Date.now()
+})
+
+// Send data without event type
+sse.to('metrics').data({
+  cpu: 0.75,
+  memory: 0.82,
+  disk: 0.45
+})
+</code></pre>
+
+<h3>Excluding specific clients</h3>
+
+<pre><code class="language-typescript">// Broadcast to all except the sender
+sse.to('chat/room1')
+   .except(senderId)
+   .send('message', {
+     user: 'Alice',
+     text: 'Hello everyone!'
+   })
+
+// Exclude multiple clients
+sse.to('game/lobby')
+   .except(player1Id, player2Id)
+   .send('player_joined', { name: 'Bob' })
+</code></pre>
+
+<h3>Channel statistics</h3>
+
+<pre><code class="language-typescript">// Get connection count
+console.log(`Active connections: ${sse.connectionCount}`)
+
+// Get subscribers for a channel
+console.log(`Notification subscribers: ${sse.subscriberCount('notifications')}`)
+
+// List all active channels
+console.log('Active channels:', sse.activeChannels)
+</code></pre>
+
+<h2>Client-Side Usage</h2>
+
+<h3>Creating an SSE client</h3>
+
+<pre><code class="language-typescript">import { SSEClient } from '@strav/signal/sse'
+
+const client = new SSEClient({
+  url: '/_sse',                    // SSE endpoint URL
+  reconnectDelay: 1000,            // Initial reconnect delay
+  maxReconnectDelay: 30000,        // Max reconnect delay
+  maxReconnectAttempts: 10,        // Max reconnect attempts
+  reconnectMultiplier: 1.5         // Exponential backoff multiplier
+})
+</code></pre>
+
+<h3>Channel subscriptions</h3>
+
+<pre><code class="language-typescript">// Subscribe to a channel
+const subscription = client.subscribe('notifications')
+
+// Listen for specific events
+subscription.on('alert', (data) => {
+  showAlert(data.level, data.message)
+})
+
+subscription.on('update', (data) => {
+  updateUI(data)
+})
+
+// Handle subscription errors
+subscription.on('error', (error) => {
+  console.error('Channel error:', error)
+})
+
+// Unsubscribe when done
+subscription.close()
+</code></pre>
+
+<h3>Client connection events</h3>
+
+<pre><code class="language-typescript">// Connection lifecycle
+client.on('connected', () => {
+  console.log('SSE connected')
+  showConnectionStatus('Connected')
+})
+
+client.on('disconnected', () => {
+  console.log('SSE disconnected')
+  showConnectionStatus('Disconnected')
+})
+
+client.on('reconnecting', ({ attempt, delay }) => {
+  console.log(`Reconnecting... attempt ${attempt}, delay ${delay}ms`)
+  showConnectionStatus(`Reconnecting (${attempt})`)
+})
+
+client.on('error', (error) => {
+  console.error('Connection error:', error)
+})
+
+// Check connection state
+if (client.connected) {
+  console.log('Client is connected')
+}
+</code></pre>
+
+<h3>Programmatic connection management</h3>
+
+<pre><code class="language-typescript">// Manual connection control
+client.disconnect()
+client.connect()
+client.reconnect()
+
+// Close client and all subscriptions
+client.close()
+</code></pre>
+
+<h2>Stream Utilities</h2>
+
+<p>The SSE module provides utilities for creating custom SSE streams.</p>
+
+<h3>Progress streams</h3>
+
+<pre><code class="language-typescript">import { createProgressStream } from '@strav/signal/sse'
+
+// Create progress stream for long operations
+export async function processData(ctx: Context) {
+  const stream = createProgressStream(async (update) => {
+    for (let i = 0; i <= 100; i += 10) {
+      update(i, `Processing... ${i}%`)
+      await performWork() // Your work here
+    }
+  })
+
+  return ctx.sse(stream)
+}
+</code></pre>
+
+<h3>Custom SSE streams</h3>
+
+<pre><code class="language-typescript">import { createSSEStream, formatSSE } from '@strav/signal/sse'
+
+// Create stream from async generator
+export async function liveMetrics(ctx: Context) {
+  const stream = createSSEStream(async function* () {
+    while (true) {
+      yield {
+        event: 'metrics',
+        data: await getSystemMetrics()
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  })
+
+  return ctx.sse(stream)
+}
+
+// Manual stream creation
+export async function customStream(ctx: Context) {
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder()
+
+      // Send initial event
+      const welcome = formatSSE({
+        event: 'welcome',
+        data: { timestamp: Date.now() }
+      })
+      controller.enqueue(encoder.encode(welcome))
+
+      // Set up interval for updates
+      const interval = setInterval(() => {
+        const update = formatSSE({
+          event: 'update',
+          data: { value: Math.random() }
+        })
+        controller.enqueue(encoder.encode(update))
+      }, 1000)
+
+      // Cleanup on stream close
+      return () => clearInterval(interval)
+    }
+  })
+
+  return ctx.sse(stream)
+}
+</code></pre>
+
+<h2>Error Handling</h2>
+
+<h3>Server-side error handling</h3>
+
+<pre><code class="language-typescript">// Authorization errors are handled automatically
+sse.channel('admin-only', async (ctx) => {
+  const user = ctx.get('user')
+  if (!user?.isAdmin) {
+    throw new Error('Insufficient permissions')
+  }
+  return true
+})
+
+// Broadcasting errors
+try {
+  sse.to('invalid-channel').send('test', {})
+} catch (error) {
+  console.error('Broadcast failed:', error)
+}
+</code></pre>
+
+<h3>Client-side error handling</h3>
+
+<pre><code class="language-typescript">// Handle client errors
+client.on('error', (error) => {
+  console.error('SSE error:', error)
+
+  // Show user-friendly error message
+  showNotification('Connection error', 'error')
+})
+
+// Handle subscription errors
+subscription.on('error', (error) => {
+  if (error.message.includes('Unauthorized')) {
+    redirectToLogin()
+  } else {
+    console.error('Subscription error:', error)
+  }
+})
+
+// Handle connection state changes
+client.on('disconnected', () => {
+  // Show offline indicator
+  showOfflineIndicator(true)
+})
+
+client.on('connected', () => {
+  // Hide offline indicator
+  showOfflineIndicator(false)
+})
+</code></pre>
+
+<h2>TypeScript Support</h2>
+
+<p>Full TypeScript support with typed events and data:</p>
+
+<h3>Server-side types</h3>
+
+<pre><code class="language-typescript">import type {
+  SSEEvent,
+  SSEChannelConfig,
+  SSEAuthorizeCallback
+} from '@strav/signal/sse'
+
+// Define event types
+interface AlertEvent {
+  level: 'info' | 'warning' | 'error'
+  message: string
+  timestamp: number
+}
+
+interface MetricsEvent {
+  cpu: number
+  memory: number
+  disk: number
+}
+
+// Typed broadcasting
+sse.to('alerts').send('alert', {
+  level: 'warning',
+  message: 'High CPU usage',
+  timestamp: Date.now()
+} as AlertEvent)
+
+// Typed authorization
+const adminAuth: SSEAuthorizeCallback = async (ctx, params) => {
+  const user = ctx.get('user')
+  return user?.role === 'admin'
+}
+
+sse.channel('admin/logs', adminAuth)
+</code></pre>
+
+<h3>Client-side types</h3>
+
+<pre><code class="language-typescript">import type {
+  SSEClient,
+  SSESubscription,
+  SSEEventListener
+} from '@strav/signal/sse'
+
+// Typed event listeners
+const alertListener: SSEEventListener&lt;AlertEvent&gt; = (data) => {
+  console.log(`${data.level}: ${data.message}`)
+}
+
+const subscription = client.subscribe('alerts')
+subscription.on('alert', alertListener)
+
+// Typed subscription
+interface TypedSubscription extends SSESubscription {
+  onAlert(listener: SSEEventListener&lt;AlertEvent&gt;): () => void
+  onMetrics(listener: SSEEventListener&lt;MetricsEvent&gt;): () => void
+}
+</code></pre>
+
+<h2>Real-World Examples</h2>
+
+<h3>Live chat system</h3>
+
+<pre><code class="language-typescript">// Server: Chat channels
+sse.channel('chat/:roomId', async (ctx, { roomId }) => {
+  const user = ctx.get('user')
+  const room = await Room.find(roomId)
+  return room?.hasUser(user.id) ?? false
+})
+
+// Server: New message handler
+async function sendChatMessage(roomId: string, message: ChatMessage) {
+  sse.to(`chat/${roomId}`)
+     .except(message.senderId)
+     .send('message', {
+       id: message.id,
+       text: message.text,
+       sender: message.sender.name,
+       timestamp: message.createdAt
+     })
+}
+
+// Client: Chat UI
+const chat = client.subscribe(`chat/${roomId}`)
+chat.on('message', (message) => {
+  appendMessage(message)
+  playNotificationSound()
+})
+
+chat.on('typing', ({ user }) => {
+  showTypingIndicator(user)
+})
+</code></pre>
+
+<h3>Real-time dashboard</h3>
+
+<pre><code class="language-typescript">// Server: Metrics broadcasting
+setInterval(() => {
+  const metrics = collectSystemMetrics()
+
+  sse.to('dashboard/metrics').data({
+    timestamp: Date.now(),
+    cpu: metrics.cpu,
+    memory: metrics.memory,
+    activeUsers: metrics.activeUsers,
+    requestsPerSecond: metrics.rps
+  })
+}, 5000)
+
+// Client: Dashboard updates
+const dashboard = client.subscribe('dashboard/metrics')
+dashboard.on('message', (metrics) => {
+  updateChart('cpu', metrics.cpu)
+  updateChart('memory', metrics.memory)
+  updateCounter('users', metrics.activeUsers)
+  updateCounter('rps', metrics.requestsPerSecond)
+})
+</code></pre>
+
+<h3>File upload progress</h3>
+
+<pre><code class="language-typescript">// Server: Upload progress endpoint
+export async function uploadWithProgress(ctx: Context) {
+  const uploadId = ctx.params.uploadId
+
+  const stream = createProgressStream(async (update) => {
+    const file = ctx.request.file
+    let uploaded = 0
+    const total = file.size
+
+    // Simulate chunked upload
+    while (uploaded &lt; total) {
+      const chunk = await file.read(1024)
+      uploaded += chunk.length
+
+      const percent = Math.round((uploaded / total) * 100)
+      update(percent, `Uploaded ${uploaded}/${total} bytes`)
+
+      await uploadChunk(uploadId, chunk)
+    }
+  })
+
+  return ctx.sse(stream)
+}
+
+// Client: Progress tracking
+const progress = client.subscribe(`upload/${uploadId}`)
+progress.on('progress', ({ percent, message }) => {
+  updateProgressBar(percent)
+  updateStatusText(message)
+})
+
+progress.on('complete', () => {
+  showSuccessMessage('Upload complete!')
+  redirectToFileList()
+})
+
+progress.on('error', ({ message }) => {
+  showErrorMessage(`Upload failed: ${message}`)
+})
+</code></pre>
+
+<h2>Best Practices</h2>
+
+<h3>Channel naming</h3>
+
+<ul>
+<li>Use hierarchical names: <code>notifications/users/123</code></li>
+<li>Include resource type: <code>projects/456/updates</code></li>
+<li>Use parameters for dynamic channels: <code>teams/:id/chat</code></li>
+<li>Separate public and private: <code>public/announcements</code>, <code>users/:id/private</code></li>
+</ul>
+
+<h3>Performance considerations</h3>
+
+<ul>
+<li>Limit channel subscriptions per client (typically &lt; 10)</li>
+<li>Use appropriate heartbeat intervals (30s for most cases)</li>
+<li>Clean up subscriptions when components unmount</li>
+<li>Consider message size and frequency for mobile clients</li>
+</ul>
+
+<h3>Error recovery</h3>
+
+<ul>
+<li>Implement client-side connection state UI</li>
+<li>Handle authorization errors gracefully</li>
+<li>Provide manual reconnection options</li>
+<li>Log connection issues for debugging</li>
+</ul>
+
+<h3>Security</h3>
+
+<ul>
+<li>Always implement channel authorization for sensitive data</li>
+<li>Validate user permissions in authorization callbacks</li>
+<li>Use middleware for session/authentication checks</li>
+<li>Sanitize data before broadcasting</li>
+</ul>
+
+  <!-- Navigation -->
+  <div class="doc-nav">
+    <span></span>
+    <span></span>
+  </div>
+</article>
+@end
