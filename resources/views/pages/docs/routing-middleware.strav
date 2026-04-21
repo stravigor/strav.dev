@@ -38,7 +38,7 @@ router.group({ prefix: '/api' }, (r) => {
   ctx.subdomain                 // extracted from Host header
   ctx.request                   // the raw Bun Request (always accessible)
 
-  const data = await ctx.body<{ name: string }>()  // auto-parse JSON/form/text
+  const data = await ctx.body&lt;{ name: string }&gt;()  // auto-parse JSON/form/text
 })</code></pre>
 
   <p>Body parsing detects the content type automatically:</p>
@@ -80,7 +80,7 @@ ctx.qs('search', '')    // string</code></pre>
 
   <pre><code class="language-typescript">const allFiles = await ctx.files()</code></pre>
 
-  <p>For validated uploads with size/type checks, see the <a href="/docs/core/kernel/storage">Storage</a> guide.</p>
+  <p>For validated uploads with size/type checks, see the <a href="./file-storage">Storage</a> guide.</p>
 
   <h3>Response Helpers</h3>
 
@@ -428,8 +428,8 @@ test('POST /users creates user', async () => {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <a href="/docs/core/kernel/core" class="prev">← Application & DI</a>
-    <a href="/docs/core/http/auth" class="next">Authentication →</a>
+    <a href="./retrieval-augmented-generation">← Retrieval Augmented Generation</a>
+    <a href="./session-management">Session Management →</a>
   </div>
 </article>
 @end

@@ -21,9 +21,14 @@ The <code>QueueProvider</code> registers <code>Queue</code> as a singleton and c
 
 <p>Options:</p>
 
-<p>| Option | Default | Description |</p>
-<p>|--------|---------|-------------|</p>
-| <code>ensureTables</code> | <code>true</code> | Auto-create the jobs and failed_jobs tables |
+<table>
+<thead>
+<tr><th>Option</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ensureTables</code></td><td><code>true</code></td><td>Auto-create the jobs and failed_jobs tables</td></tr>
+</tbody>
+</table>
 
 <h3>Manual setup</h3>
 
@@ -96,11 +101,13 @@ await worker.start() // blocks until worker.stop() is called
 
 <h3>How it works</h3>
 
+<ul>
 <li>Polls for available jobs using <code>SELECT ... FOR UPDATE SKIP LOCKED</code> — safe for multiple concurrent workers.</li>
 <li>Runs the job handler with a <code>Promise.race</code> timeout.</li>
 <li>On success, deletes the job.</li>
 <li>On failure, either retries (releases back with backoff) or moves to <code>_strav_failed_jobs</code>.</li>
 <li>Periodically releases stale jobs from crashed workers.</li>
+</ul>
 
 <h3>Graceful shutdown</h3>
 
@@ -131,7 +138,7 @@ Emitter.on('order.placed', Queue.listener('generate-invoice', { queue: 'billing'
 
 <p>When the event fires, the payload is automatically pushed as a job. This is ideal for offloading slow work from the request cycle.</p>
 
-The <a href="./notification.md">Notification module</a> also uses the queue — notifications with <code>shouldQueue()</code> returning <code>true</code> are pushed as <code>stravigor:send-notification</code> jobs and delivered by the worker.
+The <a href="./real-time-notifications">Notification module</a> also uses the queue — notifications with <code>shouldQueue()</code> returning <code>true</code> are pushed as <code>stravigor:send-notification</code> jobs and delivered by the worker.
 
 <h2>Queue management</h2>
 
@@ -212,31 +219,41 @@ The queue module creates two internal tables (prefixed with <code>_strav_</code>
 
 <strong>_strav_jobs</strong>
 
-<p>| Column | Type | Notes |</p>
-<p>|--------|------|-------|</p>
-<p>| id | BIGSERIAL | Primary key |</p>
-| queue | VARCHAR(255) | Default <code>'default'</code> |
-<p>| job | VARCHAR(255) | Job name |</p>
-<p>| payload | JSONB | Serialized data |</p>
-<p>| attempts | INT | Current attempt count |</p>
-<p>| max_attempts | INT | Max retries |</p>
-<p>| timeout | INT | Per-job timeout (ms) |</p>
-<p>| available_at | TIMESTAMPTZ | When the job becomes available |</p>
-<p>| reserved_at | TIMESTAMPTZ | NULL if available, set when a worker picks it up |</p>
-<p>| created_at | TIMESTAMPTZ | |</p>
+<table>
+<thead>
+<tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>id</td><td>BIGSERIAL</td><td>Primary key</td></tr>
+<tr><td>queue</td><td>VARCHAR(255)</td><td>Default <code>'default'</code></td></tr>
+<tr><td>job</td><td>VARCHAR(255)</td><td>Job name</td></tr>
+<tr><td>payload</td><td>JSONB</td><td>Serialized data</td></tr>
+<tr><td>attempts</td><td>INT</td><td>Current attempt count</td></tr>
+<tr><td>max_attempts</td><td>INT</td><td>Max retries</td></tr>
+<tr><td>timeout</td><td>INT</td><td>Per-job timeout (ms)</td></tr>
+<tr><td>available_at</td><td>TIMESTAMPTZ</td><td>When the job becomes available</td></tr>
+<tr><td>reserved_at</td><td>TIMESTAMPTZ</td><td>NULL if available, set when a worker picks it up</td></tr>
+<tr><td>created_at</td><td>TIMESTAMPTZ</td><td></td></tr>
+</tbody>
+</table>
 
 A partial index on <code>(queue, available_at) WHERE reserved_at IS NULL</code> ensures only fetchable jobs are indexed.
 
 <strong>_strav_failed_jobs</strong>
 
-<p>| Column | Type | Notes |</p>
-<p>|--------|------|-------|</p>
-<p>| id | BIGSERIAL | Primary key |</p>
-<p>| queue | VARCHAR(255) | |</p>
-<p>| job | VARCHAR(255) | |</p>
-<p>| payload | JSONB | Original payload |</p>
-<p>| error | TEXT | Error message |</p>
-<p>| failed_at | TIMESTAMPTZ | |</p>
+<table>
+<thead>
+<tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>id</td><td>BIGSERIAL</td><td>Primary key</td></tr>
+<tr><td>queue</td><td>VARCHAR(255)</td><td></td></tr>
+<tr><td>job</td><td>VARCHAR(255)</td><td></td></tr>
+<tr><td>payload</td><td>JSONB</td><td>Original payload</td></tr>
+<tr><td>error</td><td>TEXT</td><td>Error message</td></tr>
+<tr><td>failed_at</td><td>TIMESTAMPTZ</td><td></td></tr>
+</tbody>
+</table>
 
 <h2>Full example</h2>
 
@@ -251,7 +268,7 @@ await Queue.ensureTables()
 // Register handlers
 Queue.handle('send-welcome-email', async (payload, meta) => {
   await mailer.send(payload.email, 'Welcome!')
-  console.log(<code>Sent welcome email (attempt ${meta.attempts}/${meta.maxAttempts})</code>)
+  console.log(`Sent welcome email (attempt ${meta.attempts}/${meta.maxAttempts})`)
 })
 
 Queue.handle('generate-report', async (payload) => {

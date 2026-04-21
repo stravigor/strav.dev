@@ -10,7 +10,7 @@
 
 <h2>BaseModel</h2>
 
-All models extend <code>BaseModel</code>. The framework generates model classes from your schemas, but the API is the same whether you write models by hand or generate them.
+All models extend <code>BaseModel</code>. The framework can generate model classes from your schemas using <code>bun strav generate:api</code>, but you can also write models by hand. The API is identical whether models are generated or hand-written.
 
 <pre><code class="language-typescript">import { BaseModel, primary } from '@strav/database'
 
@@ -99,9 +99,20 @@ await user.save()   // UPDATE — auto-sets updatedAt
 
 <h3>Deleting records</h3>
 
-<pre><code class="language-typescript">await user.delete()        // soft-delete if model supports it
-await user.forceDelete()   // always hard-delete
+<pre><code class="language-typescript">// Soft delete (if model supports it) - sets deletedAt timestamp
+await user.delete()
+
+// Hard delete - permanently removes from database, bypasses soft deletes
+await user.forceDelete()
+
+// Both methods accept a transaction parameter
+await transaction(async (trx) => {
+  await user.delete(trx)
+  await user.forceDelete(trx)
+})
 </code></pre>
+
+<p>For models with <code>softDeletes = true</code>, <code>delete()</code> sets the <code>deletedAt</code> timestamp. Use <code>forceDelete()</code> to permanently remove records regardless of soft delete settings.</p>
 
 <h2>Decorators</h2>
 
@@ -352,10 +363,14 @@ const user = await transaction(async (trx) => {
 <p>QueryBuilder operations also accept the transaction handle:</p>
 
 <pre><code class="language-typescript">await transaction(async (trx) => {
+  // Query and update within transaction
   const user = await query(User, trx).where('email', 'alice@example.com').firstOrFail()
   user.role = 'admin'
   await user.save(trx)
+
+  // Bulk operations within same transaction
   await query(AuditLog, trx).where('userId', user.id).delete()
+  await query(LoginAttempt, trx).where('userId', user.id).where('success', false).delete()
 })
 </code></pre>
 

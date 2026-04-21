@@ -10,7 +10,7 @@ The OAuth2 module (<code>@strav/oauth2</code>) turns your Strav application into
 
 Supports <strong>Authorization Code + PKCE</strong> (RFC 7636), <strong>Client Credentials</strong>, <strong>Refresh Token rotation</strong>, <strong>Token Revocation</strong> (RFC 7009), and <strong>Token Introspection</strong> (RFC 7662).
 
-Built on top of the <a href="./auth.md">auth</a> and <a href="./session.md">session</a> modules from <code>@strav/http</code>.
+Built on top of the <a href="/docs/authentication-system">auth</a> and <a href="/docs/session-management">session</a> modules from <code>@strav/http</code>.
 
 <h2>Installation</h2>
 
@@ -49,20 +49,50 @@ export default defineActions<User>({
 })
 </code></pre>
 
-The <code>defineActions<TUser>()</code> helper is a typed identity function — it provides full autocompletion and type safety.
+The <code>defineActions&lt;TUser&gt;()</code> helper is a typed identity function — it provides full autocompletion and type safety.
 
 <p>Only two methods are required:</p>
 
-<p>| Method | Signature | Description |</p>
-<p>|--------|-----------|-------------|</p>
-| <code>findById</code> | <code>(id: string \| number) => Promise<TUser \| null></code> | Look up a user by primary key. Used to load the resource owner for token-protected routes. |
-| <code>identifierOf</code> | <code>(user: TUser) => string</code> | Return the user's display identifier. Shown on the consent screen for third-party clients. |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Signature</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>findById</code></td>
+      <td><code>(id: string | number) =&gt; Promise&lt;TUser | null&gt;</code></td>
+      <td>Look up a user by primary key. Used to load the resource owner for token-protected routes.</td>
+    </tr>
+    <tr>
+      <td><code>identifierOf</code></td>
+      <td><code>(user: TUser) =&gt; string</code></td>
+      <td>Return the user's display identifier. Shown on the consent screen for third-party clients.</td>
+    </tr>
+  </tbody>
+</table>
 
 <p>One method is optional:</p>
 
-<p>| Method | Signature | Description |</p>
-<p>|--------|-----------|-------------|</p>
-| <code>renderAuthorization</code> | <code>(ctx, client, scopes) => Promise<Response></code> | Render a custom consent screen for third-party clients. When omitted, the handler returns a JSON payload for SPA-based consent. |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Signature</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>renderAuthorization</code></td>
+      <td><code>(ctx, client, scopes) =&gt; Promise&lt;Response&gt;</code></td>
+      <td>Render a custom consent screen for third-party clients. When omitted, the handler returns a JSON payload for SPA-based consent.</td>
+    </tr>
+  </tbody>
+</table>
 
 <h3>2. Register the provider</h3>
 
@@ -134,22 +164,87 @@ export default {
 
 <h3>Configuration reference</h3>
 
-<p>| Key | Default | Description |</p>
-<p>|-----|---------|-------------|</p>
-| <code>accessTokenLifetime</code> | <code>60</code> | Access token lifetime in minutes. |
-| <code>refreshTokenLifetime</code> | <code>43200</code> | Refresh token lifetime in minutes (30 days). |
-| <code>authCodeLifetime</code> | <code>10</code> | Authorization code lifetime in minutes. |
-| <code>personalAccessTokenLifetime</code> | <code>525600</code> | Personal access token lifetime in minutes (1 year). |
-| <code>prefix</code> | <code>'/oauth'</code> | Route prefix for all OAuth2 endpoints. |
-| <code>routes.aliases.api</code> | <code>'oauth2.api'</code> | Route alias prefix for OAuth2 API endpoints. |
-| <code>routes.aliases.admin</code> | <code>'oauth2.admin'</code> | Route alias prefix for client management endpoints. |
-| <code>routes.subdomain</code> | <code>undefined</code> | Optional subdomain for routing (e.g., <code>'oauth'</code> for oauth.example.com). |
-| <code>scopes</code> | <code>{}</code> | Available scopes as <code>{ name: description }</code> pairs. |
-| <code>defaultScopes</code> | <code>[]</code> | Scopes granted when the client requests none. |
-| <code>personalAccessClient</code> | <code>null</code> | Client ID for personal access tokens. Created by <code>oauth2:setup</code>. |
-| <code>rateLimit.authorize</code> | <code>{ max: 30, window: 60 }</code> | Rate limit for the authorize endpoint. <code>window</code> is in seconds. |
-| <code>rateLimit.token</code> | <code>{ max: 20, window: 60 }</code> | Rate limit for the token endpoint. |
-| <code>pruneRevokedAfterDays</code> | <code>7</code> | Delete revoked tokens older than this many days during purge. |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Key</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>accessTokenLifetime</code></td>
+      <td><code>60</code></td>
+      <td>Access token lifetime in minutes.</td>
+    </tr>
+    <tr>
+      <td><code>refreshTokenLifetime</code></td>
+      <td><code>43200</code></td>
+      <td>Refresh token lifetime in minutes (30 days).</td>
+    </tr>
+    <tr>
+      <td><code>authCodeLifetime</code></td>
+      <td><code>10</code></td>
+      <td>Authorization code lifetime in minutes.</td>
+    </tr>
+    <tr>
+      <td><code>personalAccessTokenLifetime</code></td>
+      <td><code>525600</code></td>
+      <td>Personal access token lifetime in minutes (1 year).</td>
+    </tr>
+    <tr>
+      <td><code>prefix</code></td>
+      <td><code>'/oauth'</code></td>
+      <td>Route prefix for all OAuth2 endpoints.</td>
+    </tr>
+    <tr>
+      <td><code>routes.aliases.api</code></td>
+      <td><code>'oauth2.api'</code></td>
+      <td>Route alias prefix for OAuth2 API endpoints.</td>
+    </tr>
+    <tr>
+      <td><code>routes.aliases.admin</code></td>
+      <td><code>'oauth2.admin'</code></td>
+      <td>Route alias prefix for client management endpoints.</td>
+    </tr>
+    <tr>
+      <td><code>routes.subdomain</code></td>
+      <td><code>undefined</code></td>
+      <td>Optional subdomain for routing (e.g., <code>'oauth'</code> for oauth.example.com).</td>
+    </tr>
+    <tr>
+      <td><code>scopes</code></td>
+      <td><code>{}</code></td>
+      <td>Available scopes as <code>{ name: description }</code> pairs.</td>
+    </tr>
+    <tr>
+      <td><code>defaultScopes</code></td>
+      <td><code>[]</code></td>
+      <td>Scopes granted when the client requests none.</td>
+    </tr>
+    <tr>
+      <td><code>personalAccessClient</code></td>
+      <td><code>null</code></td>
+      <td>Client ID for personal access tokens. Created by <code>oauth2:setup</code>.</td>
+    </tr>
+    <tr>
+      <td><code>rateLimit.authorize</code></td>
+      <td><code>{ max: 30, window: 60 }</code></td>
+      <td>Rate limit for the authorize endpoint. <code>window</code> is in seconds.</td>
+    </tr>
+    <tr>
+      <td><code>rateLimit.token</code></td>
+      <td><code>{ max: 20, window: 60 }</code></td>
+      <td>Rate limit for the token endpoint.</td>
+    </tr>
+    <tr>
+      <td><code>pruneRevokedAfterDays</code></td>
+      <td><code>7</code></td>
+      <td>Delete revoked tokens older than this many days during purge.</td>
+    </tr>
+  </tbody>
+</table>
 
 <h2>Routes</h2>
 
@@ -157,24 +252,112 @@ All routes are registered automatically by <code>OAuth2Provider</code>. They are
 
 <h3>OAuth2 API routes (<code>oauth2.api</code> alias)</h3>
 
-<p>| Method | Path | Middleware | Route Name | Description |</p>
-<p>|--------|------|-----------|-----------|-------------|</p>
-| GET | <code>/oauth/authorize</code> | <code>auth()</code>, rate limit | <code>{api}.authorize</code> | Start authorization code flow |
-| POST | <code>/oauth/approve</code> | <code>auth()</code>, <code>csrf()</code> | <code>{api}.approve</code> | Approve or deny authorization |
-| POST | <code>/oauth/token</code> | rate limit | <code>{api}.token</code> | Exchange grant for tokens |
-| POST | <code>/oauth/revoke</code> | — | <code>{api}.revoke</code> | Revoke a token (RFC 7009) |
-| POST | <code>/oauth/introspect</code> | — | <code>{api}.introspect</code> | Introspect a token (RFC 7662) |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Path</th>
+      <th>Middleware</th>
+      <th>Route Name</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GET</td>
+      <td><code>/oauth/authorize</code></td>
+      <td><code>auth()</code>, rate limit</td>
+      <td><code>{api}.authorize</code></td>
+      <td>Start authorization code flow</td>
+    </tr>
+    <tr>
+      <td>POST</td>
+      <td><code>/oauth/approve</code></td>
+      <td><code>auth()</code>, <code>csrf()</code></td>
+      <td><code>{api}.approve</code></td>
+      <td>Approve or deny authorization</td>
+    </tr>
+    <tr>
+      <td>POST</td>
+      <td><code>/oauth/token</code></td>
+      <td>rate limit</td>
+      <td><code>{api}.token</code></td>
+      <td>Exchange grant for tokens</td>
+    </tr>
+    <tr>
+      <td>POST</td>
+      <td><code>/oauth/revoke</code></td>
+      <td>—</td>
+      <td><code>{api}.revoke</code></td>
+      <td>Revoke a token (RFC 7009)</td>
+    </tr>
+    <tr>
+      <td>POST</td>
+      <td><code>/oauth/introspect</code></td>
+      <td>—</td>
+      <td><code>{api}.introspect</code></td>
+      <td>Introspect a token (RFC 7662)</td>
+    </tr>
+  </tbody>
+</table>
 
 <h3>Client management routes (<code>oauth2.admin</code> alias)</h3>
 
-<p>| Method | Path | Middleware | Route Name | Description |</p>
-<p>|--------|------|-----------|-----------|-------------|</p>
-| GET | <code>/oauth/clients</code> | <code>auth()</code> | <code>{admin}.clients</code> | List clients |
-| POST | <code>/oauth/clients</code> | <code>auth()</code> | <code>{admin}.create_client</code> | Create a client |
-| DELETE | <code>/oauth/clients/:id</code> | <code>auth()</code> | <code>{admin}.delete_client</code> | Delete a client |
-| POST | <code>/oauth/personal-tokens</code> | <code>auth()</code> | <code>{admin}.create_personal_token</code> | Create a personal access token |
-| GET | <code>/oauth/personal-tokens</code> | <code>auth()</code> | <code>{admin}.personal_tokens</code> | List personal access tokens |
-| DELETE | <code>/oauth/personal-tokens/:id</code> | <code>auth()</code> | <code>{admin}.revoke_personal_token</code> | Revoke a personal access token |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Path</th>
+      <th>Middleware</th>
+      <th>Route Name</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GET</td>
+      <td><code>/oauth/clients</code></td>
+      <td><code>auth()</code></td>
+      <td><code>{admin}.clients</code></td>
+      <td>List clients</td>
+    </tr>
+    <tr>
+      <td>POST</td>
+      <td><code>/oauth/clients</code></td>
+      <td><code>auth()</code></td>
+      <td><code>{admin}.create_client</code></td>
+      <td>Create a client</td>
+    </tr>
+    <tr>
+      <td>DELETE</td>
+      <td><code>/oauth/clients/:id</code></td>
+      <td><code>auth()</code></td>
+      <td><code>{admin}.delete_client</code></td>
+      <td>Delete a client</td>
+    </tr>
+    <tr>
+      <td>POST</td>
+      <td><code>/oauth/personal-tokens</code></td>
+      <td><code>auth()</code></td>
+      <td><code>{admin}.create_personal_token</code></td>
+      <td>Create a personal access token</td>
+    </tr>
+    <tr>
+      <td>GET</td>
+      <td><code>/oauth/personal-tokens</code></td>
+      <td><code>auth()</code></td>
+      <td><code>{admin}.personal_tokens</code></td>
+      <td>List personal access tokens</td>
+    </tr>
+    <tr>
+      <td>DELETE</td>
+      <td><code>/oauth/personal-tokens/:id</code></td>
+      <td><code>auth()</code></td>
+      <td><code>{admin}.revoke_personal_token</code></td>
+      <td>Revoke a personal access token</td>
+    </tr>
+  </tbody>
+</table>
 
 Where <code>{api}</code> defaults to <code>oauth2.api</code> and <code>{admin}</code> defaults to <code>oauth2.admin</code>, but both can be customized in the configuration.
 
@@ -485,11 +668,32 @@ router.group({ prefix: '/api', middleware: [oauth()] }, r => {
 
 After <code>oauth()</code> runs, three values are available on the context:
 
-<p>| Key | Type | Description |</p>
-<p>|-----|------|-------------|</p>
-| <code>user</code> | <code>TUser</code> | The resource owner. Not set for <code>client_credentials</code> tokens. |
-| <code>oauth_token</code> | <code>OAuthTokenData</code> | The validated token metadata (scopes, expiry, etc.). |
-| <code>oauth_client</code> | <code>OAuthClientData</code> | The client that issued the token. |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Key</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>user</code></td>
+      <td><code>TUser</code></td>
+      <td>The resource owner. Not set for <code>client_credentials</code> tokens.</td>
+    </tr>
+    <tr>
+      <td><code>oauth_token</code></td>
+      <td><code>OAuthTokenData</code></td>
+      <td>The validated token metadata (scopes, expiry, etc.).</td>
+    </tr>
+    <tr>
+      <td><code>oauth_client</code></td>
+      <td><code>OAuthClientData</code></td>
+      <td>The client that issued the token.</td>
+    </tr>
+  </tbody>
+</table>
 
 Returns <code>401</code> with <code>{ error: 'unauthenticated' }</code> if the header is missing, or <code>{ error: 'invalid_token' }</code> if the token is invalid, expired, or revoked.
 
@@ -517,23 +721,60 @@ Every significant action emits an event via the core <code>Emitter</code>:
 import { OAuth2Events } from '@strav/oauth2'
 
 Emitter.on(OAuth2Events.TOKEN_ISSUED, async ({ ctx, userId, clientId, grantType }) => {
-  console.log(<code>Token issued for user ${userId} via ${grantType}</code>)
+  console.log(`Token issued for user ${userId} via ${grantType}`)
 })
 
 Emitter.on(OAuth2Events.ACCESS_DENIED, async ({ ctx, clientId }) => {
-  console.log(<code>User denied access to client ${clientId}</code>)
+  console.log(`User denied access to client ${clientId}`)
 })
 </code></pre>
 
-<p>| Constant | Event string | Emitted when |</p>
-<p>|----------|-------------|--------------|</p>
-| <code>TOKEN_ISSUED</code> | <code>oauth2:token-issued</code> | An access token is issued (any grant) |
-| <code>TOKEN_REVOKED</code> | <code>oauth2:token-revoked</code> | A token is revoked |
-| <code>TOKEN_REFRESHED</code> | <code>oauth2:token-refreshed</code> | A token is refreshed (rotation) |
-| <code>CODE_ISSUED</code> | <code>oauth2:code-issued</code> | An authorization code is issued |
-| <code>CLIENT_CREATED</code> | <code>oauth2:client-created</code> | A new client is created |
-| <code>CLIENT_REVOKED</code> | <code>oauth2:client-revoked</code> | A client is soft-revoked |
-| <code>ACCESS_DENIED</code> | <code>oauth2:access-denied</code> | The user denies consent |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Constant</th>
+      <th>Event string</th>
+      <th>Emitted when</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>TOKEN_ISSUED</code></td>
+      <td><code>oauth2:token-issued</code></td>
+      <td>An access token is issued (any grant)</td>
+    </tr>
+    <tr>
+      <td><code>TOKEN_REVOKED</code></td>
+      <td><code>oauth2:token-revoked</code></td>
+      <td>A token is revoked</td>
+    </tr>
+    <tr>
+      <td><code>TOKEN_REFRESHED</code></td>
+      <td><code>oauth2:token-refreshed</code></td>
+      <td>A token is refreshed (rotation)</td>
+    </tr>
+    <tr>
+      <td><code>CODE_ISSUED</code></td>
+      <td><code>oauth2:code-issued</code></td>
+      <td>An authorization code is issued</td>
+    </tr>
+    <tr>
+      <td><code>CLIENT_CREATED</code></td>
+      <td><code>oauth2:client-created</code></td>
+      <td>A new client is created</td>
+    </tr>
+    <tr>
+      <td><code>CLIENT_REVOKED</code></td>
+      <td><code>oauth2:client-revoked</code></td>
+      <td>A client is soft-revoked</td>
+    </tr>
+    <tr>
+      <td><code>ACCESS_DENIED</code></td>
+      <td><code>oauth2:access-denied</code></td>
+      <td>The user denies consent</td>
+    </tr>
+  </tbody>
+</table>
 
 <h2>oauth2 helper</h2>
 
@@ -562,18 +803,56 @@ oauth2.defineScopes({ admin: 'Full admin access' })
 const descriptions = oauth2.scopeDescriptions(['read', 'write'])
 </code></pre>
 
-<p>| Method | Description |</p>
-<p>|--------|-------------|</p>
-| <code>createClient(data)</code> | Create a new OAuth client. Returns the client and plain-text secret. |
-| <code>findClient(id)</code> | Find a client by ID. |
-| <code>listClients()</code> | List all non-revoked clients. |
-| <code>revokeClient(id)</code> | Soft-revoke a client. |
-| <code>createPersonalToken(user, name, scopes?)</code> | Issue a personal access token. Token is shown once. |
-| <code>revokeToken(tokenId)</code> | Revoke a specific token by ID. |
-| <code>revokeAllFor(user)</code> | Revoke all tokens for a user. |
-| <code>defineScopes(scopes)</code> | Register additional scopes at runtime. |
-| <code>scopeDescriptions(names?)</code> | Get descriptions for scopes. Returns all if no names given. |
-| <code>validateToken(plainToken)</code> | Validate a plain-text token and return its data, or null. |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>createClient(data)</code></td>
+      <td>Create a new OAuth client. Returns the client and plain-text secret.</td>
+    </tr>
+    <tr>
+      <td><code>findClient(id)</code></td>
+      <td>Find a client by ID.</td>
+    </tr>
+    <tr>
+      <td><code>listClients()</code></td>
+      <td>List all non-revoked clients.</td>
+    </tr>
+    <tr>
+      <td><code>revokeClient(id)</code></td>
+      <td>Soft-revoke a client.</td>
+    </tr>
+    <tr>
+      <td><code>createPersonalToken(user, name, scopes?)</code></td>
+      <td>Issue a personal access token. Token is shown once.</td>
+    </tr>
+    <tr>
+      <td><code>revokeToken(tokenId)</code></td>
+      <td>Revoke a specific token by ID.</td>
+    </tr>
+    <tr>
+      <td><code>revokeAllFor(user)</code></td>
+      <td>Revoke all tokens for a user.</td>
+    </tr>
+    <tr>
+      <td><code>defineScopes(scopes)</code></td>
+      <td>Register additional scopes at runtime.</td>
+    </tr>
+    <tr>
+      <td><code>scopeDescriptions(names?)</code></td>
+      <td>Get descriptions for scopes. Returns all if no names given.</td>
+    </tr>
+    <tr>
+      <td><code>validateToken(plainToken)</code></td>
+      <td>Validate a plain-text token and return its data, or null.</td>
+    </tr>
+  </tbody>
+</table>
 
 <h2>CLI commands</h2>
 
@@ -588,26 +867,49 @@ const descriptions = oauth2.scopeDescriptions(['read', 'write'])
 
 <p>Create a new OAuth2 client:</p>
 
-<pre><code class="language-bash"><h1>Confidential client (default)</h1>
+<pre><code class="language-bash"># Confidential client (default)
 bun strav oauth2:client --name "Web App" --redirect "https://app.com/callback"
 
-<h1>Public client (SPA / mobile)</h1>
+# Public client (SPA / mobile)
 bun strav oauth2:client --name "Mobile App" --redirect "myapp://callback" --public
 
-<h1>First-party (skip consent)</h1>
+# First-party (skip consent)
 bun strav oauth2:client --name "Admin Dashboard" --redirect "https://admin.com/callback" --first-party
 
-<h1>Machine-to-machine</h1>
+# Machine-to-machine
 bun strav oauth2:client --name "Worker Service" --credentials
 </code></pre>
 
-<p>| Flag | Description |</p>
-<p>|------|-------------|</p>
-| <code>--name <name></code> | Client name (required). |
-| <code>--redirect <uris...></code> | Redirect URIs. |
-| <code>--public</code> | Create a public (non-confidential) client. |
-| <code>--first-party</code> | Mark as a first-party client (skip consent screen). |
-| <code>--credentials</code> | Enable the <code>client_credentials</code> grant type. |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Flag</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>--name &lt;name&gt;</code></td>
+      <td>Client name (required).</td>
+    </tr>
+    <tr>
+      <td><code>--redirect &lt;uris...&gt;</code></td>
+      <td>Redirect URIs.</td>
+    </tr>
+    <tr>
+      <td><code>--public</code></td>
+      <td>Create a public (non-confidential) client.</td>
+    </tr>
+    <tr>
+      <td><code>--first-party</code></td>
+      <td>Mark as a first-party client (skip consent screen).</td>
+    </tr>
+    <tr>
+      <td><code>--credentials</code></td>
+      <td>Enable the <code>client_credentials</code> grant type.</td>
+    </tr>
+  </tbody>
+</table>
 
 <h3>oauth2:purge</h3>
 
@@ -648,11 +950,32 @@ When <code>scopes</code> is <code>null</code> (default), the client can request 
 
 <p>The package creates three tables:</p>
 
-<p>| Table | Archetype | Description |</p>
-<p>|-------|-----------|-------------|</p>
-| <code>_strav_oauth_clients</code> | Entity | OAuth clients (apps) |
-| <code>_strav_oauth_tokens</code> | Component | Access + refresh tokens |
-| <code>_strav_oauth_auth_codes</code> | Event | Authorization codes (single-use) |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Table</th>
+      <th>Archetype</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>_strav_oauth_clients</code></td>
+      <td>Entity</td>
+      <td>OAuth clients (apps)</td>
+    </tr>
+    <tr>
+      <td><code>_strav_oauth_tokens</code></td>
+      <td>Component</td>
+      <td>Access + refresh tokens</td>
+    </tr>
+    <tr>
+      <td><code>_strav_oauth_auth_codes</code></td>
+      <td>Event</td>
+      <td>Authorization codes (single-use)</td>
+    </tr>
+  </tbody>
+</table>
 
 Tables are created automatically by <code>OAuth2Provider</code> on boot or by <code>strav oauth2:setup</code>.
 
@@ -668,15 +991,60 @@ Tables are created automatically by <code>OAuth2Provider</code> on boot or by <c
 
 <p>Error classes:</p>
 
-<p>| Class | Error code | Status | Description |</p>
-<p>|-------|-----------|--------|-------------|</p>
-| <code>OAuth2Error</code> | <code>server_error</code> | 400 | Base error |
-| <code>InvalidRequestError</code> | <code>invalid_request</code> | 400 | Missing or malformed parameter |
-| <code>InvalidClientError</code> | <code>invalid_client</code> | 401 | Client authentication failed |
-| <code>InvalidGrantError</code> | <code>invalid_grant</code> | 400 | Grant is invalid, expired, or revoked |
-| <code>InvalidScopeError</code> | <code>invalid_scope</code> | 400 | Unknown or disallowed scope |
-| <code>UnsupportedGrantError</code> | <code>unsupported_grant_type</code> | 400 | Grant type not supported |
-| <code>AccessDeniedError</code> | <code>access_denied</code> | 403 | User denied the authorization request |
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Class</th>
+      <th>Error code</th>
+      <th>Status</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>OAuth2Error</code></td>
+      <td><code>server_error</code></td>
+      <td>400</td>
+      <td>Base error</td>
+    </tr>
+    <tr>
+      <td><code>InvalidRequestError</code></td>
+      <td><code>invalid_request</code></td>
+      <td>400</td>
+      <td>Missing or malformed parameter</td>
+    </tr>
+    <tr>
+      <td><code>InvalidClientError</code></td>
+      <td><code>invalid_client</code></td>
+      <td>401</td>
+      <td>Client authentication failed</td>
+    </tr>
+    <tr>
+      <td><code>InvalidGrantError</code></td>
+      <td><code>invalid_grant</code></td>
+      <td>400</td>
+      <td>Grant is invalid, expired, or revoked</td>
+    </tr>
+    <tr>
+      <td><code>InvalidScopeError</code></td>
+      <td><code>invalid_scope</code></td>
+      <td>400</td>
+      <td>Unknown or disallowed scope</td>
+    </tr>
+    <tr>
+      <td><code>UnsupportedGrantError</code></td>
+      <td><code>unsupported_grant_type</code></td>
+      <td>400</td>
+      <td>Grant type not supported</td>
+    </tr>
+    <tr>
+      <td><code>AccessDeniedError</code></td>
+      <td><code>access_denied</code></td>
+      <td>403</td>
+      <td>User denied the authorization request</td>
+    </tr>
+  </tbody>
+</table>
 
 <pre><code class="language-typescript">import { OAuth2Error, InvalidGrantError } from '@strav/oauth2'
 

@@ -101,11 +101,11 @@ await withSchema('company_123', async () => {
     .all()
 
   // Raw SQL
-  const stats = await sql<code>
+  const stats = await sql`
     SELECT COUNT(*) as total
     FROM users
     WHERE active = true
-  </code>
+  `
 })
 </code></pre>
 
@@ -114,7 +114,8 @@ await withSchema('company_123', async () => {
 <p>Create your own middleware in your app layer to extract and set tenant context:</p>
 
 <pre><code class="language-typescript">// app/middleware/tenant.ts
-import { withSchema, withoutSchema, SchemaManager } from '@strav/database'
+import { withSchema, withoutSchema } from '@strav/database'
+import { SchemaManager } from '@strav/database/database/domain/manager'
 import type { Middleware } from '@strav/http'
 
 export const tenantMiddleware: Middleware = async (ctx, next) => {
@@ -122,9 +123,9 @@ export const tenantMiddleware: Middleware = async (ctx, next) => {
   const host = ctx.request.headers.get('host')
   const tenant = host?.split('.')[0] // tenant123.example.com -> tenant123
 
-  if (tenant &amp;&amp; tenant !== 'www') {
+  if (tenant && tenant !== 'www') {
     // Map to schema name
-    const schema = <code>tenant_${tenant}</code>
+    const schema = `tenant_${tenant}`
 
     // Optionally validate tenant exists
     const manager = container.resolve(SchemaManager)
@@ -148,8 +149,8 @@ export const headerTenantMiddleware: Middleware = async (ctx, next) => {
   return next()
 }
 
-// For admin routes that need to bypass tenant isolation
-export const bypassTenant: Middleware = async (ctx, next) => {
+// For admin routes that need to bypass schema isolation
+export const bypassSchema: Middleware = async (ctx, next) => {
   return withoutSchema(() => next())
 }
 </code></pre>
@@ -158,7 +159,7 @@ export const bypassTenant: Middleware = async (ctx, next) => {
 
 <pre><code class="language-typescript">// app/routes.ts
 import { router } from '@strav/http'
-import { tenantMiddleware, bypassTenant } from './middleware/tenant'
+import { tenantMiddleware, bypassSchema } from './middleware/tenant'
 
 // Apply tenant context to all routes
 router.use(tenantMiddleware)
@@ -169,51 +170,51 @@ router.get('/users', async (ctx) => {
   return ctx.json(users)
 })
 
-// Admin routes can bypass tenant isolation
-router.get('/admin/tenants', bypassTenant, async (ctx) => {
+// Admin routes can bypass schema isolation
+router.get('/admin/schemas', bypassSchema, async (ctx) => {
   const manager = container.resolve(SchemaManager)
-  const tenants = await manager.listTenants() // Accesses all schemas
-  return ctx.json(tenants)
+  const schemas = await manager.listSchemas() // Accesses all schemas
+  return ctx.json(schemas)
 })
 </code></pre>
 
-<h2>Tenant Management</h2>
+<h2>Schema Management</h2>
 
 The <code>SchemaManager</code> class provides utilities for schema management:
 
-<h3>Creating Tenants</h3>
+<h3>Creating Schemas</h3>
 
-<pre><code class="language-typescript">import { SchemaManager } from '@strav/database'
+<pre><code class="language-typescript">import { SchemaManager } from '@strav/database/database/domain/manager'
 
 const manager = container.resolve(SchemaManager)
 
-// Create a new tenant schema
+// Create a new schema
 await manager.createSchema('company_123')
 
 // Clone structure from template schema
-await manager.cloneSchema('public', 'tenant_456')
+await manager.cloneSchema('public', 'company_456')
 </code></pre>
 
 <h3>Running Migrations</h3>
 
-<pre><code class="language-typescript">// Migrate specific tenant
-await manager.migrateTenant('company_123')
+<pre><code class="language-typescript">// Migrate specific schema
+await manager.migrateSchema('company_123')
 
-// Migrate all tenants
-await manager.migrateAllTenants()
+// Migrate all schemas
+await manager.migrateAllSchemas()
 </code></pre>
 
-<h3>Managing Tenants</h3>
+<h3>Managing Schemas</h3>
 
-<pre><code class="language-typescript">// Check if tenant exists
-const exists = await manager.tenantExists('company_123')
+<pre><code class="language-typescript">// Check if schema exists
+const exists = await manager.schemaExists('company_123')
 
-// List all tenants
-const tenants = await manager.listTenants()
+// List all schemas
+const schemas = await manager.listSchemas()
 // ['company_123', 'tenant_456', ...]
 
-// Get tenant statistics
-const stats = await manager.getTenantStats('company_123')
+// Get schema statistics
+const stats = await manager.getSchemaStats('company_123')
 console.log(stats)
 // { tables: 15, totalRows: 45678, sizeInBytes: 10485760 }
 
@@ -227,48 +228,48 @@ await manager.deleteSchema('old_tenant')
 
 <h3>Generate Migrations</h3>
 
-<pre><code class="language-bash"><h1>Generate migration for public domain</h1>
-bun strav generate:migration --scope=public --message="add user table"
+<pre><code class="language-bash"># Generate migration for public domain
+strav generate:migration --scope=public --message="add user table"
 
-<h1>Generate migration for tenant domain</h1>
-bun strav generate:migration --scope=tenant --message="add orders table"
+# Generate migration for tenant domain
+strav generate:migration --scope=tenant --message="add orders table"
 
-<h1>Generate migration for custom domain</h1>
-bun strav generate:migration --scope=factory --message="add machine table"
+# Generate migration for custom domain
+strav generate:migration --scope=factory --message="add machine table"
 </code></pre>
 
 <h3>Run Migrations</h3>
 
-<pre><code class="language-bash"><h1>Run public migrations</h1>
-bun strav migrate --scope=public
+<pre><code class="language-bash"># Run public migrations
+strav migrate --scope=public
 
-<h1>Run tenant migrations</h1>
-bun strav migrate --scope=tenant
+# Run tenant migrations
+strav migrate --scope=tenant
 
-<h1>Run migrations for custom domain</h1>
-bun strav migrate --scope=factory
+# Run migrations for custom domain
+strav migrate --scope=factory
 </code></pre>
 
 <h3>Rollback Migrations</h3>
 
-<pre><code class="language-bash"><h1>Rollback public migrations</h1>
-bun strav rollback --scope=public
+<pre><code class="language-bash"># Rollback public migrations
+strav rollback --scope=public
 
-<h1>Rollback last batch for tenant domain</h1>
-bun strav rollback --scope=tenant
+# Rollback last batch for tenant domain
+strav rollback --scope=tenant
 
-<h1>Rollback specific batch</h1>
-bun strav rollback --scope=tenant --batch=5
+# Rollback specific batch
+strav rollback --scope=tenant --batch=5
 </code></pre>
 
 <h3>Generate Models</h3>
 
-<pre><code class="language-bash"><h1>Generate models for all domains</h1>
-bun strav generate:models --scope=all
+<pre><code class="language-bash"># Generate models for all domains
+strav generate:models --scope=all
 
-<h1>Generate models for specific domain</h1>
-bun strav generate:models --scope=tenant
-bun strav generate:models --scope=factory
+# Generate models for specific domain
+strav generate:models --scope=tenant
+strav generate:models --scope=factory
 </code></pre>
 
 <h2>Transactions</h2>
@@ -314,14 +315,14 @@ async function processJob(job: Job) {
 // Access all schemas without tenant restriction
 await withoutSchema(async () => {
   // Query across all tenant schemas
-  const report = await sql<code>
+  const report = await sql`
     SELECT
       schema_name,
       (SELECT COUNT(*) FROM information_schema.tables
        WHERE table_schema = schema_name) as table_count
     FROM information_schema.schemata
     WHERE schema_name LIKE 'tenant_%'
-  </code>
+  `
 })
 </code></pre>
 
@@ -331,8 +332,8 @@ await withoutSchema(async () => {
 
 <pre><code class="language-typescript">const manager = container.resolve(SchemaManager)
 
-// Execute query in specific tenant
-const users = await manager.executeTenant(
+// Execute query in specific schema
+const users = await manager.executeSchema(
   'company_123',
   'SELECT * FROM users WHERE active = $1',
   [true]
@@ -346,7 +347,7 @@ const users = await manager.executeTenant(
 <p>Use consistent schema naming conventions:</p>
 
 <pre><code class="language-typescript">// Good: predictable and safe
-const schema = <code>tenant_${tenantId.toLowerCase()}</code>
+const schema = `tenant_${tenantId.toLowerCase()}`
 
 // Validate schema names to prevent injection
 if (!/^[a-z0-9_]+$/.test(schema)) {
@@ -363,7 +364,8 @@ if (!/^[a-z0-9_]+$/.test(schema)) {
 <p>Test with multiple tenants:</p>
 
 <pre><code class="language-typescript">// test/multi-tenant.test.ts
-import { withSchema, SchemaManager } from '@strav/database'
+import { withSchema } from '@strav/database'
+import { SchemaManager } from '@strav/database/database/domain/manager'
 
 beforeEach(async () => {
   const manager = container.resolve(SchemaManager)
@@ -409,38 +411,38 @@ test('data isolation between tenants', async () => {
 
 <pre><code class="language-typescript">// migrations/2024_01_01_create_users_table.ts
 export async function up(sql: SQL) {
-  await sql<code>
+  await sql`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       email VARCHAR(255) UNIQUE NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()  -- PostgreSQL syntax
     )
-  </code>
+  `
 }
 
 export async function down(sql: SQL) {
-  await sql<code>DROP TABLE IF EXISTS users</code>
+  await sql`DROP TABLE IF EXISTS users`
 }
 </code></pre>
 
 <p>Then apply to all tenants:</p>
 
-<pre><code class="language-bash"><h1>Run migrations for all tenants</h1>
-bun run migrate:tenants
+<pre><code class="language-bash"># Run migrations for all schemas
+strav migrate:all-schemas
 </code></pre>
 
 <h3>5. Monitoring</h3>
 
-<p>Monitor tenant usage and performance:</p>
+<p>Monitor schema usage and performance:</p>
 
-<pre><code class="language-typescript">async function getTenantMetrics() {
+<pre><code class="language-typescript">async function getSchemaMetrics() {
   const manager = container.resolve(SchemaManager)
-  const tenants = await manager.listTenants()
+  const schemas = await manager.listSchemas()
 
   const metrics = await Promise.all(
-    tenants.map(async (tenant) => ({
-      tenant,
-      stats: await manager.getTenantStats(tenant),
+    schemas.map(async (schema) => ({
+      schema,
+      stats: await manager.getSchemaStats(schema),
     }))
   )
 
@@ -455,12 +457,12 @@ bun run migrate:tenants
 <li><strong>Connection Security</strong>: The search_path is set per-query, preventing cross-tenant data leaks</li>
 <li><strong>Audit Logging</strong>: Track tenant context in your audit logs</li>
 
-<pre><code class="language-typescript">// Audit log with tenant context
+<pre><code class="language-typescript">// Audit log with schema context
 function logDatabaseOperation(operation: string) {
-  const tenant = getCurrentTenant()
+  const context = getCurrentSchemaContext()
   logger.info('Database operation', {
     operation,
-    tenant: tenant?.schema ?? 'public',
+    schema: context?.schema ?? 'public',
     timestamp: new Date(),
   })
 }
@@ -468,14 +470,14 @@ function logDatabaseOperation(operation: string) {
 
 <h2>Troubleshooting</h2>
 
-<h3>Checking Current Tenant</h3>
+<h3>Checking Current Schema</h3>
 
-<pre><code class="language-typescript">import { getCurrentTenant, getCurrentSchema } from '@strav/database'
+<pre><code class="language-typescript">import { getCurrentSchemaContext, getCurrentSchema, hasSchemaContext } from '@strav/database'
 
 // In your code
-const context = getCurrentTenant()
+const context = getCurrentSchemaContext()
 console.log('Current schema:', getCurrentSchema())
-console.log('Has tenant context:', hasTenantContext())
+console.log('Has schema context:', hasSchemaContext())
 </code></pre>
 
 <h3>Debug Mode</h3>
@@ -487,7 +489,7 @@ if (process.env.NODE_ENV === 'development') {
   const original = getCurrentSchema
   getCurrentSchema = () => {
     const schema = original()
-    console.log(<code>[TENANT] Using schema: ${schema}</code>)
+    console.log(`[TENANT] Using schema: ${schema}`)
     return schema
   }
 }
@@ -495,22 +497,22 @@ if (process.env.NODE_ENV === 'development') {
 
 <h3>Common Issues</h3>
 
-<strong>Issue</strong>: Queries not using tenant schema
+<strong>Issue</strong>: Queries not using correct schema
 <ul>
-<li>Check that multi-tenant mode is enabled in config</li>
-<li>Verify tenant context is set with <code>hasTenantContext()</code></li>
+<li>Check that multi-domain mode is enabled in config</li>
+<li>Verify schema context is set with <code>hasSchemaContext()</code></li>
 <li>Ensure middleware is applied before route handlers</li>
 </ul>
 
 <strong>Issue</strong>: Cannot access public schema
 <ul>
 <li>Use <code>withoutSchema()</code> for operations that need public schema</li>
-<li>Use <code>bypassTenant</code> middleware for admin routes</li>
+<li>Use <code>bypassSchema</code> middleware for admin routes</li>
 </ul>
 
-<strong>Issue</strong>: Transaction rollback loses tenant context
+<strong>Issue</strong>: Transaction rollback loses schema context
 <ul>
-<li>Tenant context is preserved within transactions automatically</li>
+<li>Schema context is preserved within transactions automatically</li>
 <li>Check that you're not manually manipulating search_path</li>
 </ul>
 
@@ -519,33 +521,33 @@ if (process.env.NODE_ENV === 'development') {
 <h3>Context Functions</h3>
 
 <ul>
-<li><code>withSchema(schema, callback)</code> - Execute callback within tenant context</li>
-<li><code>withoutSchema(callback)</code> - Execute callback without tenant isolation</li>
-<li><code>getCurrentTenant()</code> - Get current tenant context</li>
+<li><code>withSchema(schema, callback)</code> - Execute callback within schema context</li>
+<li><code>withoutSchema(callback)</code> - Execute callback without schema isolation</li>
+<li><code>getCurrentSchemaContext()</code> - Get current schema context</li>
 <li><code>getCurrentSchema()</code> - Get current schema name</li>
-<li><code>hasTenantContext()</code> - Check if in tenant context</li>
+<li><code>hasSchemaContext()</code> - Check if in schema context</li>
 </ul>
 
 <h3>SchemaManager Methods</h3>
 
 <ul>
-<li><code>createSchema(schema)</code> - Create new tenant schema</li>
-<li><code>deleteSchema(schema)</code> - Delete tenant schema (irreversible)</li>
-<li><code>tenantExists(schema)</code> - Check if tenant exists</li>
-<li><code>listTenants()</code> - List all tenant schemas</li>
-<li><code>migrateTenant(schema)</code> - Run migrations for tenant</li>
-<li><code>migrateAllTenants()</code> - Run migrations for all tenants</li>
+<li><code>createSchema(schema)</code> - Create new schema</li>
+<li><code>deleteSchema(schema)</code> - Delete schema (irreversible)</li>
+<li><code>schemaExists(schema)</code> - Check if schema exists</li>
+<li><code>listSchemas()</code> - List all schemas</li>
+<li><code>migrateSchema(schema)</code> - Run migrations for schema</li>
+<li><code>migrateAllSchemas()</code> - Run migrations for all schemas</li>
 <li><code>cloneSchema(source, target)</code> - Copy schema structure</li>
-<li><code>getTenantStats(schema)</code> - Get tenant statistics</li>
-<li><code>executeTenant(schema, sql, params)</code> - Execute query in tenant</li>
+<li><code>getSchemaStats(schema)</code> - Get schema statistics</li>
+<li><code>executeSchema(schema, sql, params)</code> - Execute query in schema</li>
 </ul>
 
 
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="/docs/database-migrations" class="nav-prev">← Database Migrations</a>
+    <a href="/docs/template-engine" class="nav-next">Template Engine →</a>
   </div>
 </article>
 @end

@@ -33,7 +33,12 @@
       "Bash(do if [ -f \"$dir/package.json\" ])",
       "Bash(then echo \"=== $dir ===\")",
       "Bash(grep '\"\"\"\"name\"\"\"\"' \"$dir/package.json\")",
-      "Bash(git add -A)"
+      "Bash(git add -A)",
+      "Bash(grep -E '\\.strav$')",
+      "Bash(grep -n '\\`' /Users/liva/Projects/Strav.dev/sources/strav-dev/resources/views/pages/docs/caching-system.strav)",
+      "Bash(sed -n '52,52p; 181,181p; 196,196p' /Users/liva/Projects/Strav.dev/sources/strav-dev/resources/views/pages/docs/caching-system.strav)",
+      "Bash(sed -n '189,194p' /Users/liva/Projects/Strav.dev/sources/strav-dev/resources/views/pages/docs/data-encryption.strav)",
+      "Bash(test -f \"/Users/liva/Projects/Strav.dev/sources/strav-dev/resources/views/pages/docs/database.strav\")"
     ],
     "deny": [],
     "ask": []

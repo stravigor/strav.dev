@@ -38,8 +38,10 @@ export default {
   debug: env.bool('APP_DEBUG', false),       // Boolean casting
   port: env.int('APP_PORT', 3000),          // Integer casting
   rate: env.float('RATE_LIMIT', 0.5),       // Float casting
-  features: env.array('FEATURES', []),       // Array from comma-separated
-  apiKey: env.required('API_KEY'),          // Required (throws if missing)
+  // For arrays, use config helpers or parse manually:
+  features: env('FEATURES', '').split(',').filter(Boolean),
+  // For required values, throw manually if needed:
+  apiKey: env('API_KEY') || (() => { throw new Error('API_KEY required') })()
 }</code></pre>
 
   <h3>Environment File Priority</h3>
@@ -76,7 +78,7 @@ export default {
   port: env.int('APP_PORT', 3000),
 
   // Encryption key for cookies and sessions
-  key: env.required('APP_KEY'),
+  key: env('APP_KEY'),
 
   // Timezone
   timezone: 'UTC',
@@ -378,18 +380,6 @@ if (config.has('services.stripe')) {
 // Set config at runtime (not persisted)
 config.set('app.maintenance', true)</code></pre>
 
-  <h2>Configuration Caching</h2>
-
-  <p>In production, cache your configuration for better performance:</p>
-
-  <pre><code class="language-bash"># Cache configuration
-bun strav config:cache
-
-# Clear configuration cache
-bun strav config:clear</code></pre>
-
-  <p>When configuration is cached, changes to config files won't take effect until you clear the cache.</p>
-
   <h2>Environment-Specific Configuration</h2>
 
   <p>Load different configurations based on environment:</p>
@@ -446,7 +436,7 @@ export class ConfigValidatorProvider extends ServiceProvider {
     ]
 
     for (const key of required) {
-      if (!config.has(key)) {
+      if (!config.has(key) || !config.get(key)) {
         throw new ConfigurationException(`Missing required config: ${key}`)
       }
     }
@@ -462,7 +452,7 @@ export class ConfigValidatorProvider extends ServiceProvider {
   <!-- Navigation -->
   <div class="doc-nav">
     <a href="/docs/installation" class="prev">← Installation</a>
-    <a href="/docs/core/kernel/core" class="next">Core Concepts →</a>
+    <a href="/docs/dependency-injection-container" class="next">Dependency Injection →</a>
   </div>
 </article>
 @end

@@ -63,22 +63,22 @@ const orderMachine = defineMachine({
     </tr>
     <tr>
       <td><code>transitions</code></td>
-      <td><code>Record<string, { from, to }></code></td>
+      <td><code>Record&lt;string, { from, to }&gt;</code></td>
       <td>Named transitions with source and target states</td>
     </tr>
     <tr>
       <td><code>guards</code></td>
-      <td><code>Record<string, (entity) => boolean></code></td>
+      <td><code>Record&lt;string, (entity) =&gt; boolean&gt;</code></td>
       <td>Functions that must return <code>true</code> for the transition</td>
     </tr>
     <tr>
       <td><code>effects</code></td>
-      <td><code>Record<string, (entity, meta) => void></code></td>
+      <td><code>Record&lt;string, (entity, meta) =&gt; void&gt;</code></td>
       <td>Side effects to run after mutating the field</td>
     </tr>
     <tr>
       <td><code>events</code></td>
-      <td><code>Record<string, string></code></td>
+      <td><code>Record&lt;string, string&gt;</code></td>
       <td>Event names to emit via <code>Emitter</code> after a transition</td>
     </tr>
   </tbody>
@@ -152,7 +152,7 @@ Guards are functions that must return <code>true</code> for a transition to proc
   guards: {
     cancel: (order) => !order.locked,
     refund: (order) => {
-      const thirtyDays = 30 <em> 24 </em> 60 <em> 60 </em> 1000
+      const thirtyDays = 30 * 24 * 60 * 60 * 1000
       return Date.now() - order.deliveredAt.getTime() < thirtyDays
     },
   },
@@ -203,7 +203,7 @@ Side effects run <strong>after</strong> the field is mutated but <strong>before<
   effects: {
     ship: async (order, meta) => {
       await sendShippingEmail(order.email)
-      await Slack.notify(<code>Order #${order.id} shipped</code>)
+      await Slack.notify(`Order #${order.id} shipped`)
     },
     cancel: async (order, meta) => {
       await refundPayment(order.paymentId)
@@ -225,7 +225,7 @@ The <code>meta</code> parameter contains transition details:
 
 Map transitions to event names. Events are emitted via <code>Emitter</code> after the transition completes (after effects run).
 
-<pre><code class="language-typescript">import Emitter from '@strav/kernel'
+<pre><code class="language-typescript">import { Emitter } from '@strav/kernel'
 
 const orderMachine = defineMachine({
   // ...states, transitions...
@@ -237,7 +237,7 @@ const orderMachine = defineMachine({
 })
 
 Emitter.on('order:shipped', ({ entity, from, to, transition }) => {
-  console.log(<code>Order ${entity.id} shipped</code>)
+  console.log(`Order ${entity.id} shipped`)
 })
 </code></pre>
 
@@ -302,12 +302,14 @@ class Order extends compose(
 
 When <code>apply()</code> or <code>transition()</code> is called:
 
+<ol>
 <li><strong>Validate from-state</strong> — check that the current state is in the transition's <code>from</code> list</li>
 <li><strong>Run guard</strong> — if defined, must return <code>true</code> (sync or async)</li>
 <li><strong>Mutate field</strong> — <code>entity[field] = to</code></li>
 <li><strong>Run effect</strong> — if defined, execute the side effect</li>
 <li><strong>Save</strong> — (mixin only) call <code>entity.save()</code></li>
 <li><strong>Emit event</strong> — if configured, fire via <code>Emitter</code></li>
+</ol>
 
 <p>If any step fails, subsequent steps don't run. The field is only mutated if both validation and guard pass.</p>
 

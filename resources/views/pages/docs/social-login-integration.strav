@@ -10,7 +10,7 @@ The social module (<code>@strav/social</code>) provides OAuth 2.0 social authent
 
 Built-in providers: <strong>Google</strong>, <strong>GitHub</strong>, <strong>Discord</strong>, <strong>Facebook</strong>, <strong>LinkedIn</strong>. Custom providers can be added via <code>extend()</code>.
 
-Requires the <code>session()</code> middleware from the <a href="./session.md">session module</a> for CSRF state verification (unless running in stateless mode).
+Requires the <code>session()</code> middleware from the <a href="./session-management">session module</a> for CSRF state verification (unless running in stateless mode).
 
 <h2>Installation</h2>
 
@@ -142,18 +142,23 @@ router.group({ middleware: [session()] }, r => {
 
 Every provider returns a <code>SocialUser</code> with these fields:
 
-<p>| Field | Type | Description |</p>
-<p>|-------|------|-------------|</p>
-| <code>id</code> | <code>string</code> | Unique identifier from the provider |
-| <code>name</code> | <code>string \| null</code> | Full name |
-| <code>email</code> | <code>string \| null</code> | Email address |
-| <code>avatar</code> | <code>string \| null</code> | Profile picture URL |
-| <code>nickname</code> | <code>string \| null</code> | Username / handle |
-| <code>token</code> | <code>string</code> | OAuth access token |
-| <code>refreshToken</code> | <code>string \| null</code> | Refresh token (if provided) |
-| <code>expiresIn</code> | <code>number \| null</code> | Token lifetime in seconds |
-| <code>approvedScopes</code> | <code>string[]</code> | Scopes granted by the user |
-| <code>raw</code> | <code>Record<string, unknown></code> | Full raw response from the provider API |
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>id</code></td><td><code>string</code></td><td>Unique identifier from the provider</td></tr>
+<tr><td><code>name</code></td><td><code>string | null</code></td><td>Full name</td></tr>
+<tr><td><code>email</code></td><td><code>string | null</code></td><td>Email address</td></tr>
+<tr><td><code>avatar</code></td><td><code>string | null</code></td><td>Profile picture URL</td></tr>
+<tr><td><code>nickname</code></td><td><code>string | null</code></td><td>Username / handle</td></tr>
+<tr><td><code>token</code></td><td><code>string</code></td><td>OAuth access token</td></tr>
+<tr><td><code>refreshToken</code></td><td><code>string | null</code></td><td>Refresh token (if provided)</td></tr>
+<tr><td><code>expiresIn</code></td><td><code>number | null</code></td><td>Token lifetime in seconds</td></tr>
+<tr><td><code>approvedScopes</code></td><td><code>string[]</code></td><td>Scopes granted by the user</td></tr>
+<tr><td><code>raw</code></td><td><code>Record&lt;string, unknown&gt;</code></td><td>Full raw response from the provider API</td></tr>
+</tbody>
+</table>
 
 <h2>Fluent API</h2>
 
@@ -282,9 +287,9 @@ class SpotifyProvider extends AbstractProvider {
 
   protected async getUserByToken(token: string) {
     const res = await fetch('https://api.spotify.com/v1/me', {
-      headers: { Authorization: <code>Bearer ${token}</code> },
+      headers: { Authorization: `Bearer ${token}` },
     })
-    if (!res.ok) throw new Error(<code>Spotify API error: ${res.status}</code>)
+    if (!res.ok) throw new Error(`Spotify API error: ${res.status}`)
     return await res.json()
   }
 
@@ -357,14 +362,14 @@ export default {
 
 <h2>Error handling</h2>
 
-<p>The module throws two error types:</p>
+<p>The module throws two main error types:</p>
 
 <ul>
 <li><strong><code>SocialError</code></strong> — OAuth flow errors (invalid state, missing code, user denied access)</li>
 <li><strong><code>ExternalServiceError</code></strong> — HTTP errors from the provider API (token exchange failure, profile fetch failure)</li>
 </ul>
 
-<pre><code class="language-typescript">import { SocialError } from '@strav/social'
+<pre><code class="language-typescript">import { SocialError, ExternalServiceError } from '@strav/social'
 
 r.get('/auth/github/callback', async ctx => {
   try {
@@ -374,6 +379,10 @@ r.get('/auth/github/callback', async ctx => {
     if (error instanceof SocialError) {
       // User denied access or CSRF mismatch
       return ctx.redirect('/login?error=auth_failed')
+    }
+    if (error instanceof ExternalServiceError) {
+      // Provider API error (network, invalid response, etc.)
+      return ctx.redirect('/login?error=provider_error')
     }
     throw error
   }
@@ -428,17 +437,22 @@ await SocialAccount.deleteByUser(user)
 
 All methods return or accept a <code>SocialAccountData</code> object:
 
-<p>| Field | Type | Description |</p>
-<p>|-------|------|-------------|</p>
-| <code>id</code> | <code>number</code> | Auto-incrementing primary key |
-| <code>userId</code> | <code>string \| number</code> | Foreign key to the user table |
-| <code>provider</code> | <code>string</code> | Provider name (e.g. <code>'github'</code>) |
-| <code>providerId</code> | <code>string</code> | User's ID from the provider |
-| <code>token</code> | <code>string</code> | OAuth access token |
-| <code>refreshToken</code> | <code>string \| null</code> | Refresh token |
-| <code>expiresAt</code> | <code>Date \| null</code> | Token expiry |
-| <code>createdAt</code> | <code>Date</code> | Row creation time |
-| <code>updatedAt</code> | <code>Date</code> | Last update time |
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>id</code></td><td><code>number</code></td><td>Auto-incrementing primary key</td></tr>
+<tr><td><code>userId</code></td><td><code>string | number</code></td><td>Foreign key to the user table</td></tr>
+<tr><td><code>provider</code></td><td><code>string</code></td><td>Provider name (e.g. <code>'github'</code>)</td></tr>
+<tr><td><code>providerId</code></td><td><code>string</code></td><td>User's ID from the provider</td></tr>
+<tr><td><code>token</code></td><td><code>string</code></td><td>OAuth access token</td></tr>
+<tr><td><code>refreshToken</code></td><td><code>string | null</code></td><td>Refresh token</td></tr>
+<tr><td><code>expiresAt</code></td><td><code>Date | null</code></td><td>Token expiry</td></tr>
+<tr><td><code>createdAt</code></td><td><code>Date</code></td><td>Row creation time</td></tr>
+<tr><td><code>updatedAt</code></td><td><code>Date</code></td><td>Last update time</td></tr>
+</tbody>
+</table>
 
 <h2>Security</h2>
 

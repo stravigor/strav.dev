@@ -434,7 +434,7 @@ const lastName = faker.person.lastName()
 const user = {
   firstName,
   lastName,
-  fullName: <code>${firstName} ${lastName}</code>,
+  fullName: `$\{firstName\} $\{lastName\}`,
   email: faker.internet.email({ firstName, lastName }),
   username: faker.person.username(firstName, lastName)
 }

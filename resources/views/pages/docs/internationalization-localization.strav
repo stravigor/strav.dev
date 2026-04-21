@@ -204,12 +204,12 @@ If no strategy matches, falls back to <code>config.default</code>.
 
 <code>t()</code>, <code>choice()</code>, and <code>locale()</code> are automatically available as globals in <code>.strav</code> templates:
 
-<pre><code class="language-strav"><html lang="{{ locale() }}">
-<body>
-  <h1>{{ t('messages.welcome', { name: user.name }) }}</h1>
-  <p>{{ choice('messages.items', items.length) }}</p>
-</body>
-</html>
+<pre><code class="language-strav">&lt;html lang="{{ locale() }}"&gt;
+&lt;body&gt;
+  &lt;h1&gt;{{ t('messages.welcome', { name: user.name }) }}&lt;/h1&gt;
+  &lt;p&gt;{{ choice('messages.items', items.length) }}&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
 </code></pre>
 
 <h3>Vue Islands</h3>
@@ -271,8 +271,8 @@ Replacements use <code>:name</code> syntax:
 When a key is missing in the current locale, the system tries the <code>fallback</code> locale (typically <code>en</code>). If still missing, it returns the raw key.
 
 <pre><code>1. Try requested locale (e.g., 'fr')
-<li>Try fallback locale (e.g., 'en')</li>
-<li>Return the key itself (e.g., 'auth.failed')</li>
+2. Try fallback locale (e.g., 'en')
+3. Return the key itself (e.g., 'auth.failed')
 </code></pre>
 
 <h2>Runtime Registration</h2>
@@ -310,8 +310,8 @@ await localeStorage.run('fr', async () => {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="./installation-guide">← Installation Guide</a>
+    <a href="./job-queue-management">Job Queue Management →</a>
   </div>
 </article>
 @end

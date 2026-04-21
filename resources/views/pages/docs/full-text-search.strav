@@ -338,7 +338,7 @@ bun strav search:import app/models/article.ts --chunk 1000
 
 Use the <code>NullDriver</code> to disable search in tests:
 
-<pre><code class="language-env"><h1>.env.test</h1>
+<pre><code class="language-env"># .env.test
 SEARCH_DRIVER=null
 </code></pre>
 

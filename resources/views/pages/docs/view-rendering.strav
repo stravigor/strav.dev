@@ -35,12 +35,12 @@ app.use(new ViewProvider())
 
 This registers the <code>ViewEngine</code> singleton and wires it into the HTTP context so <code>ctx.view()</code> works in all route handlers.
 
-Templates live in the <code>views/</code> directory by default. Configure via <code>config/view.ts</code>:
+Templates live in the <code>resources/views/</code> directory by default. Configure via <code>config/view.ts</code>:
 
 <pre><code class="language-typescript">import { env } from '@strav/kernel'
 
 export default {
-  directory: env('VIEW_DIRECTORY', 'views'),
+  directory: env('VIEW_DIRECTORY', 'resources/views'),
   cache: env.bool('VIEW_CACHE', true),   // disable in development for auto-reload
 }
 </code></pre>
@@ -127,7 +127,7 @@ The included template receives both the parent data and any additional data pass
 
 <p>Layouts define the page shell. Child templates fill named blocks.</p>
 
-<pre><code class="language-html">{{-- views/layouts/app.strav --}}
+<pre><code class="language-html">{{-- resources/views/layouts/app.strav --}}
 <!DOCTYPE html>
 <html>
 <head><title>{{ title }}</title></head>
@@ -144,7 +144,7 @@ The included template receives both the parent data and any additional data pass
 </html>
 </code></pre>
 
-<pre><code class="language-html">{{-- views/pages/dashboard.strav --}}
+<pre><code class="language-html">{{-- resources/views/pages/dashboard.strav --}}
 @layout('layouts/app')
 
 @block('content')
@@ -173,11 +173,11 @@ Static attributes pass string values. Bound attributes (<code>:prop</code>) eval
 
 <h3>Vue SFC islands (recommended)</h3>
 
-Write real <code>.vue</code> single-file components in an <code>islands/</code> directory. The framework compiles and bundles them automatically.
+Write real <code>.vue</code> single-file components in a <code>resources/islands/</code> directory. The framework compiles and bundles them automatically.
 
 <strong>1. Create <code>.vue</code> files:</strong>
 
-<pre><code class="language-vue"><!-- islands/counter.vue -->
+<pre><code class="language-vue"><!-- resources/islands/counter.vue -->
 <template>
   <div class="counter">
     <button @click="count--">-</button>
@@ -202,7 +202,7 @@ Both <code>&lt;script setup&gt;</code> and Options API (<code>&lt;script&gt;</co
 
 <strong>2. Use <code>@islands</code> in your template:</strong>
 
-<pre><code class="language-html">{{-- views/pages/home.strav --}}
+<pre><code class="language-html">{{-- resources/views/pages/home.strav --}}
 @layout('layouts/app')
 
 @block('content')
@@ -228,15 +228,24 @@ await islands.build()
 server.start(router)
 </code></pre>
 
-<code>IslandBuilder.build()</code> scans the <code>islands/</code> directory, compiles all <code>.vue</code> files using <code>@vue/compiler-sfc</code>, and bundles everything (Vue runtime + components + mount logic) into a single <code>public/islands.js</code>.
+<code>IslandBuilder.build()</code> scans the <code>resources/islands/</code> directory, compiles all <code>.vue</code> files using <code>@vue/compiler-sfc</code>, and bundles everything (Vue runtime + components + mount logic) into a single <code>public/builds/islands.js</code>.
 
 <strong>Options:</strong>
 
 <pre><code class="language-typescript">const islands = new IslandBuilder({
-  islandsDir: './islands',    // default: './islands'
-  outDir: './public',         // default: './public'
-  outFile: 'islands.js',     // default: 'islands.js'
-  minify: true,               // default: true in production
+  islandsDir: './resources/islands',    // default: './resources/islands'
+  outDir: './public/builds',           // default: './public/builds'
+  outFile: 'islands.js',              // default: 'islands.js'
+  minify: true,                       // default: true in production
+  basePath: '/builds/',              // default: '/builds/'
+  compress: true,                    // default: true (generate .gz/.br files)
+  css: {                            // optional CSS compilation
+    entry: './resources/css/app.scss',  // single entry
+    // OR entry: ['./src/app.scss', './src/admin.scss'],  // multiple entries
+    // OR entry: { app: './src/app.scss', admin: './src/admin.scss' },  // named entries
+    outDir: './public/css',        // default: './public/css'
+    basePath: '/css/',             // default: '/css/'
+  },
 })
 </code></pre>
 
@@ -249,11 +258,25 @@ islands.watch()
 islands.unwatch()
 </code></pre>
 
-<strong>Dependencies:</strong> The app package needs <code>vue</code> as a dependency (it gets bundled into <code>islands.js</code>):
+<strong>CSS Compilation:</strong> The IslandBuilder can also compile Sass/SCSS files alongside your islands:
+
+<pre><code class="language-typescript">// Build both islands and CSS
+await islands.build()
+
+// Or build CSS separately
+await islands.buildCss()
+</code></pre>
+
+<p>CSS files are compiled with Sass, minified in production, and automatically versioned with content hashes. The builder generates multiple CSS files if you provide multiple entries and watches for changes in development mode.</p>
+
+<strong>Dependencies:</strong> The app package needs <code>vue</code> as a dependency (it gets bundled into <code>islands.js</code>). For CSS compilation, install <code>sass</code>:
 
 <pre><code class="language-json">{
   "dependencies": {
     "vue": "^3.5.28"
+  },
+  "devDependencies": {
+    "sass": "^1.70.0"
   }
 }
 </code></pre>
@@ -278,16 +301,18 @@ import '@strav/view/client/islands'
 <pre><code class="language-html"><script type="module" src="/assets/app.js"></script>
 </code></pre>
 
-<h2>Static file middleware</h2>
+<h2>Static file serving</h2>
 
-Serve files from a <code>public/</code> directory:
+<p>The Strav HTTP server automatically serves static files from the configured public directory (default: <code>public/</code>). No middleware setup is required.</p>
 
-<pre><code class="language-typescript">import { staticFiles } from '@strav/view'
+<p>Configure the public directory in <code>config/http.ts</code>:</p>
 
-router.use(staticFiles('public'))
+<pre><code class="language-typescript">export default {
+  public: './public',  // default: './public'
+}
 </code></pre>
 
-<p>Serves any file that exists under the root directory. Falls through to the next middleware when no file matches. Blocks directory traversal and hidden files automatically.</p>
+<p>The server automatically serves any file that exists under the public directory, with support for content negotiation (gzip/brotli), falls through to route handlers when no file matches, and blocks directory traversal attacks automatically.</p>
 
 <h2>Template resolution</h2>
 
@@ -303,15 +328,15 @@ router.use(staticFiles('public'))
   <tbody>
     <tr>
       <td><code>'pages/home'</code></td>
-      <td><code>views/pages/home.strav</code></td>
+      <td><code>resources/views/pages/home.strav</code></td>
     </tr>
     <tr>
       <td><code>'layouts/app'</code></td>
-      <td><code>views/layouts/app.strav</code></td>
+      <td><code>resources/views/layouts/app.strav</code></td>
     </tr>
     <tr>
       <td><code>'partials/nav'</code></td>
-      <td><code>views/partials/nav.strav</code></td>
+      <td><code>resources/views/partials/nav.strav</code></td>
     </tr>
   </tbody>
 </table>

@@ -31,13 +31,13 @@ export const providers = [
 ]
 </code></pre>
 
-<pre><code class="language-html"><!-- 3. Create pages/about.strav -->
+<pre><code class="language-html">&lt;!-- 3. Create pages/about.strav --&gt;
 @layout('layouts/app')
 
 @section('content')
-  <h1>About Us</h1>
-  <p>This page is automatically served at /about</p>
-  <vue:contact-form />
+  &lt;h1&gt;About Us&lt;/h1&gt;
+  &lt;p&gt;This page is automatically served at /about&lt;/p&gt;
+  &lt;vue:contact-form /&gt;
 @end
 </code></pre>
 
@@ -224,11 +224,13 @@ With <code>fallbackToDefault: true</code>, if a page doesn't exist in the subdom
 
 <h3>URL resolution rules</h3>
 
+<ul>
 <li><strong>Root path</strong> (<code>/</code>) → <code>pages/index.strav</code></li>
 <li><strong>Direct file</strong> (<code>/about</code>) → <code>pages/about.strav</code></li>
 <li><strong>Directory with slash</strong> (<code>/docs/</code>) → <code>pages/docs/index.strav</code></li>
 <li><strong>Directory without slash</strong> (<code>/docs</code>) → tries <code>pages/docs.strav</code> first, then <code>pages/docs/index.strav</code></li>
 <li><strong>Nested paths</strong> (<code>/docs/getting-started</code>) → <code>pages/docs/getting-started.strav</code></li>
+</ul>
 
 <h2>Template features</h2>
 
@@ -236,69 +238,69 @@ Static pages support all <code>.strav</code> template features:
 
 <h3>Layout inheritance</h3>
 
-<pre><code class="language-html"><!-- pages/about.strav -->
+<pre><code class="language-html">&lt;!-- pages/about.strav --&gt;
 @layout('layouts/app')
 
 @section('title', 'About Us')
 
 @section('content')
-  <h1>About Our Company</h1>
-  <p>Founded in 2024...</p>
+  &lt;h1&gt;About Our Company&lt;/h1&gt;
+  &lt;p&gt;Founded in 2024...&lt;/p&gt;
 @end
 </code></pre>
 
 <h3>Vue islands</h3>
 
-<pre><code class="language-html"><!-- pages/contact.strav -->
+<pre><code class="language-html">&lt;!-- pages/contact.strav --&gt;
 @layout('layouts/app')
 
 @section('content')
-  <h1>Contact Us</h1>
-  <vue:contact-form :user="{{ auth.user() }}" />
+  &lt;h1&gt;Contact Us&lt;/h1&gt;
+  &lt;vue:contact-form :user="{{ auth.user() }}" /&gt;
 
-  <div class="map">
-    <vue:interactive-map location="San Francisco" />
-  </div>
+  &lt;div class="map"&gt;
+    &lt;vue:interactive-map location="San Francisco" /&gt;
+  &lt;/div&gt;
 @end
 </code></pre>
 
 <h3>Template directives</h3>
 
-<pre><code class="language-html"><!-- pages/features.strav -->
+<pre><code class="language-html">&lt;!-- pages/features.strav --&gt;
 @layout('layouts/app')
 
 @section('content')
-  <h1>Features</h1>
+  &lt;h1&gt;Features&lt;/h1&gt;
 
-  @if(features.length > 0)
-    <div class="feature-grid">
+  @if(features.length &gt; 0)
+    &lt;div class="feature-grid"&gt;
       @each feature in features
-        <div class="feature-card">
-          <h3>{{ feature.title }}</h3>
-          <p>{{ feature.description }}</p>
-        </div>
+        &lt;div class="feature-card"&gt;
+          &lt;h3&gt;{{ feature.title }}&lt;/h3&gt;
+          &lt;p&gt;{{ feature.description }}&lt;/p&gt;
+        &lt;/div&gt;
       @end
-    </div>
+    &lt;/div&gt;
   @else
-    <p>No features available.</p>
+    &lt;p&gt;No features available.&lt;/p&gt;
   @end
 @end
 </code></pre>
 
 <h3>Asset inclusion</h3>
 
-<pre><code class="language-html"><!-- pages/dashboard.strav -->
+<pre><code class="language-html">&lt;!-- pages/dashboard.strav --&gt;
 @layout('layouts/app')
 
 @section('head')
   @push('styles')
-    <link rel="stylesheet" href="{{ asset('css/dashboard.css') }}">
+    &lt;link rel="stylesheet" href="{{ asset('css/dashboard.css') }}"&gt;
   @end
 @end
 
 @section('content')
-  <h1>Dashboard</h1>
-  <vue:analytics-chart />
+  &lt;h1&gt;Dashboard&lt;/h1&gt;
+  &lt;vue:analytics-chart /&gt;
 @end
 </code></pre>
 
@@ -313,27 +315,76 @@ ViewEngine.setGlobal('currentYear', new Date().getFullYear())
 ViewEngine.setGlobal('siteName', 'My Awesome Site')
 </code></pre>
 
-<pre><code class="language-html"><!-- Any page can now use -->
-<footer>
+<pre><code class="language-html">&lt;!-- Any page can now use --&gt;
+&lt;footer&gt;
   &amp;copy; {{ currentYear }} {{ siteName }}
-</footer>
+&lt;/footer&gt;
 </code></pre>
 
 <h3>Pass data via Vue islands</h3>
 
-<pre><code class="language-html"><!-- pages/pricing.strav -->
+<pre><code class="language-html">&lt;!-- pages/pricing.strav --&gt;
 @layout('layouts/app')
 
 @section('content')
-  <h1>Pricing</h1>
-  <vue:pricing-table
+  &lt;h1&gt;Pricing&lt;/h1&gt;
+  &lt;vue:pricing-table
     :plans="{{ JSON.stringify(plans) }}"
     currency="USD"
-  />
+  /&gt;
 @end
 </code></pre>
 
 <p>The Vue component receives the data and handles any dynamic behavior.</p>
+
+<h2>Template context</h2>
+
+<p>Static pages automatically receive a context object containing request information:</p>
+
+<pre><code class="language-html">&lt;!-- pages/example.strav --&gt;
+@layout('layouts/app')
+
+@section('content')
+  &lt;h1&gt;Current Path: {{ ctx.path }}&lt;/h1&gt;
+
+  @if(ctx.subdomain)
+    &lt;p&gt;Subdomain: {{ ctx.subdomain }}&lt;/p&gt;
+  @end
+
+  @if(ctx.params.path)
+    &lt;p&gt;Route Parameter: {{ ctx.params.path }}&lt;/p&gt;
+  @end
+@end
+</code></pre>
+
+<h3>Available context variables</h3>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Variable</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ctx.path</code></td>
+      <td><code>string</code></td>
+      <td>The current URL path</td>
+    </tr>
+    <tr>
+      <td><code>ctx.subdomain</code></td>
+      <td><code>string</code></td>
+      <td>Current subdomain (when subdomain routing is enabled)</td>
+    </tr>
+    <tr>
+      <td><code>ctx.params</code></td>
+      <td><code>object</code></td>
+      <td>Route parameters (including catch-all path parameter)</td>
+    </tr>
+  </tbody>
+</table>
 
 <h2>Security</h2>
 
@@ -388,9 +439,11 @@ ViewEngine.setGlobal('siteName', 'My Awesome Site')
 
 Static pages use catch-all routes registered <strong>after</strong> all application routes, so:
 
+<ul>
 <li>Explicit application routes take precedence</li>
 <li>Static pages serve as fallbacks</li>
 <li>404 responses for missing static pages</li>
+</ul>
 
 <p>Example:</p>
 
@@ -416,14 +469,15 @@ pages: {
 }
 </code></pre>
 
-<p>In your templates, you can access the subdomain value via the context:</p>
+<p>In your templates, the subdomain value is automatically available via the context object (see <a href="#template-context">Template context</a> section for more details):</p>
 
-<pre><code class="language-html"><!-- pages/_tenants/dashboard.strav -->
+<pre><code class="language-html">&lt;!-- pages/_tenants/dashboard.strav --&gt;
 @layout('layouts/app')
 
 @section('content')
-  <h1>Welcome to {{ ctx.subdomain }}'s Dashboard</h1>
-  <!-- For acme.example.com, displays: Welcome to acme's Dashboard -->
+  &lt;h1&gt;Welcome to {{ ctx.subdomain }}'s Dashboard&lt;/h1&gt;
+  &lt;!-- For acme.example.com, ctx.subdomain will be "acme" --&gt;
+  &lt;!-- For xyz.example.com, ctx.subdomain will be "xyz" --&gt;
 @end
 </code></pre>
 

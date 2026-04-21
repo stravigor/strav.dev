@@ -69,10 +69,10 @@ The callback receives the connection's <code>Context</code> (with session/user f
     async send(ctx, { id }, data) {
       const user = ctx.get('user')
       await Message.create({ chatId: id, text: data.text, userId: user.id })
-      broadcast.to(<code>chat/${id}</code>).send('new_message', { text: data.text, userId: user.id })
+      broadcast.to(`chat/${id}`).send('new_message', { text: data.text, userId: user.id })
     },
     typing(ctx, { id }, data) {
-      broadcast.to(<code>chat/${id}</code>).except(ctx.clientId).send('typing', data)
+      broadcast.to(`chat/${id}`).except(ctx.clientId).send('typing', data)
     }
   }
 })
@@ -95,10 +95,10 @@ The callback receives the connection's <code>Context</code> (with session/user f
 broadcast.to('announcements').send('news', { title: 'v2 released!' })
 
 // Broadcast to a dynamic channel
-broadcast.to(<code>chats/${chatId}</code>).send('message', { text, userId })
+broadcast.to(`chats/${chatId}`).send('message', { text, userId })
 
 // Exclude a specific client (e.g. the sender)
-broadcast.to(<code>chats/${chatId}</code>).except(senderId).send('message', data)
+broadcast.to(`chats/${chatId}`).except(senderId).send('message', data)
 </code></pre>
 
 <p>Broadcasting to a channel with no subscribers is a no-op.</p>
@@ -166,15 +166,15 @@ bc.on('disconnected', () => {
 })
 
 bc.on('reconnecting', (attempt) => {
-  console.log(<code>Reconnecting... attempt ${attempt}</code>)
+  console.log(`Reconnecting... attempt ${attempt}`)
 })
 
 bc.on('subscribed', (channel) => {
-  console.log(<code>Subscribed to ${channel}</code>)
+  console.log(`Subscribed to ${channel}`)
 })
 
 bc.on('error', ({ channel, reason }) => {
-  console.log(<code>Subscription to ${channel} denied: ${reason}</code>)
+  console.log(`Subscription to ${channel} denied: ${reason}`)
 })
 </code></pre>
 
@@ -225,7 +225,7 @@ broadcast.subscriberCount('chat/1')     // subscribers on a specific channel
 import { broadcast } from '@strav/signal'
 
 Emitter.on<{ task: Task }>('task.created', ({ task }) => {
-  broadcast.to(<code>projects/${task.projectId}/tasks</code>).send('created', task)
+  broadcast.to(`projects/${task.projectId}/tasks`).send('created', task)
 })
 </code></pre>
 
@@ -242,7 +242,7 @@ broadcast.channel('chat/:id', {
   authorize: (ctx, { id }) => !!ctx.get('user'),
   messages: {
     async send(ctx, { id }, data) {
-      broadcast.to(<code>chat/${id}</code>).send('message', {
+      broadcast.to(`chat/${id}`).send('message', {
         text: data.text,
         userId: ctx.get('user').id,
       })

@@ -8,7 +8,7 @@
 
 The HTTP auth module provides database-backed authentication (sessions and access tokens), CSRF protection, and middleware for protecting routes. It integrates with <code>@strav/auth</code> for low-level authentication primitives like JWTs, TOTP, and tokens.
 
-All session-based auth requires the <code>session()</code> middleware from the <a href="./session.md">session module</a> to run first.
+All session-based auth requires the <code>session()</code> middleware from the <a href="./session-management">session module</a> to run first.
 
 <h2>Integration with @strav/auth</h2>
 
@@ -33,7 +33,7 @@ The HTTP auth module re-exports all <code>@strav/auth</code> primitives for conv
 <li><strong>Stateless JWT/signed tokens</strong>: For distributed systems or temporary authentication</li>
 </ul>
 
-See the <a href="../auth/auth.md">Auth primitives guide</a> for detailed usage of JWT, TOTP, tokens, and other low-level utilities.
+See the <a href="./authentication-primitives">Auth primitives guide</a> for detailed usage of JWT, TOTP, tokens, and other low-level utilities.
 
 <h2>Setup</h2>
 
@@ -82,7 +82,7 @@ Auth.useResolver((id) => User.find(id))
 await Auth.ensureTables()
 </code></pre>
 
-> The sessions table is managed by the <a href="./session.md">session module</a> via <code>SessionManager.ensureTable()</code>.
+> The sessions table is managed by the <a href="./session-management">session module</a> via <code>SessionManager.ensureTable()</code>.
 
 <h2>Configuration</h2>
 
@@ -96,7 +96,7 @@ export default {
 }
 </code></pre>
 
-Session configuration (cookie name, lifetime, etc.) lives in <code>config/session.ts</code> — see the <a href="./session.md">session guide</a>.
+Session configuration (cookie name, lifetime, etc.) lives in <code>config/session.ts</code> — see the <a href="./session-management">session guide</a>.
 
 <h2>Protecting routes</h2>
 
@@ -161,9 +161,11 @@ The <code>csrf()</code> middleware must be placed <strong>after</strong> <code>s
 On <strong>GET/HEAD/OPTIONS</strong> requests, it makes the CSRF token available via <code>ctx.get('csrfToken')</code>.
 
 On <strong>state-changing</strong> requests (POST, PUT, PATCH, DELETE), it checks for a valid token in:
+<ul>
 <li><code>X-CSRF-Token</code> header</li>
 <li><code>X-XSRF-Token</code> header</li>
 <li><code>_token</code> field in a JSON or form body</li>
+</ul>
 
 Returns <code>403</code> if the token is missing or doesn't match.
 
@@ -187,17 +189,17 @@ router.group({ middleware: [session(), guest()] }, (r) => {
 
 <h2>Sessions & Authentication</h2>
 
-Sessions are managed by the <a href="./session.md">session module</a>. The auth module builds on top of it.
+Sessions are managed by the <a href="./session-management">session module</a>. The auth module builds on top of it.
 
 <h3>Login</h3>
 
 <pre><code class="language-typescript">import { Session } from '@strav/http'
 
 router.post('/login', async (ctx) => {
-  const { email, password } = await ctx.body<{ email: string; password: string }>()
+  const { email, password } = await ctx.body&lt;{ email: string; password: string }&gt;()
   const user = await verifyCredentials(email, password) // your logic
 
-  const s = ctx.get<Session>('session')
+  const s = ctx.get&lt;Session&gt;('session')
   s.authenticate(user)     // sets userId on the session
   await s.regenerate()     // new session ID (prevents fixation attacks)
 
@@ -229,7 +231,7 @@ Expired sessions remain in the database until cleaned up. Call <code>SessionMana
 <pre><code class="language-typescript">import { SessionManager } from '@strav/http'
 
 const deleted = await SessionManager.gc()
-console.log(<code>Cleaned up ${deleted} expired sessions</code>)
+console.log(`Cleaned up ${deleted} expired sessions`)
 </code></pre>
 
 <h2>Access tokens (Database-backed)</h2>
@@ -243,7 +245,7 @@ This is different from JWT access tokens (<code>@strav/auth</code>) which are st
 <pre><code class="language-typescript">import { AccessToken } from '@strav/http'
 
 router.post('/api/tokens', auth(), async (ctx) => {
-  const { name } = await ctx.body<{ name: string }>()
+  const { name } = await ctx.body&lt;{ name: string }&gt;()
   const user = ctx.get('user')
 
   const { token, accessToken } = await AccessToken.create(user, name)
@@ -274,7 +276,7 @@ await AccessToken.revokeAllFor(user)
 
 <h2>Database tables</h2>
 
-<strong>_strav_sessions</strong> — managed by the <a href="./session.md">session module</a>
+<strong>_strav_sessions</strong> — managed by the <a href="./session-management">session module</a>
 
 <table class="doc-table">
   <thead>
@@ -426,7 +428,7 @@ router.group({ middleware: [guest('/dashboard')] }, (r) => {
   r.get('/login', showLoginPage)
   r.post('/login', async (ctx) => {
     const user = await verifyCredentials(await ctx.body())
-    const s = ctx.get<Session>('session')
+    const s = ctx.get&lt;Session&gt;('session')
     s.authenticate(user)
     await s.regenerate()
     return ctx.redirect('/dashboard')
@@ -450,8 +452,8 @@ router.group({ prefix: '/api', middleware: [auth('token')] }, (r) => {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="./application-configuration">← Application Configuration</a>
+    <a href="./authorization-policies">Authorization Policies →</a>
   </div>
 </article>
 @end

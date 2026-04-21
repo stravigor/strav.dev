@@ -1,10 +1,10 @@
 @layout('layouts/docs')
 
-@set('title', 'Core — Application, Service Providers & DI Container - Strav Documentation')
+@set('title', 'Core - Application, Service Providers & DI Container - Strav Documentation')
 
 @section('content')
 <article class="doc-content">
-  <h1>Core — Application, Service Providers & DI Container</h1>
+  <h1>Core - Application, Service Providers & DI Container</h1>
 
   <p>The core module provides the Application lifecycle manager, the Service Provider pattern, the IoC container, and the <code>@inject</code> decorator. Together they form the backbone of Strav's dependency injection and bootstrap system.</p>
 
@@ -121,10 +121,13 @@ const svc = app.make(NotificationService)</code></pre>
 
   <pre><code class="language-typescript">import { app } from '@strav/kernel'
 import {
-  ConfigProvider, DatabaseProvider, AuthProvider,
-  SessionProvider, CacheProvider, MailProvider,
-  QueueProvider, HttpProvider,
+  ConfigProvider, EncryptionProvider, StorageProvider,
+  CacheProvider, I18nProvider, LoggerProvider,
 } from '@strav/kernel'
+import { DatabaseProvider } from '@strav/database'
+import { AuthProvider, SessionProvider, HttpProvider } from '@strav/http'
+import { MailProvider, NotificationProvider, BroadcastProvider } from '@strav/signal'
+import { QueueProvider } from '@strav/queue'
 import User from './app/models/user'
 
 app
@@ -290,12 +293,13 @@ class RedisProvider extends ServiceProvider {
 
   <h3>Built-in providers</h3>
 
-  <p>All built-in providers are exported from <code>@strav/kernel</code>:</p>
+  <p>Strav's providers are distributed across multiple packages for modularity. Here's where to find each provider:</p>
 
   <table class="doc-table">
     <thead>
       <tr>
         <th>Provider</th>
+        <th>Package</th>
         <th>Name</th>
         <th>Dependencies</th>
         <th>What it does</th>
@@ -304,84 +308,98 @@ class RedisProvider extends ServiceProvider {
     <tbody>
       <tr>
         <td><code>ConfigProvider</code></td>
+        <td><code>@strav/kernel</code></td>
         <td><code>config</code></td>
         <td>—</td>
         <td>Loads <code>Configuration</code> from config directory</td>
       </tr>
       <tr>
         <td><code>DatabaseProvider</code></td>
+        <td><code>@strav/database</code></td>
         <td><code>database</code></td>
         <td><code>config</code></td>
         <td>Registers <code>Database</code>, closes on shutdown</td>
       </tr>
       <tr>
         <td><code>EncryptionProvider</code></td>
+        <td><code>@strav/kernel</code></td>
         <td><code>encryption</code></td>
         <td><code>config</code></td>
         <td>Registers <code>EncryptionManager</code></td>
       </tr>
       <tr>
         <td><code>LoggerProvider</code></td>
+        <td><code>@strav/kernel</code></td>
         <td><code>logger</code></td>
         <td><code>config</code></td>
         <td>Registers <code>Logger</code></td>
       </tr>
       <tr>
         <td><code>CacheProvider</code></td>
+        <td><code>@strav/kernel</code></td>
         <td><code>cache</code></td>
         <td><code>config</code></td>
         <td>Registers <code>CacheManager</code></td>
       </tr>
       <tr>
         <td><code>StorageProvider</code></td>
+        <td><code>@strav/kernel</code></td>
         <td><code>storage</code></td>
         <td><code>config</code></td>
         <td>Registers <code>StorageManager</code></td>
       </tr>
       <tr>
         <td><code>AuthProvider</code></td>
+        <td><code>@strav/http</code></td>
         <td><code>auth</code></td>
         <td><code>database</code></td>
         <td>Registers <code>Auth</code>, sets user resolver, creates tables</td>
       </tr>
       <tr>
         <td><code>SessionProvider</code></td>
+        <td><code>@strav/http</code></td>
         <td><code>session</code></td>
         <td><code>database</code></td>
         <td>Registers <code>SessionManager</code>, creates table</td>
       </tr>
       <tr>
         <td><code>MailProvider</code></td>
+        <td><code>@strav/signal</code></td>
         <td><code>mail</code></td>
         <td><code>config</code></td>
         <td>Registers <code>MailManager</code></td>
       </tr>
       <tr>
         <td><code>QueueProvider</code></td>
+        <td><code>@strav/queue</code></td>
         <td><code>queue</code></td>
         <td><code>database</code></td>
         <td>Registers <code>Queue</code>, creates tables</td>
       </tr>
       <tr>
         <td><code>NotificationProvider</code></td>
+        <td><code>@strav/signal</code></td>
         <td><code>notification</code></td>
         <td><code>database</code></td>
         <td>Registers <code>NotificationManager</code>, creates table</td>
       </tr>
       <tr>
         <td><code>I18nProvider</code></td>
+        <td><code>@strav/kernel</code></td>
         <td><code>i18n</code></td>
         <td><code>config</code></td>
         <td>Registers <code>I18nManager</code>, loads translations</td>
       </tr>
       <tr>
         <td><code>BroadcastProvider</code></td>
+        <td><code>@strav/signal</code></td>
         <td><code>broadcast</code></td>
         <td>—</td>
         <td>Boots <code>BroadcastManager</code> on the router</td>
       </tr>
       <tr>
         <td><code>HttpProvider</code></td>
+        <td><code>@strav/http</code></td>
         <td><code>http</code></td>
         <td><code>config</code></td>
         <td>Registers <code>Server</code>, starts HTTP server, stops on shutdown</td>
@@ -394,40 +412,40 @@ class RedisProvider extends ServiceProvider {
   <table class="doc-table">
     <thead>
       <tr>
-        <th>Package</th>
         <th>Provider</th>
+        <th>Package</th>
         <th>Name</th>
         <th>Dependencies</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td><code>@strav/search</code></td>
         <td><code>SearchProvider</code></td>
+        <td><code>@strav/search</code></td>
         <td><code>search</code></td>
         <td><code>config</code></td>
       </tr>
       <tr>
-        <td><code>@strav/devtools</code></td>
         <td><code>DevtoolsProvider</code></td>
+        <td><code>@strav/devtools</code></td>
         <td><code>devtools</code></td>
         <td><code>database</code></td>
       </tr>
       <tr>
-        <td><code>@strav/brain</code></td>
         <td><code>BrainProvider</code></td>
+        <td><code>@strav/brain</code></td>
         <td><code>brain</code></td>
         <td><code>config</code></td>
       </tr>
       <tr>
-        <td><code>@strav/stripe</code></td>
         <td><code>StripeProvider</code></td>
+        <td><code>@strav/stripe</code></td>
         <td><code>stripe</code></td>
         <td><code>database</code></td>
       </tr>
       <tr>
-        <td><code>@strav/social</code></td>
         <td><code>SocialProvider</code></td>
+        <td><code>@strav/social</code></td>
         <td><code>social</code></td>
         <td><code>database</code></td>
       </tr>
@@ -449,18 +467,29 @@ new BroadcastProvider({ middleware: [session()], path: '/_broadcast' })</code></
 
   <pre><code class="language-typescript">// index.ts
 import { app } from '@strav/kernel'
-import { router } from '@strav/http'
+import { router, session, auth } from '@strav/http'
+
+// Core providers from @strav/kernel
 import {
-  ConfigProvider, DatabaseProvider, EncryptionProvider,
-  LoggerProvider, CacheProvider, StorageProvider,
-  AuthProvider, SessionProvider, MailProvider,
-  QueueProvider, NotificationProvider, I18nProvider,
-  BroadcastProvider, HttpProvider,
+  ConfigProvider, EncryptionProvider, LoggerProvider,
+  CacheProvider, StorageProvider, I18nProvider,
 } from '@strav/kernel'
+
+// Database provider
+import { DatabaseProvider } from '@strav/database'
+
+// HTTP-related providers
+import { AuthProvider, SessionProvider, HttpProvider } from '@strav/http'
+
+// Communication providers
+import { MailProvider, NotificationProvider, BroadcastProvider } from '@strav/signal'
+
+// Queue provider
+import { QueueProvider } from '@strav/queue'
+
+// Optional providers
 import { SearchProvider } from '@strav/search'
 import { DevtoolsProvider } from '@strav/devtools'
-import { session } from '@strav/http'
-import { auth } from '@strav/http'
 import User from './app/models/user'
 
 // Register providers
@@ -495,7 +524,7 @@ await app.start()</code></pre>
   <!-- Navigation -->
   <div class="doc-nav">
     <a href="/docs" class="prev">← Documentation Home</a>
-    <a href="/docs/core/kernel/configuration" class="next">Configuration →</a>
+    <a href="/docs/configuration-guide" class="next">Configuration →</a>
   </div>
 </article>
 

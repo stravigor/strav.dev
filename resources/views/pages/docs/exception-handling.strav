@@ -303,8 +303,8 @@ try {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="./event-dispatcher">← Event Dispatcher</a>
+    <a href="./faker-data-generation">Faker Data Generation →</a>
   </div>
 </article>
 @end

@@ -1,10 +1,10 @@
 @layout('layouts/docs')
 
-@set('title', 'View Engine - Strav Documentation')
+@set('title', 'Template Engine - Strav Documentation')
 
 @section('content')
 <article class="doc-content">
-<h1>View Engine</h1>
+<h1>Template Engine</h1>
 
 Server-side template engine with Vue.js island support. Renders <code>.strav</code> templates to HTML strings, compiles them to cached async functions for fast repeated renders.
 
@@ -35,12 +35,12 @@ new ViewProvider(),
 
 This registers the <code>ViewEngine</code> singleton and wires it into the HTTP context so <code>ctx.view()</code> works in all route handlers.
 
-Templates live in the <code>views/</code> directory by default. Configure via <code>config/view.ts</code>:
+Templates live in the <code>resources/views/</code> directory by default. Configure via <code>config/view.ts</code>:
 
 <pre><code class="language-typescript">import { env } from '@strav/kernel'
 
 export default {
-  directory: env('VIEW_DIRECTORY', 'views'),
+  directory: env('VIEW_DIRECTORY', 'resources/views'),
   cache: env.bool('VIEW_CACHE', true),   // disable in development for auto-reload
 }
 </code></pre>
@@ -59,11 +59,11 @@ Expressions are real JavaScript — <code>{{ items.length + 1 }}</code>, <code>{
 <h3>Conditionals</h3>
 
 <pre><code class="language-html">@if(user.isAdmin)
-  <span class="badge">Admin</span>
+  &lt;span class="badge"&gt;Admin&lt;/span&gt;
 @elseif(user.isMod)
-  <span class="badge">Moderator</span>
+  &lt;span class="badge"&gt;Moderator&lt;/span&gt;
 @else
-  <span class="badge">Member</span>
+  &lt;span class="badge"&gt;Member&lt;/span&gt;
 @end
 </code></pre>
 
@@ -71,11 +71,11 @@ Any JS expression works as the condition: <code>@if(items.length > 0)</code>, <c
 
 <h3>Loops</h3>
 
-<pre><code class="language-html"><ul>
+<pre><code class="language-html">&lt;ul&gt;
   @each(item in items)
-    <li>{{ item.name }}</li>
+    &lt;li&gt;{{ item.name }}&lt;/li&gt;
   @end
-</ul>
+&lt;/ul&gt;
 </code></pre>
 
 <p>Inside loops, these variables are available automatically:</p>
@@ -108,9 +108,9 @@ Any JS expression works as the condition: <code>@if(items.length > 0)</code>, <c
 </table>
 
 <pre><code class="language-html">@each(user in users)
-  <div class="{{ $first ? 'border-t' : '' }}">
+  &lt;div class="{{ $first ? 'border-t' : '' }}"&gt;
     {{ $index + 1 }}. {{ user.name }}
-  </div>
+  &lt;/div&gt;
 @end
 </code></pre>
 
@@ -118,32 +118,32 @@ Any JS expression works as the condition: <code>@if(items.length > 0)</code>, <c
 
 Build a <code>class</code> attribute with conditional entries. Plain strings are always included; entries with <code>=></code> are included only when the condition is truthy.
 
-<pre><code class="language-html"><span @class([
+<pre><code class="language-html">&lt;span @class([
     'p-4',
     'font-bold' => isActive,
     'text-gray-500' => !isActive,
     'bg-red' => hasError,
-])></span>
+])&gt;&lt;/span&gt;
 </code></pre>
 
 When <code>isActive</code> is <code>true</code> and <code>hasError</code> is <code>false</code>, this renders:
 
-<pre><code class="language-html"><span class="p-4 font-bold"></span>
+<pre><code class="language-html">&lt;span class="p-4 font-bold"&gt;&lt;/span&gt;
 </code></pre>
 
 <h3>Conditional styles</h3>
 
 Works the same as <code>@class</code> but outputs a <code>style</code> attribute, joining entries with <code>; </code>.
 
-<pre><code class="language-html"><span @style([
+<pre><code class="language-html">&lt;span @style([
     'background-color: red',
     'font-weight: bold' => isActive,
-])></span>
+])&gt;&lt;/span&gt;
 </code></pre>
 
 When <code>isActive</code> is <code>true</code>:
 
-<pre><code class="language-html"><span style="background-color: red; font-weight: bold"></span>
+<pre><code class="language-html">&lt;span style="background-color: red; font-weight: bold"&gt;&lt;/span&gt;
 </code></pre>
 
 <h3>CSS</h3>
@@ -157,20 +157,20 @@ When <code>isActive</code> is <code>true</code>:
 @css('admin')
 </code></pre>
 
-When using multiple CSS entries with IslandBuilder, <code>@css</code> outputs <code><link></code> tags for all configured CSS files. Use <code>@css('key')</code> to include a specific CSS file. The directive automatically includes versioned URLs for cache busting.
+When using multiple CSS entries with IslandBuilder, <code>@css</code> outputs <code>&amp;lt;link&amp;gt;</code> tags for all configured CSS files. Use <code>@css('key')</code> to include a specific CSS file. The directive automatically includes versioned URLs for cache busting.
 
 <h3>CSRF</h3>
 
 <p>Output a hidden CSRF token input inside forms:</p>
 
-<pre><code class="language-html"><form method="POST" action="/submit">
+<pre><code class="language-html">&lt;form method="POST" action="/submit"&gt;
   @csrf
-  <input type="text" name="title">
-  <button type="submit">Save</button>
-</form>
+  &lt;input type="text" name="title"&gt;
+  &lt;button type="submit"&gt;Save&lt;/button&gt;
+&lt;/form&gt;
 </code></pre>
 
-Renders: <code>&lt;input type="hidden" name="_token" value="a1b2c3..."&gt;</code>. The token is automatically available when the <code>session()</code> middleware is active — no need to pass it from the controller.
+Renders: <code>&amp;lt;input type="hidden" name="_token" value="a1b2c3..."&amp;gt;</code>. The token is automatically available when the <code>session()</code> middleware is active — no need to pass it from the controller.
 
 Pair with the <code>csrf()</code> middleware on the route group to validate incoming tokens on POST/PUT/PATCH/DELETE (see <a href="../../http/docs/auth.md#csrf--csrf-protection">auth docs</a>).
 
@@ -178,65 +178,65 @@ Pair with the <code>csrf()</code> middleware on the route group to validate inco
 
 <p>Stack-based content sections for collecting and outputting content from multiple locations, useful for assets like scripts and styles.</p>
 
-<strong>@push</strong> — Add content to the end of a stack:
+<strong>&#64;push</strong> — Add content to the end of a stack:
 
 <pre><code class="language-html">@push('scripts')
-  <script src="app.js"></script>
+  &lt;script src="app.js"&gt;&lt;/script&gt;
 @end
 
 @push('scripts')
-  <script>console.log('ready')</script>
+  &lt;script&gt;console.log('ready')&lt;/script&gt;
 @end
 </code></pre>
 
-<strong>@prepend</strong> — Add content to the beginning of a stack:
+<strong>&#64;prepend</strong> — Add content to the beginning of a stack:
 
 <pre><code class="language-html">@prepend('scripts')
-  <script>window.config = {}</script>
+  &lt;script&gt;window.config = {}&lt;/script&gt;
 @end
 </code></pre>
 
-<strong>@stack</strong> — Output all content from a stack:
+<strong>&#64;stack</strong> — Output all content from a stack:
 
-<pre><code class="language-html"><html>
-<head>
+<pre><code class="language-html">&lt;html&gt;
+&lt;head&gt;
   @stack('styles')
-</head>
-<body>
+&lt;/head&gt;
+&lt;body&gt;
   @stack('scripts')
-</body>
-</html>
+&lt;/body&gt;
+&lt;/html&gt;
 </code></pre>
 
 <p>Common pattern for layouts:</p>
 
-<pre><code class="language-html">{{-- views/layouts/app.strav --}}
-<!DOCTYPE html>
-<html>
-<head>
-  <title>{{ title }}</title>
+<pre><code class="language-html">{{-- resources/views/layouts/app.strav --}}
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;title&gt;{{ title }}&lt;/title&gt;
   @stack('styles')
-</head>
-<body>
+&lt;/head&gt;
+&lt;body&gt;
   @show('content')
   @stack('scripts')
-</body>
-</html>
+&lt;/body&gt;
+&lt;/html&gt;
 </code></pre>
 
-<pre><code class="language-html">{{-- views/pages/dashboard.strav --}}
+<pre><code class="language-html">{{-- resources/views/pages/dashboard.strav --}}
 @layout('layouts/app')
 
 @push('styles')
-  <link rel="stylesheet" href="dashboard.css">
+  &lt;link rel="stylesheet" href="dashboard.css"&gt;
 @end
 
 @prepend('scripts')
-  <script>window.dashboard = true</script>
+  &lt;script&gt;window.dashboard = true&lt;/script&gt;
 @end
 
 @section('content')
-  <h1>Dashboard</h1>
+  &lt;h1&gt;Dashboard&lt;/h1&gt;
 @end
 </code></pre>
 
@@ -257,27 +257,27 @@ The included template receives both the parent data and any additional data pass
 
 <strong>Layout</strong> — use <code>@show('name')</code> to mark where child content goes:
 
-<pre><code class="language-html">{{-- views/layouts/app.strav --}}
-<!DOCTYPE html>
-<html>
-<head><title>{{ title }}</title></head>
-<body>
+<pre><code class="language-html">{{-- resources/views/layouts/app.strav --}}
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;&lt;title&gt;{{ title }}&lt;/title&gt;&lt;/head&gt;
+&lt;body&gt;
   @include('partials/nav', { user })
-  <main>
+  &lt;main&gt;
     @show('content')
-  </main>
-</body>
-</html>
+  &lt;/main&gt;
+&lt;/body&gt;
+&lt;/html&gt;
 </code></pre>
 
 <strong>Child template</strong> — use <code>@section('name')...@end</code> to provide content:
 
-<pre><code class="language-html">{{-- views/pages/dashboard.strav --}}
+<pre><code class="language-html">{{-- resources/views/pages/dashboard.strav --}}
 @layout('layouts/app')
 
 @section('content')
-  <h1>Dashboard</h1>
-  <p>Welcome back, {{ user.name }}</p>
+  &lt;h1&gt;Dashboard&lt;/h1&gt;
+  &lt;p&gt;Welcome back, {{ user.name }}&lt;/p&gt;
 @end
 </code></pre>
 
@@ -299,10 +299,10 @@ export default {
 
 <strong>In templates:</strong>
 
-<pre><code class="language-html"><link rel="stylesheet" href="{{ asset('/css/app.css') }}">
+<pre><code class="language-html">&lt;link rel="stylesheet" href="{{ asset('/css/app.css') }}"&gt;
 </code></pre>
 
-Renders: <code><link rel="stylesheet" href="/css/app.css?v=a1b2c3d4"></code>
+Renders: <code>&amp;lt;link rel="stylesheet" href="/css/app.css?v=a1b2c3d4"&amp;gt;</code>
 
 <p>The hash changes when the file content changes. In development, file watchers automatically re-hash when assets are rebuilt. You can version any file in the public directory — CSS, JS, images, fonts.</p>
 
@@ -312,14 +312,14 @@ For interactive components, use Vue islands. The server renders a placeholder <c
 
 <h3>In templates</h3>
 
-<pre><code class="language-html"><vue:search-bar placeholder="Search users..." />
-<vue:counter :initial="{{ startCount }}" label="Click me" />
+<pre><code class="language-html">&lt;vue:search-bar placeholder="Search users..." /&gt;
+&lt;vue:counter :initial="{{ startCount }}" label="Click me" /&gt;
 </code></pre>
 
 Static attributes pass string values. Bound attributes (<code>:prop</code>) evaluate the expression at render time. The server output:
 
-<pre><code class="language-html"><div data-vue="search-bar" data-props='{"placeholder":"Search users..."}'></div>
-<div data-vue="counter" data-props='{"initial":5,"label":"Click me"}'></div>
+<pre><code class="language-html">&lt;div data-vue="search-bar" data-props='{"placeholder":"Search users..."}'&gt;&lt;/div&gt;
+&lt;div data-vue="counter" data-props='{"initial":5,"label":"Click me"}'&gt;&lt;/div&gt;
 </code></pre>
 
 <h3>Vue SFC islands (recommended)</h3>
@@ -328,37 +328,38 @@ Write real <code>.vue</code> single-file components in an <code>islands/</code> 
 
 <strong>1. Create <code>.vue</code> files:</strong>
 
-<pre><code class="language-vue"><!-- islands/counter.vue -->
-<template>
-  <div class="counter">
-    <button @click="count--">-</button>
-    <span>{{ count }}</span>
-    <button @click="count++">+</button>
-  </div>
-</template>
+<pre><code class="language-vue">&lt;!-- islands/counter.vue --&gt;
+&lt;template&gt;
+  &lt;div class="counter"&gt;
+    &lt;button @click="count--"&gt;-&lt;/button&gt;
+    &lt;span&gt;{{ count }}&lt;/span&gt;
+    &lt;button @click="count++"&gt;+&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
 
-<script setup>
+&lt;script setup&gt;
 import { ref } from 'vue'
 
 const props = defineProps({ initial: { type: Number, default: 0 } })
 const count = ref(props.initial)
-</script>
+&lt;/script&gt;
 
-<style scoped>
+&lt;style scoped&gt;
 .counter { display: flex; gap: 8px; align-items: center; }
-</style>
+&lt;/style&gt;
 </code></pre>
 
 Both <code>&lt;script setup&gt;</code> and Options API (<code>&lt;script&gt;</code>) are supported. <code>&lt;style scoped&gt;</code> works as expected.
 
 <strong>2. Use <code>@islands</code> in your template:</strong>
 
-<pre><code class="language-html">{{-- views/pages/home.strav --}}
+<pre><code class="language-html">{{-- resources/views/pages/home.strav --}}
 @layout('layouts/app')
 
 @section('content')
-  <h1>Welcome</h1>
-  <vue:counter :initial="{{ startCount }}" />
+  &lt;h1&gt;Welcome&lt;/h1&gt;
+  &lt;vue:counter :initial="{{ startCount }}" /&gt;
+  @islands  {{-- Required to load the Vue island system --}}
 @end
 </code></pre>
 
@@ -449,23 +450,23 @@ if (Bun.env.NODE_ENV !== 'production') {
 }
 </code></pre>
 
-<pre><code class="language-html">{{-- views/layouts/app.strav --}}
-<!DOCTYPE html>
-<html>
-<head>
-  <title>{{ title }}</title>
+<pre><code class="language-html">{{-- resources/views/layouts/app.strav --}}
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;title&gt;{{ title }}&lt;/title&gt;
   @css('critical')  {{-- Critical CSS only --}}
-</head>
-<body>
+&lt;/head&gt;
+&lt;body&gt;
   @show('content')
 
   @css  {{-- All CSS files --}}
   @islands
-</body>
-</html>
+&lt;/body&gt;
+&lt;/html&gt;
 </code></pre>
 
-<pre><code class="language-html">{{-- views/admin/dashboard.strav --}}
+<pre><code class="language-html">{{-- resources/views/admin/dashboard.strav --}}
 @layout('layouts/admin')
 
 @section('head')
@@ -499,7 +500,7 @@ import '@strav/view/client/islands'
 
 <p>Include the bundled script in your layout:</p>
 
-<pre><code class="language-html"><script type="module" src="/assets/app.js"></script>
+<pre><code class="language-html">&lt;script type="module" src="/assets/app.js"&gt;&lt;/script&gt;
 </code></pre>
 
 <h2>SPA routing</h2>
@@ -615,27 +616,29 @@ route.value.view    // 'Chat'
 
 <h3>RouterLink</h3>
 
-<code>RouterLink</code> renders an <code><a></code> tag with client-side navigation. It respects modifier keys (Cmd/Ctrl+click opens in a new tab).
+<code>RouterLink</code> renders an <code>&amp;lt;a&amp;gt;</code> tag with client-side navigation. It respects modifier keys (Cmd/Ctrl+click opens in a new tab).
 
-<pre><code class="language-vue"><RouterLink to="/settings" v-slot="{ isActive }">
-  <span :class="isActive ? 'text-white' : 'text-gray-500'">Settings</span>
-</RouterLink>
+<pre><code class="language-vue">&lt;RouterLink to="/settings" v-slot="{ isActive }"&gt;
+  &lt;span :class="isActive ? 'text-white' : 'text-gray-500'"&gt;Settings&lt;/span&gt;
+&lt;/RouterLink&gt;
 </code></pre>
 
 The scoped slot exposes <code>{ href, isActive, isExactActive, navigate }</code>.
 
 <code>isActive</code> is <code>true</code> when the current path starts with the link's href (prefix match). <code>isExactActive</code> is <code>true</code> only on exact match.
 
-<h2>Static file middleware</h2>
+<h2>Static File Serving</h2>
 
-Serve files from a <code>public/</code> directory:
+Strav automatically serves static files from the configured public directory through the built-in HTTP server. Configure the public directory in your HTTP configuration:
 
-<pre><code class="language-typescript">import { staticFiles } from '@strav/http'
-
-router.use(staticFiles('public'))
+<pre><code class="language-typescript">// config/http.ts
+export default {
+  port: env.int('PORT', 3000),
+  public: './public',  // Static files directory
+}
 </code></pre>
 
-<p>Serves any file that exists under the root directory. Falls through to the next middleware when no file matches. Blocks directory traversal and hidden files automatically.</p>
+<p>The server automatically handles static file requests, content-type detection, compression (gzip/brotli), and security (blocks directory traversal and hidden files). No middleware setup required.</p>
 
 <h2>Template resolution</h2>
 
@@ -651,15 +654,15 @@ router.use(staticFiles('public'))
   <tbody>
     <tr>
       <td><code>'pages/home'</code></td>
-      <td><code>views/pages/home.strav</code></td>
+      <td><code>resources/views/pages/home.strav</code></td>
     </tr>
     <tr>
       <td><code>'layouts/app'</code></td>
-      <td><code>views/layouts/app.strav</code></td>
+      <td><code>resources/views/layouts/app.strav</code></td>
     </tr>
     <tr>
       <td><code>'partials/nav'</code></td>
-      <td><code>views/partials/nav.strav</code></td>
+      <td><code>resources/views/partials/nav.strav</code></td>
     </tr>
   </tbody>
 </table>
@@ -709,8 +712,8 @@ test('renders user page', async () => {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="/docs/multi-domain-database" class="nav-prev">← Multi-Domain Database</a>
+    <a href="/docs/authentication-system" class="nav-next">Authentication System →</a>
   </div>
 </article>
 @end

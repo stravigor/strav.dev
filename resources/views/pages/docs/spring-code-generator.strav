@@ -22,13 +22,13 @@
 
 <h2>Quick Start</h2>
 
-<pre><code class="language-bash"><h1>Interactive prompt (recommended for first-time users)</h1>
+<pre><code class="language-bash"># Interactive prompt (recommended for first-time users)
 bunx @strav/spring my-app
 
-<h1>Full-stack application with Vue islands</h1>
+# Full-stack application with Vue islands
 bunx @strav/spring my-blog --web
 
-<h1>Headless REST API</h1>
+# Headless REST API
 bunx @strav/spring my-api --api
 </code></pre>
 
@@ -36,11 +36,13 @@ bunx @strav/spring my-api --api
 
 <p>Spring embodies Strav's core philosophy:</p>
 
+<ul>
 <li><strong>Convention over Configuration</strong> - Predictable directory structure and naming</li>
 <li><strong>Schema-driven Development</strong> - Database schemas as the single source of truth</li>
 <li><strong>Vue Islands</strong> - Progressive enhancement with server-side templates + client-side interactivity</li>
 <li><strong>Type Safety</strong> - Full TypeScript integration from database to frontend</li>
 <li><strong>Developer Experience</strong> - Rich tooling and instant productivity</li>
+</ul>
 
 <h2>Directory Structure</h2>
 
@@ -136,10 +138,10 @@ The <strong>api</strong> template creates a headless REST API with:
 
 <h3>1. Create Your Application</h3>
 
-<pre><code class="language-bash"><h1>Interactive mode - recommended for beginners</h1>
+<pre><code class="language-bash"># Interactive mode - recommended for beginners
 bunx @strav/spring my-app
 
-<h1>Or specify template directly</h1>
+# Or specify template directly
 bunx @strav/spring my-blog --web --db=blog_database
 </code></pre>
 
@@ -162,11 +164,11 @@ DB_DATABASE=my_app
 
 <h3>4. Run Migrations and Seed</h3>
 
-<pre><code class="language-bash"><h1>Generate and run migrations from schemas</h1>
+<pre><code class="language-bash"># Generate and run migrations from schemas
 bun strav generate:migration --scope=public --message="initial schema"
 bun strav migrate --scope=public
 
-<h1>Seed with sample data</h1>
+# Seed with sample data
 bun strav seed
 </code></pre>
 
@@ -181,6 +183,7 @@ Visit <code>http://localhost:3000</code> to see your application!
 
 <h3>Schema-Driven Development</h3>
 
+<ol>
 <li><strong>Define schemas</strong> in <code>database/schemas/public/</code>:</li>
 
 <pre><code class="language-typescript">// database/schemas/public/post.ts
@@ -213,9 +216,11 @@ export default defineSchema('post', {
 
 <pre><code class="language-bash">bun strav generate:models --scope=public
 </code></pre>
+</ol>
 
 <h3>Vue Islands Development</h3>
 
+<ol>
 <li><strong>Create island components</strong> in <code>resources/ts/islands/</code>:</li>
 
 <pre><code class="language-vue"><!-- resources/ts/islands/post_editor.vue -->
@@ -264,6 +269,7 @@ async function save() {
   <vue:post-editor />
 @end
 </code></pre>
+</ol>
 
 <h3>Controller Development</h3>
 
@@ -304,7 +310,7 @@ export default class PostController extends Controller {
 
 Once your application is created, you can use the built-in <code>strav.ts</code> CLI:
 
-<pre><code class="language-bash"><h1>Schema and database</h1>
+<pre><code class="language-bash"># Schema and database
 bun strav make:schema post --archetype=entity
 bun strav generate:migration --scope=public --message="add post schema"
 bun strav migrate --scope=public
@@ -418,6 +424,7 @@ VIEW_DIRECTORY=resources/views
 
 <h3>Building for Production</h3>
 
+<ol>
 <li><strong>Set production environment</strong>:</li>
 
 <pre><code class="language-env">APP_ENV=production
@@ -427,7 +434,7 @@ VIEW_CACHE=true
 
 <li><strong>Build Vue islands</strong>:</li>
 
-<pre><code class="language-bash"><h1>Islands are auto-built on server start, or manually:</h1>
+<pre><code class="language-bash"># Islands are auto-built on server start, or manually:
 bun strav build:islands
 </code></pre>
 
@@ -440,6 +447,7 @@ bun strav build:islands
 
 <pre><code class="language-bash">bun start
 </code></pre>
+</ol>
 
 <h2>Examples</h2>
 
@@ -502,6 +510,14 @@ cd shop
 </ul>
 
 <h3>Getting Help</h3>
+
+<p>For support and community discussions:</p>
+
+<ul>
+<li>Check the <a href="/docs">official documentation</a></li>
+<li>Visit our <a href="https://github.com/anthropics/claude-code/issues">GitHub repository</a> for issues and feature requests</li>
+<li>Join the community discussions for tips and best practices</li>
+</ul>
 
   <!-- Navigation -->
   <div class="doc-nav">

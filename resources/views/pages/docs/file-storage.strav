@@ -47,8 +47,8 @@ Both <code>maxSize()</code> and <code>types()</code> are optional. If validation
 try {
   await Upload.file(file).maxSize('2mb').store('docs')
 } catch (e) {
-  if (e instanceof FileTooLargeError) { /<em> ... </em>/ }
-  if (e instanceof InvalidFileTypeError) { /<em> ... </em>/ }
+  if (e instanceof FileTooLargeError) { /* ... */ }
+  if (e instanceof InvalidFileTypeError) { /* ... */ }
 }
 </code></pre>
 
@@ -105,14 +105,14 @@ Stores files under the <code>root</code> directory using <code>Bun.write()</code
 
 Uses Bun's native <code>S3Client</code> — works with AWS S3, Cloudflare R2, DigitalOcean Spaces, MinIO, and any S3-compatible service.
 
-<pre><code class="language-bash"><h1>.env for AWS S3</h1>
+<pre><code class="language-bash"># .env for AWS S3
 STORAGE_DRIVER=s3
 S3_BUCKET=my-app
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=AKIA...
 S3_SECRET_ACCESS_KEY=...
 
-<h1>.env for Cloudflare R2</h1>
+# .env for Cloudflare R2
 STORAGE_DRIVER=s3
 S3_BUCKET=my-r2-bucket
 S3_REGION=auto
@@ -121,7 +121,7 @@ S3_ACCESS_KEY_ID=...
 S3_SECRET_ACCESS_KEY=...
 S3_BASE_URL=https://cdn.example.com
 
-<h1>.env for MinIO (local dev)</h1>
+# .env for MinIO (local dev)
 STORAGE_DRIVER=s3
 S3_BUCKET=stravigor-test
 S3_REGION=us-east-1
@@ -140,7 +140,7 @@ Storage.url('avatars/photo.jpg', 86400)   // presigned, 24h
 
 Stores files on a <a href="https://github.com/stravigor/ostra">Stravigor Ostra</a> server — a standalone object storage service with an HTTP API.
 
-<pre><code class="language-bash"><h1>.env</h1>
+<pre><code class="language-bash"># .env
 STORAGE_DRIVER=ostra
 OSTRA_URL=http://localhost:9000
 OSTRA_TOKEN=otk_...
@@ -245,8 +245,8 @@ app.resolve(StorageManager)
 
 export default class ProfileController {
   async updateAvatar(ctx: Context) {
-    const session = ctx.get<Session>('session')
-    const user = ctx.get<User>('user')
+    const session = ctx.get&lt;Session&gt;('session')
+    const user = ctx.get&lt;User&gt;('user')
     const { avatar } = await ctx.files('avatar')
 
     if (!avatar) {
@@ -263,9 +263,9 @@ export default class ProfileController {
         .types(['image/jpeg', 'image/png', 'image/webp'])
         .store('avatars')
 
-      await BaseModel.db.sql<code>
+      await BaseModel.db.sql`
         UPDATE "user_profile" SET "avatar_url" = ${path} WHERE "user_pid" = ${user.pid}
-      </code>
+      `
 
       session.flash('success', 'Avatar updated.')
     } catch (e) {
@@ -284,8 +284,8 @@ export default class ProfileController {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="./feature-flags">← Feature Flags</a>
+    <a href="./form-validation">Form Validation →</a>
   </div>
 </article>
 @end

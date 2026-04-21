@@ -143,7 +143,7 @@ The <code>onActive</code> callback receives the resolved value. The <code>onInac
 
 By default, features resolve at the global scope. Use <code>.for()</code> to scope to a specific entity:
 
-<pre><code class="language-typescript">const user = ctx.get<User>('user')
+<pre><code class="language-typescript">const user = ctx.get&lt;User&gt;('user')
 
 await flag.for(user).active('beta-ui')
 await flag.for(user).value('checkout-variant')
@@ -198,11 +198,13 @@ await flag.activateForEveryone('checkout-variant', 'variant-b')
 
 When <code>flag.value('feature', scope)</code> is called:
 
+<ol>
 <li><strong>In-memory cache</strong> — return immediately if cached</li>
 <li><strong>Store lookup</strong> — check the database for a persisted value</li>
 <li><strong>Resolver</strong> — call the closure/class <code>resolve()</code> method</li>
 <li><strong>Persist</strong> — store the resolved value in the database</li>
 <li><strong>Cache</strong> — cache in memory for the rest of the request</li>
+</ol>
 
 The resolver only runs once per feature+scope. After that, the persisted value is returned directly. Use <code>forget()</code> to force re-resolution.
 
@@ -267,16 +269,37 @@ r.get('/team/:id/analytics', compose(
 
 Feature operations emit events through the <code>Emitter</code>:
 
-<p>| Event | Payload | When |</p>
-<p>|---|---|---|</p>
-| <code>flag:resolved</code> | <code>{ feature, scope, value }</code> | Value resolved for the first time |
-| <code>flag:updated</code> | <code>{ feature, scope, value }</code> | Value changed via activate/deactivate |
-| <code>flag:deleted</code> | <code>{ feature, scope }</code> | Value forgotten or purged |
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Payload</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>flag:resolved</code></td>
+<td><code>{ feature, scope, value }</code></td>
+<td>Value resolved for the first time</td>
+</tr>
+<tr>
+<td><code>flag:updated</code></td>
+<td><code>{ feature, scope, value }</code></td>
+<td>Value changed via activate/deactivate</td>
+</tr>
+<tr>
+<td><code>flag:deleted</code></td>
+<td><code>{ feature, scope }</code></td>
+<td>Value forgotten or purged</td>
+</tr>
+</tbody>
+</table>
 
 <pre><code class="language-typescript">import Emitter from '@strav/kernel'
 
 Emitter.on('flag:resolved', ({ feature, scope, value }) => {
-  console.log(<code>Feature "${feature}" resolved to ${value} for ${scope}</code>)
+  console.log(`Feature "${feature}" resolved to ${value} for ${scope}`)
 })
 </code></pre>
 
@@ -337,7 +360,7 @@ bun strav flag:purge --all
 
 Use the <code>array</code> driver in tests to avoid hitting the database:
 
-<pre><code class="language-env"><h1>.env.test</h1>
+<pre><code class="language-env"># .env.test
 FLAG_DRIVER=array
 </code></pre>
 
@@ -357,7 +380,7 @@ beforeEach(() => {
 
 export default class CheckoutController {
   async show(ctx: Context) {
-    const user = ctx.get<User>('user')
+    const user = ctx.get&lt;User&gt;('user')
 
     const variant = await flag.for(user).value('checkout-variant') as string
 
@@ -369,8 +392,8 @@ export default class CheckoutController {
   }
 
   async toggleBeta(ctx: Context) {
-    const user = ctx.get<User>('user')
-    const { enabled } = await ctx.body<{ enabled: boolean }>()
+    const user = ctx.get&lt;User&gt;('user')
+    const { enabled } = await ctx.body&lt;{ enabled: boolean }&gt;()
 
     if (enabled) {
       await flag.for(user).activate('beta-ui')

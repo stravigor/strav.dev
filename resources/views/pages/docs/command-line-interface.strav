@@ -10,7 +10,7 @@ The Strav CLI (<code>strav</code>) provides commands for migrations, code genera
 
 <h2>Running commands</h2>
 
-<pre><code class="language-bash">bun strav <command> [options]
+<pre><code class="language-bash">bun strav &lt;command&gt; [options]
 </code></pre>
 
 The CLI entry point is <code>strav.ts</code> at the project root.
@@ -23,27 +23,37 @@ The CLI entry point is <code>strav.ts</code> at the project root.
 
 <pre><code class="language-bash">bun strav generate:migration
 bun strav generate:migration -m "add user roles"
+bun strav generate:migration --scope public -m "add public schema tables"
 </code></pre>
 
 <strong>Options:</strong>
 <ul>
-<li><code>-m, --message <message></code> — Migration description (default: <code>'migration'</code>).</li>
+<li><code>-m, --message &lt;message&gt;</code> — Migration description (default: <code>'migration'</code>).</li>
+<li><code>-s, --scope &lt;scope&gt;</code> — Domain to target (default: <code>'public'</code>). Supports multi-domain database architectures.</li>
 </ul>
 
 <strong>What it does:</strong>
+<ul>
 <li>Loads all schemas from <code>database/schemas/</code>.</li>
 <li>Introspects the live database.</li>
 <li>Computes the diff (new tables, altered columns, new indexes, etc.).</li>
-<li>Writes migration files to <code>database/migrations/<timestamp>_<message>/</code>.</li>
+<li>Writes migration files to <code>database/migrations/&lt;timestamp&gt;_&lt;message&gt;/</code>.</li>
+</ul>
 
 <h3>migrate</h3>
 
 <p>Applies all pending (unapplied) migrations.</p>
 
 <pre><code class="language-bash">bun strav migrate
+bun strav migrate --scope public
 </code></pre>
 
 Migrations are applied in order and grouped into a <strong>batch</strong>. Each run creates a new batch number.
+
+<strong>Options:</strong>
+<ul>
+<li><code>-s, --scope &lt;scope&gt;</code> — Domain to migrate (default: <code>'public'</code>).</li>
+</ul>
 
 <h3>rollback</h3>
 
@@ -51,11 +61,13 @@ Migrations are applied in order and grouped into a <strong>batch</strong>. Each 
 
 <pre><code class="language-bash">bun strav rollback              # roll back the last batch
 bun strav rollback --batch 3    # roll back batch 3 specifically
+bun strav rollback --scope public
 </code></pre>
 
 <strong>Options:</strong>
 <ul>
-<li><code>--batch <number></code> — Target a specific batch.</li>
+<li><code>--batch &lt;number&gt;</code> — Target a specific batch.</li>
+<li><code>-s, --scope &lt;scope&gt;</code> — Domain to rollback (default: <code>'public'</code>).</li>
 </ul>
 
 <h3>compare</h3>
@@ -80,15 +92,19 @@ bun strav rollback --batch 3    # roll back batch 3 specifically
 </code></pre>
 
 <strong>Safety checks:</strong>
+<ul>
 <li>Requires <code>APP_ENV=local</code>.</li>
 <li>Prompts for a random 6-digit confirmation code.</li>
+</ul>
 
 <strong>What it does:</strong>
+<ul>
 <li>Drops all tables (<code>DROP TABLE ... CASCADE</code>).</li>
 <li>Drops all enum types.</li>
 <li>Deletes all migration files.</li>
 <li>Generates a fresh migration from current schemas.</li>
 <li>Runs the new migration.</li>
+</ul>
 
 <h3>generate:models</h3>
 
@@ -101,8 +117,8 @@ Output directories are configured via <code>config/generators.ts</code> (see the
 
 <strong>What it produces:</strong>
 <ul>
-<li><code>app/models/<entity>.ts</code> — Model class extending <code>BaseModel</code> with decorators, typed properties, and relationships.</li>
-<li><code>app/enums/<entity>.ts</code> — TypeScript enum definitions extracted from schema enum fields.</li>
+<li><code>app/models/&lt;entity&gt;.ts</code> — Model class extending <code>BaseModel</code> with decorators, typed properties, and relationships.</li>
+<li><code>app/enums/&lt;entity&gt;.ts</code> — TypeScript enum definitions extracted from schema enum fields.</li>
 <li><code>app/models/index.ts</code> — Barrel export for all model classes.</li>
 <li><code>app/enums/index.ts</code> — Barrel export for all enum types.</li>
 </ul>
@@ -120,11 +136,11 @@ Output directories are configured via <code>config/generators.ts</code> (see the
 
 <strong>What it produces (per non-association schema):</strong>
 <ul>
-<li><code>app/events/<entity>.ts</code> — Event constant object (e.g., <code>UserEvents.CREATED</code>).</li>
-<li><code>app/validators/<entity>_validator.ts</code> — Validation rule sets for <code>store</code> and <code>update</code>.</li>
-<li><code>app/policies/<entity>_policy.ts</code> — Policy class skeleton with archetype-specific methods.</li>
-<li><code>app/services/<entity>_service.ts</code> — Service class wrapping model CRUD + event dispatch.</li>
-<li><code>app/http/controllers/<entity>_controller.ts</code> — Controller with route handlers (validate → service → response).</li>
+<li><code>app/events/&lt;entity&gt;.ts</code> — Event constant object (e.g., <code>UserEvents.CREATED</code>).</li>
+<li><code>app/validators/&lt;entity&gt;_validator.ts</code> — Validation rule sets for <code>store</code> and <code>update</code>.</li>
+<li><code>app/policies/&lt;entity&gt;_policy.ts</code> — Policy class skeleton with archetype-specific methods.</li>
+<li><code>app/services/&lt;entity&gt;_service.ts</code> — Service class wrapping model CRUD + event dispatch.</li>
+<li><code>app/http/controllers/&lt;entity&gt;_controller.ts</code> — Controller with route handlers (validate → service → response).</li>
 <li><code>start/api_routes.ts</code> — Route file wiring all controllers to the router.</li>
 <li>Barrel <code>index.ts</code> files for each output directory.</li>
 </ul>
@@ -161,11 +177,13 @@ bun strav install social --force       # overwrite existing files
 </ul>
 
 <strong>What it does:</strong>
+<ul>
 <li>Resolves the package root (checks <code>node_modules/</code> first, then Bun workspace resolution).</li>
 <li>Looks for a <code>stubs/</code> directory inside the package.</li>
 <li>Copies <code>stubs/config/*.ts</code> → <code>./config/</code>.</li>
 <li>Copies <code>stubs/schemas/*.ts</code> → <code>./database/schemas/</code>.</li>
 <li>Skips files that already exist (yellow warning) unless <code>--force</code> is passed.</li>
+</ul>
 
 Any <code>@strav/*</code> package can ship stubs by including a <code>stubs/</code> directory with <code>config/</code> and/or <code>schemas/</code> subdirectories. No manifest or registration is needed.
 
@@ -180,15 +198,17 @@ bun strav seed --fresh
 
 <strong>Options:</strong>
 <ul>
-<li><code>-c, --class <name></code> — Run a specific seeder instead of the default <code>DatabaseSeeder</code>.</li>
+<li><code>-c, --class &lt;name&gt;</code> — Run a specific seeder instead of the default <code>DatabaseSeeder</code>.</li>
 <li><code>--fresh</code> — Drop all tables and re-migrate before seeding (requires <code>APP_ENV=local</code>).</li>
 </ul>
 
 <strong>What it does:</strong>
+<ul>
 <li>Bootstraps config, database, and wires the ORM.</li>
 <li>If <code>--fresh</code>, runs the full <code>fresh</code> pipeline (without the interactive challenge).</li>
 <li>Resolves the seeder file (default: <code>database/seeders/database_seeder.ts</code>).</li>
 <li>Instantiates and runs the seeder.</li>
+</ul>
 
 The default seeder is <code>DatabaseSeeder</code>, which typically chains sub-seeders via <code>this.call()</code>. See the <a href="./database.md#seeding">Database guide</a> for full documentation.
 
@@ -206,7 +226,7 @@ bun strav generate:seeder User             # also works — "Seeder" suffix is a
 <li><code>-f, --force</code> — Overwrite an existing file.</li>
 </ul>
 
-Output: <code>database/seeders/<snake_case>_seeder.ts</code> with a <code>Seeder</code> subclass skeleton.
+Output: <code>database/seeders/&lt;snake_case&gt;_seeder.ts</code> with a <code>Seeder</code> subclass skeleton.
 
 <h3>queue:work</h3>
 
@@ -218,8 +238,8 @@ bun strav queue:work --queue emails --sleep 500
 
 <strong>Options:</strong>
 <ul>
-<li><code>--queue <name></code> — Queue to process (default: <code>'default'</code>).</li>
-<li><code>--sleep <ms></code> — Poll interval in milliseconds (default: <code>1000</code>).</li>
+<li><code>--queue &lt;name&gt;</code> — Queue to process (default: <code>'default'</code>).</li>
+<li><code>--sleep &lt;ms&gt;</code> — Poll interval in milliseconds (default: <code>1000</code>).</li>
 </ul>
 
 <p>Press Ctrl+C to stop the worker gracefully (finishes current job before exiting).</p>
@@ -234,7 +254,7 @@ bun strav queue:retry --queue emails
 
 <strong>Options:</strong>
 <ul>
-<li><code>--queue <name></code> — Only retry failed jobs from this queue.</li>
+<li><code>--queue &lt;name&gt;</code> — Only retry failed jobs from this queue.</li>
 </ul>
 
 <h3>queue:flush</h3>
@@ -248,7 +268,7 @@ bun strav queue:flush --failed
 
 <strong>Options:</strong>
 <ul>
-<li><code>--queue <name></code> — Queue to flush (default: <code>'default'</code>).</li>
+<li><code>--queue &lt;name&gt;</code> — Queue to flush (default: <code>'default'</code>).</li>
 <li><code>--failed</code> — Also clear failed jobs.</li>
 </ul>
 
@@ -263,9 +283,9 @@ export function register(program: Command): void {
   program
     .command('deploy')
     .description('Deploy the application')
-    .option('-e, --env <environment>', 'Target environment', 'production')
+    .option('-e, --env &lt;environment&gt;', 'Target environment', 'production')
     .action(async ({ env }) => {
-      console.log(<code>Deploying to ${env}...</code>)
+      console.log(`Deploying to ${env}...`)
       // your deployment logic
     })
 }
@@ -314,33 +334,35 @@ export function register(program: Command): void {
 </code></pre>
 
 <p>The bootstrap:</p>
+<ul>
 <li>Loads configuration from <code>./config</code>.</li>
 <li>Connects to the database.</li>
 <li>Discovers and validates schemas.</li>
 <li>Creates the database introspector.</li>
+</ul>
 
 <h2>Typical workflow</h2>
 
-<pre><code class="language-bash"><h1>1. Define or modify schemas in database/schemas/</h1>
-<h1>2. Compare against the database</h1>
+<pre><code class="language-bash"># 1. Define or modify schemas in database/schemas/
+# 2. Compare against the database
 bun strav compare
 
-<h1>3. Generate migration files</h1>
+# 3. Generate migration files
 bun strav generate:migration -m "add teams"
 
-<h1>4. Apply the migration</h1>
+# 4. Apply the migration
 bun strav migrate
 
-<h1>5. Regenerate model classes</h1>
+# 5. Regenerate model classes
 bun strav generate:models
 
-<h1>6. Generate the application layer (services, controllers, policies, validators, events)</h1>
+# 6. Generate the application layer (services, controllers, policies, validators, events)
 bun strav generate:api
 
-<h1>7. Seed dev data (optional)</h1>
+# 7. Seed dev data (optional)
 bun strav seed
 
-<h1>Full reset: drop + migrate + seed in one command</h1>
+# Full reset: drop + migrate + seed in one command
 bun strav seed --fresh
 </code></pre>
 

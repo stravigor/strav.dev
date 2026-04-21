@@ -54,12 +54,37 @@ It depends on the <code>database</code> provider.
 
 <p>Options:</p>
 
-<p>| Option | Default | Description |</p>
-<p>|--------|---------|-------------|</p>
-| <code>ensureTables</code> | <code>true</code> | Auto-create the entries and aggregates tables |
-| <code>middleware</code> | <code>true</code> | Auto-register the request-tracking middleware on the router |
-| <code>dashboard</code> | <code>true</code> | Auto-register the dashboard routes at <code>/_devtools</code> |
-| <code>guard</code> | — | Custom auth guard for the dashboard (see <a href="#dashboard-auth">Dashboard auth</a>) |
+<table>
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ensureTables</code></td>
+      <td><code>true</code></td>
+      <td>Auto-create the entries and aggregates tables</td>
+    </tr>
+    <tr>
+      <td><code>middleware</code></td>
+      <td><code>true</code></td>
+      <td>Auto-register the request-tracking middleware on the router</td>
+    </tr>
+    <tr>
+      <td><code>dashboard</code></td>
+      <td><code>true</code></td>
+      <td>Auto-register the dashboard routes at <code>/_devtools</code></td>
+    </tr>
+    <tr>
+      <td><code>guard</code></td>
+      <td>—</td>
+      <td>Custom auth guard for the dashboard (see <a href="#dashboard-auth">Dashboard auth</a>)</td>
+    </tr>
+  </tbody>
+</table>
 
 <p>To add a custom dashboard auth guard:</p>
 
@@ -138,15 +163,52 @@ Set <code>DEVTOOLS_ENABLED=false</code> in production to disable all collection 
 
 <h3>Configuration reference</h3>
 
-<p>| Key | Default | Description |</p>
-<p>|-----|---------|-------------|</p>
-| <code>enabled</code> | <code>true</code> | Whether to enable all devtools collection |
-| <code>routes.aliases.dashboard</code> | <code>'devtools.dashboard'</code> | Route alias prefix for dashboard routes |
-| <code>routes.aliases.api</code> | <code>'devtools.api'</code> | Route alias prefix for API routes |
-| <code>routes.subdomain</code> | <code>undefined</code> | Optional subdomain for devtools routes |
-| <code>storage.pruneAfter</code> | <code>24</code> | Hours after which to delete old entries |
-| <code>collectors.*</code> | varies | Collector-specific configuration |
-| <code>recorders.*</code> | varies | Recorder-specific configuration |
+<table>
+  <thead>
+    <tr>
+      <th>Key</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>enabled</code></td>
+      <td><code>true</code></td>
+      <td>Whether to enable all devtools collection</td>
+    </tr>
+    <tr>
+      <td><code>routes.aliases.dashboard</code></td>
+      <td><code>'devtools.dashboard'</code></td>
+      <td>Route alias prefix for dashboard routes</td>
+    </tr>
+    <tr>
+      <td><code>routes.aliases.api</code></td>
+      <td><code>'devtools.api'</code></td>
+      <td>Route alias prefix for API routes</td>
+    </tr>
+    <tr>
+      <td><code>routes.subdomain</code></td>
+      <td><code>undefined</code></td>
+      <td>Optional subdomain for devtools routes</td>
+    </tr>
+    <tr>
+      <td><code>storage.pruneAfter</code></td>
+      <td><code>24</code></td>
+      <td>Hours after which to delete old entries</td>
+    </tr>
+    <tr>
+      <td><code>collectors.*</code></td>
+      <td>varies</td>
+      <td>Collector-specific configuration</td>
+    </tr>
+    <tr>
+      <td><code>recorders.*</code></td>
+      <td>varies</td>
+      <td>Recorder-specific configuration</td>
+    </tr>
+  </tbody>
+</table>
 
 <h2>Collectors</h2>
 
@@ -156,7 +218,7 @@ Set <code>DEVTOOLS_ENABLED=false</code> in production to disable all collection 
 
 Middleware-based. Captures method, path, status, duration, memory usage, request/response headers, and IP. Sensitive headers (<code>authorization</code>, <code>cookie</code>) are automatically redacted.
 
-Tags: <code>status:<code></code>, <code>slow</code> (if >1000ms), <code>user:<id></code> (if authenticated).
+Tags: <code>status:&lt;code&gt;</code>, <code>slow</code> (if >1000ms), <code>user:&lt;id&gt;</code> (if authenticated).
 
 <pre><code class="language-typescript">collectors: {
   request: { enabled: true, sizeLimit: 64 },
@@ -296,20 +358,57 @@ The built-in SPA dashboard is served at <code>/_devtools</code> and provides sev
 
 <strong>Inspector views:</strong>
 
-<p>| View | Shows |</p>
-<p>|------|-------|</p>
-<p>| Requests | Method, path, status, duration, time |</p>
-<p>| Queries | SQL preview, duration, slow flag |</p>
-<p>| Exceptions | Error class, message, request path |</p>
-<p>| Logs | Level, message, timestamp |</p>
-<p>| Jobs | Name, status, queue, duration |</p>
+<table>
+  <thead>
+    <tr>
+      <th>View</th>
+      <th>Shows</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Requests</td>
+      <td>Method, path, status, duration, time</td>
+    </tr>
+    <tr>
+      <td>Queries</td>
+      <td>SQL preview, duration, slow flag</td>
+    </tr>
+    <tr>
+      <td>Exceptions</td>
+      <td>Error class, message, request path</td>
+    </tr>
+    <tr>
+      <td>Logs</td>
+      <td>Level, message, timestamp</td>
+    </tr>
+    <tr>
+      <td>Jobs</td>
+      <td>Name, status, queue, duration</td>
+    </tr>
+  </tbody>
+</table>
 
 <strong>Metrics views:</strong>
 
-<p>| View | Shows |</p>
-<p>|------|-------|</p>
-<p>| Slow Requests | Top endpoints by count and max duration |</p>
-<p>| Slow Queries | Top queries by count and max duration |</p>
+<table>
+  <thead>
+    <tr>
+      <th>View</th>
+      <th>Shows</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Slow Requests</td>
+      <td>Top endpoints by count and max duration</td>
+    </tr>
+    <tr>
+      <td>Slow Queries</td>
+      <td>Top queries by count and max duration</td>
+    </tr>
+  </tbody>
+</table>
 
 <p>Clicking any entry opens a detail view with full content and all related batch entries. The dashboard auto-refreshes every 5 seconds.</p>
 
@@ -369,24 +468,87 @@ bun strav devtools:prune --hours 48
 
 <h3>Dashboard routes (<code>devtools.dashboard</code> alias)</h3>
 
-<p>| Path | Route Name | Description |</p>
-<p>|------|-----------|-------------|</p>
-| <code>/_devtools</code> | <code>devtools.dashboard.home</code> | Main dashboard SPA |
+<table>
+  <thead>
+    <tr>
+      <th>Path</th>
+      <th>Route Name</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>/_devtools</code></td>
+      <td><code>devtools.dashboard.home</code></td>
+      <td>Main dashboard SPA</td>
+    </tr>
+  </tbody>
+</table>
 
 <h3>API routes (<code>devtools.api</code> alias)</h3>
 
 The dashboard mounts a REST API under <code>/_devtools/api/</code>:
 
-<p>| Method | Path | Route Name | Description |</p>
-<p>|--------|------|-----------|-------------|</p>
-| GET | <code>/api/entries</code> | <code>devtools.api.entries</code> | List entries. Query: <code>type</code>, <code>limit</code>, <code>offset</code> |
-| GET | <code>/api/entries/:uuid</code> | <code>devtools.api.entry</code> | Single entry by UUID |
-| GET | <code>/api/entries/:uuid/batch</code> | <code>devtools.api.entry_batch</code> | All entries in the same batch |
-| GET | <code>/api/entries/tag/:tag</code> | <code>devtools.api.entries_by_tag</code> | Entries by tag. Query: <code>limit</code> |
-| GET | <code>/api/metrics/:type</code> | <code>devtools.api.metrics</code> | Time-series aggregates. Query: <code>period</code>, <code>aggregate</code>, <code>limit</code> |
-| GET | <code>/api/metrics/:type/top</code> | <code>devtools.api.metrics_top</code> | Top keys by value. Query: <code>period</code>, <code>aggregate</code>, <code>limit</code> |
-| GET | <code>/api/stats</code> | <code>devtools.api.stats</code> | Entry counts by type |
-| DELETE | <code>/api/entries</code> | <code>devtools.api.prune_entries</code> | Prune old data. Query: <code>hours</code> |
+<table>
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Path</th>
+      <th>Route Name</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GET</td>
+      <td><code>/api/entries</code></td>
+      <td><code>devtools.api.entries</code></td>
+      <td>List entries. Query: <code>type</code>, <code>limit</code>, <code>offset</code></td>
+    </tr>
+    <tr>
+      <td>GET</td>
+      <td><code>/api/entries/:uuid</code></td>
+      <td><code>devtools.api.entry</code></td>
+      <td>Single entry by UUID</td>
+    </tr>
+    <tr>
+      <td>GET</td>
+      <td><code>/api/entries/:uuid/batch</code></td>
+      <td><code>devtools.api.entry_batch</code></td>
+      <td>All entries in the same batch</td>
+    </tr>
+    <tr>
+      <td>GET</td>
+      <td><code>/api/entries/tag/:tag</code></td>
+      <td><code>devtools.api.entries_by_tag</code></td>
+      <td>Entries by tag. Query: <code>limit</code></td>
+    </tr>
+    <tr>
+      <td>GET</td>
+      <td><code>/api/metrics/:type</code></td>
+      <td><code>devtools.api.metrics</code></td>
+      <td>Time-series aggregates. Query: <code>period</code>, <code>aggregate</code>, <code>limit</code></td>
+    </tr>
+    <tr>
+      <td>GET</td>
+      <td><code>/api/metrics/:type/top</code></td>
+      <td><code>devtools.api.metrics_top</code></td>
+      <td>Top keys by value. Query: <code>period</code>, <code>aggregate</code>, <code>limit</code></td>
+    </tr>
+    <tr>
+      <td>GET</td>
+      <td><code>/api/stats</code></td>
+      <td><code>devtools.api.stats</code></td>
+      <td>Entry counts by type</td>
+    </tr>
+    <tr>
+      <td>DELETE</td>
+      <td><code>/api/entries</code></td>
+      <td><code>devtools.api.prune_entries</code></td>
+      <td>Prune old data. Query: <code>hours</code></td>
+    </tr>
+  </tbody>
+</table>
 
 <h3>Using named routes</h3>
 
@@ -494,31 +656,113 @@ PERIODS.SEVEN_DAYS  // 604800
 
 <h3>_strav_devtools_entries</h3>
 
-<p>| Column | Type | Description |</p>
-<p>|--------|------|-------------|</p>
-| <code>id</code> | <code>bigserial</code> | Primary key |
-| <code>uuid</code> | <code>uuid</code> | Unique entry identifier |
-| <code>batch_id</code> | <code>uuid</code> | Groups entries from the same request |
-| <code>type</code> | <code>varchar(30)</code> | Entry type (request, query, etc.) |
-| <code>family_hash</code> | <code>varchar(64)</code> | Groups similar entries (same error, same query) |
-| <code>content</code> | <code>jsonb</code> | Full entry payload |
-| <code>tags</code> | <code>text[]</code> | Searchable string tags |
-| <code>created_at</code> | <code>timestamptz</code> | When the entry was recorded |
+<table>
+  <thead>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>id</code></td>
+      <td><code>bigserial</code></td>
+      <td>Primary key</td>
+    </tr>
+    <tr>
+      <td><code>uuid</code></td>
+      <td><code>uuid</code></td>
+      <td>Unique entry identifier</td>
+    </tr>
+    <tr>
+      <td><code>batch_id</code></td>
+      <td><code>uuid</code></td>
+      <td>Groups entries from the same request</td>
+    </tr>
+    <tr>
+      <td><code>type</code></td>
+      <td><code>varchar(30)</code></td>
+      <td>Entry type (request, query, etc.)</td>
+    </tr>
+    <tr>
+      <td><code>family_hash</code></td>
+      <td><code>varchar(64)</code></td>
+      <td>Groups similar entries (same error, same query)</td>
+    </tr>
+    <tr>
+      <td><code>content</code></td>
+      <td><code>jsonb</code></td>
+      <td>Full entry payload</td>
+    </tr>
+    <tr>
+      <td><code>tags</code></td>
+      <td><code>text[]</code></td>
+      <td>Searchable string tags</td>
+    </tr>
+    <tr>
+      <td><code>created_at</code></td>
+      <td><code>timestamptz</code></td>
+      <td>When the entry was recorded</td>
+    </tr>
+  </tbody>
+</table>
 
 Indexes: <code>batch_id</code>, <code>(type, created_at DESC)</code>, <code>family_hash</code> (partial, where not null).
 
 <h3>_strav_devtools_aggregates</h3>
 
-<p>| Column | Type | Description |</p>
-<p>|--------|------|-------------|</p>
-| <code>id</code> | <code>bigserial</code> | Primary key |
-| <code>bucket</code> | <code>int</code> | Unix timestamp of the time bucket start |
-| <code>period</code> | <code>int</code> | Bucket size in seconds |
-| <code>type</code> | <code>varchar(30)</code> | Metric type (slow_request, slow_query) |
-| <code>key</code> | <code>text</code> | Grouping key (e.g. <code>GET /api/users</code>) |
-| <code>aggregate</code> | <code>varchar(10)</code> | Function (count, min, max, sum, avg) |
-| <code>value</code> | <code>numeric(20,2)</code> | Aggregated value |
-| <code>count</code> | <code>int</code> | Number of samples in this bucket |
+<table>
+  <thead>
+    <tr>
+      <th>Column</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>id</code></td>
+      <td><code>bigserial</code></td>
+      <td>Primary key</td>
+    </tr>
+    <tr>
+      <td><code>bucket</code></td>
+      <td><code>int</code></td>
+      <td>Unix timestamp of the time bucket start</td>
+    </tr>
+    <tr>
+      <td><code>period</code></td>
+      <td><code>int</code></td>
+      <td>Bucket size in seconds</td>
+    </tr>
+    <tr>
+      <td><code>type</code></td>
+      <td><code>varchar(30)</code></td>
+      <td>Metric type (slow_request, slow_query)</td>
+    </tr>
+    <tr>
+      <td><code>key</code></td>
+      <td><code>text</code></td>
+      <td>Grouping key (e.g. <code>GET /api/users</code>)</td>
+    </tr>
+    <tr>
+      <td><code>aggregate</code></td>
+      <td><code>varchar(10)</code></td>
+      <td>Function (count, min, max, sum, avg)</td>
+    </tr>
+    <tr>
+      <td><code>value</code></td>
+      <td><code>numeric(20,2)</code></td>
+      <td>Aggregated value</td>
+    </tr>
+    <tr>
+      <td><code>count</code></td>
+      <td><code>int</code></td>
+      <td>Number of samples in this bucket</td>
+    </tr>
+  </tbody>
+</table>
 
 Unique constraint: <code>(bucket, period, type, aggregate, key)</code>.
 

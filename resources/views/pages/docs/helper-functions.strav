@@ -35,7 +35,7 @@ env.float('TAX_RATE', 0.2)    // parsed as float
 env.bool('APP_DEBUG', false)   // true for 'true', '1', 'yes'
 </code></pre>
 
-All typed accessors throw if the variable is not set and no default is provided. If the variable exists but cannot be parsed (e.g., <code>env.int('NOT_A_NUMBER')</code>), the default is returned.
+All typed accessors throw if the variable is not set and no default is provided. If the variable exists but cannot be parsed (e.g., <code>env.int('NOT_A_NUMBER')</code>), the default is returned if provided, otherwise an error is thrown.
 
 <h2>config() — Configuration access</h2>
 
@@ -153,8 +153,8 @@ extractUserId(42)         // returns '42'
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="./full-text-search">← Full-text Search</a>
+    <a href="./index">Documentation Home →</a>
   </div>
 </article>
 @end

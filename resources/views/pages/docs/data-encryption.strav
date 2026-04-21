@@ -71,7 +71,7 @@ const original = encrypt.decrypt(encrypted)
 <pre><code class="language-typescript">const token = encrypt.seal({ userId: 123, role: 'admin' })
 // Send to client — it's encrypted and tamper-proof
 
-const data = encrypt.unseal<{ userId: number; role: string }>(token)
+const data = encrypt.unseal&lt;{ userId: number; role: string }&gt;(token)
 // { userId: 123, role: 'admin' }
 </code></pre>
 
@@ -80,7 +80,7 @@ const data = encrypt.unseal<{ userId: number; role: string }>(token)
 Hash passwords using argon2id (via <code>Bun.password</code>). Each hash includes a unique salt automatically.
 
 <pre><code class="language-typescript">const hash = await encrypt.hash(formData.password)
-await db.sql<code>UPDATE users SET password = ${hash} WHERE id = ${userId}</code>
+await db.sql`UPDATE users SET password = ${hash} WHERE id = ${userId}`
 
 const valid = await encrypt.verify(formData.password, user.password)
 if (!valid) throw new Error('Invalid credentials')
@@ -154,27 +154,27 @@ EncryptionManager.useKey('test-key-for-unit-tests')
 
 export default class ApiKeyController {
   async create(ctx: Context) {
-    const user = ctx.get<User>('user')
+    const user = ctx.get&lt;User&gt;('user')
 
     // Generate and store an encrypted API key
     const plain = encrypt.random()
     const hash = encrypt.sha256(plain)
 
-    await db.sql<code>
+    await db.sql`
       INSERT INTO api_keys (user_id, hash) VALUES (${user.id}, ${hash})
-    </code>
+    `
 
     // Return the plain key once — it can never be recovered
     return ctx.json({ apiKey: plain })
   }
 
   async verify(ctx: Context) {
-    const { apiKey } = await ctx.body<{ apiKey: string }>()
+    const { apiKey } = await ctx.body&lt;{ apiKey: string }&gt;()
     const hash = encrypt.sha256(apiKey)
 
-    const rows = await db.sql<code>
+    const rows = await db.sql`
       SELECT * FROM api_keys WHERE hash = ${hash} LIMIT 1
-    </code>
+    `
 
     if (rows.length === 0) {
       return ctx.json({ error: 'Invalid API key' }, 401)
@@ -188,8 +188,8 @@ export default class ApiKeyController {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="/docs/caching-system" class="prev">← Caching</a>
+    <a href="/docs/helper-functions" class="next">Helper Functions →</a>
   </div>
 </article>
 @end

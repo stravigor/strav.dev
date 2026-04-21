@@ -10,7 +10,7 @@
 
 <h2>Quick Start</h2>
 
-<pre><code class="language-typescript">import { query, transaction } from '@strav/database'
+<pre><code class="language-typescript">import { query, transaction, withSchema } from '@strav/database'
 import User from '../app/models/user'
 
 // Basic query
@@ -334,20 +334,54 @@ const orders = await query(Order)
 
 <h3>Model Scopes</h3>
 
-<pre><code class="language-typescript">// Assuming User model has defined scopes
+<p>Define reusable query logic as static scope methods on your models:</p>
+
+<pre><code class="language-typescript">// Define scopes in your model
 class User extends BaseModel {
-  static scopeActive(query: QueryBuilder<User>) {
+  // Simple scope
+  static scopeActive(query: QueryBuilder&lt;User&gt;) {
     return query.where('active', true).whereNotNull('emailVerifiedAt')
   }
 
-  static scopePremium(query: QueryBuilder<User>) {
+  // Scoped query for specific role
+  static scopeAdmin(query: QueryBuilder&lt;User&gt;) {
+    return query.where('role', 'admin')
+  }
+
+  // Complex scope with multiple conditions
+  static scopePremium(query: QueryBuilder&lt;User&gt;) {
     return query.where('plan', 'premium')
+      .where('subscriptionStatus', 'active')
+      .whereNull('deletedAt')
+  }
+
+  // Scope with joins
+  static scopeWithOrders(query: QueryBuilder&lt;User&gt;) {
+    return query.innerJoin(Order).on('User.id', '=', 'Order.userId')
+      .where('Order.status', 'completed')
+  }
+
+  // Register scopes (required for scope() method to work)
+  static scopes = {
+    active: this.scopeActive,
+    admin: this.scopeAdmin,
+    premium: this.scopePremium,
+    withOrders: this.scopeWithOrders,
   }
 }
 
 // Using scopes
 const activeUsers = await query(User).scope('active').all()
+const adminUsers = await query(User).scope('admin').all()
 const premiumUsers = await query(User).scope('premium').scope('active').all()
+
+// Combine scopes with regular query methods
+const recentPremiumUsers = await query(User)
+  .scope('premium')
+  .scope('active')
+  .where('createdAt', '>', DateTime.now().minus({ days: 30 }))
+  .orderBy('createdAt', 'desc')
+  .all()
 </code></pre>
 
 <h3>Chunked Processing</h3>
@@ -363,16 +397,17 @@ await query(User)
     }
   })
 
-// With early termination
+// With early termination (return false to stop)
 await query(Order)
   .where('status', 'pending')
   .chunk(50, async (orders) => {
     for (const order of orders) {
       await processOrder(order)
       if (shouldStop()) {
-        return false // Stop chunking
+        return false // Stop chunking early
       }
     }
+    return true // Continue to next chunk
   })
 </code></pre>
 
@@ -400,8 +435,8 @@ console.log('Params:', params)
 function buildUserFilter(query: QueryBuilder<User>, filters: UserFilters) {
   if (filters.search) {
     query.where(q => {
-      q.where('name', 'ILIKE', <code>%${filters.search}%</code>)
-        .orWhere('email', 'ILIKE', <code>%${filters.search}%</code>)
+      q.where('name', 'ILIKE', `%${filters.search}%`)
+        .orWhere('email', 'ILIKE', `%${filters.search}%`)
     })
   }
 
@@ -490,12 +525,14 @@ async function archiveOldPosts() {
         .update({ archived: true, archivedAt: new Date() })
 
       // Log the operation
-      console.log(<code>Archived ${ids.length} posts</code>)
+      console.log(`Archived ${ids.length} posts`)
     })
 }
 </code></pre>
 
 <h3>Transaction Patterns</h3>
+
+<p>All queries within a transaction are automatically committed on success or rolled back on error. In multi-tenant applications, tenant context is preserved throughout the transaction.</p>
 
 <pre><code class="language-typescript">// Complex transaction with multiple queries
 const order = await transaction(async (trx) => {
@@ -528,6 +565,40 @@ const order = await transaction(async (trx) => {
     .increment('totalSpent', order.total)
 
   return order
+})
+
+// Multi-tenant transaction (preserves schema context)
+await withSchema('tenant_123', async () => {
+  await transaction(async (trx) => {
+    // All queries automatically use tenant_123 schema
+    const users = await query(User, trx)
+      .where('role', 'admin')
+      .all()
+
+    // Create audit log record
+    await AuditLog.create({
+      action: 'bulk_update',
+      affectedRecords: users.length
+    }, trx)
+  })
+})
+
+// Nested model operations in transaction
+await transaction(async (trx) => {
+  const user = await User.create({
+    name: 'John Doe',
+    email: 'john@example.com'
+  }, trx)
+
+  const profile = await Profile.create({
+    userId: user.id,
+    bio: 'Software Developer'
+  }, trx)
+
+  // QueryBuilder operations on existing records
+  await query(User, trx)
+    .where('id', user.id)
+    .update({ profileComplete: true })
 })
 </code></pre>
 
@@ -614,8 +685,10 @@ query(User)
 
 <h2>Error Handling</h2>
 
-<pre><code class="language-typescript">import { ModelNotFoundError } from '@strav/database'
+<pre><code class="language-typescript">import { ModelNotFoundError } from '@strav/kernel/exceptions/errors'
+import { query, transaction } from '@strav/database'
 
+// firstOrFail throws ModelNotFoundError when no record is found
 try {
   const user = await query(User)
     .where('email', 'nonexistent@example.com')
@@ -623,7 +696,26 @@ try {
 } catch (error) {
   if (error instanceof ModelNotFoundError) {
     console.log('User not found')
+    // Handle the missing record appropriately
   }
+}
+
+// Database connection errors
+try {
+  const users = await query(User).all()
+} catch (error) {
+  console.error('Database query failed:', error.message)
+}
+
+// Transaction rollback on errors
+try {
+  await transaction(async (trx) => {
+    await query(User, trx).where('id', 1).update({ status: 'active' })
+    throw new Error('Something went wrong')
+    // Transaction automatically rolls back
+  })
+} catch (error) {
+  console.log('Transaction rolled back due to error')
 }
 </code></pre>
 
@@ -650,8 +742,8 @@ const result: PaginationResult<User> = await query(User).paginate()
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="/docs/object-relational-mapping" class="nav-prev">← Object Relational Mapping</a>
+    <a href="/docs/database-migrations" class="nav-next">Database Migrations →</a>
   </div>
 </article>
 @end

@@ -32,9 +32,14 @@ The <code>NotificationProvider</code> registers <code>NotificationManager</code>
 
 <p>Options:</p>
 
-<p>| Option | Default | Description |</p>
-<p>|--------|---------|-------------|</p>
-| <code>ensureTable</code> | <code>true</code> | Auto-create the notifications table |
+<table>
+<thead>
+<tr><th>Option</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ensureTable</code></td><td><code>true</code></td><td>Auto-create the notifications table</td></tr>
+</tbody>
+</table>
 
 <p>To enable async delivery via the queue, register the queue handler separately:</p>
 
@@ -100,7 +105,7 @@ export class TaskAssignedNotification extends BaseNotification {
 
   toEmail(notifiable: Notifiable): MailEnvelope {
     return {
-      subject: <code>You've been assigned: ${this.task.title}</code>,
+      subject: `You've been assigned: ${this.task.title}`,
       template: 'task-assigned',
       templateData: {
         taskTitle: this.task.title,
@@ -125,7 +130,7 @@ export class TaskAssignedNotification extends BaseNotification {
     return {
       embeds: [{
         title: 'Task Assigned',
-        description: <code><strong>${this.task.title}</strong> was assigned to a team member</code>,
+        description: `**${this.task.title}** was assigned to a team member`,
         color: 0x5865F2,
         fields: [
           { name: 'Assigned by', value: this.assigner.name, inline: true },
@@ -172,7 +177,7 @@ Delegates to the existing Mail module. Reads the address from <code>notifiable.r
 }
 </code></pre>
 
-Templates, CSS inlining, and Tailwind support all work exactly as documented in the <a href="./mail.md">Mail guide</a>.
+Templates, CSS inlining, and Tailwind support all work exactly as documented in the <a href="./email-sending">Mail guide</a>.
 
 <h3>Database (in-app)</h3>
 
@@ -189,9 +194,11 @@ Stores notifications in <code>_strav_notifications</code> for in-app notificatio
 <h3>Webhook</h3>
 
 <p>Sends an HTTP POST to a webhook URL. URL resolution:</p>
+<ul>
 <li><code>WebhookEnvelope.url</code> (per-notification override)</li>
 <li><code>notifiable.routeNotificationForWebhook()</code> (per-recipient)</li>
 <li>Config <code>webhooks.default.url</code></li>
+</ul>
 
 <pre><code class="language-typescript">toWebhook(notifiable: Notifiable): WebhookEnvelope {
   return {
@@ -205,20 +212,22 @@ Stores notifications in <code>_strav_notifications</code> for in-app notificatio
 <h3>Discord</h3>
 
 Sends to a Discord webhook URL. Supports plain text content and <a href="https://discord.com/developers/docs/resources/message#embed-object">embeds</a>. URL resolution:
+<ul>
 <li><code>DiscordEnvelope.url</code> (per-notification override)</li>
 <li><code>notifiable.routeNotificationForDiscord()</code> (per-recipient)</li>
 <li>Config <code>discord.default</code></li>
+</ul>
 
 <pre><code class="language-typescript">toDiscord(): DiscordEnvelope {
   return {
     content: 'New payment received!',
     embeds: [{
       title: 'Invoice Paid',
-      description: <code>Invoice #${invoice.number} — $${invoice.total}</code>,
+      description: `Invoice #${invoice.number} — $${invoice.total}`,
       color: 0x00D26A,
       fields: [
         { name: 'Customer', value: customer.name, inline: true },
-        { name: 'Amount', value: <code>$${invoice.total}</code>, inline: true },
+        { name: 'Amount', value: `$${invoice.total}`, inline: true },
       ],
       timestamp: new Date().toISOString(),
     }],
@@ -383,15 +392,20 @@ await notifications.deleteAll('user', userId)
 
 <code>NotificationManager.ensureTable()</code> creates <code>_strav_notifications</code>:
 
-<p>| Column | Type | Notes |</p>
-<p>|--------|------|-------|</p>
-<p>| id | UUID | PK, auto-generated |</p>
-| notifiable_type | VARCHAR(255) | e.g. <code>'user'</code>, <code>'organization'</code> |
-<p>| notifiable_id | VARCHAR(255) | Notifiable's ID |</p>
-| type | VARCHAR(255) | Category string, e.g. <code>'task.assigned'</code> |
-<p>| data | JSONB | Structured notification data |</p>
-<p>| read_at | TIMESTAMPTZ | NULL = unread |</p>
-<p>| created_at | TIMESTAMPTZ | Auto-set |</p>
+<table>
+<thead>
+<tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>id</td><td>UUID</td><td>PK, auto-generated</td></tr>
+<tr><td>notifiable_type</td><td>VARCHAR(255)</td><td>e.g. <code>'user'</code>, <code>'organization'</code></td></tr>
+<tr><td>notifiable_id</td><td>VARCHAR(255)</td><td>Notifiable's ID</td></tr>
+<tr><td>type</td><td>VARCHAR(255)</td><td>Category string, e.g. <code>'task.assigned'</code></td></tr>
+<tr><td>data</td><td>JSONB</td><td>Structured notification data</td></tr>
+<tr><td>read_at</td><td>TIMESTAMPTZ</td><td>NULL = unread</td></tr>
+<tr><td>created_at</td><td>TIMESTAMPTZ</td><td>Auto-set</td></tr>
+</tbody>
+</table>
 
 <p>Indexes:</p>
 <ul>

@@ -73,7 +73,7 @@ mcp.tool('get-user', {
   input: { id: z.number() },
   handler: async ({ id }, { app }) => {
     const db = app.resolve(Database)
-    const [user] = await db.sql<code>SELECT * FROM users WHERE id = ${id}</code>
+    const [user] = await db.sql`SELECT * FROM users WHERE id = $\{id\}`
     return { content: [{ type: 'text', text: JSON.stringify(user) }] }
   },
 })
@@ -95,7 +95,7 @@ mcp.prompt('summarize', {
   handler: async ({ topic }) => ({
     messages: [{
       role: 'user',
-      content: { type: 'text', text: <code>Summarize: ${topic}</code> },
+      content: { type: 'text', text: `Summarize: $\{topic\}` },
     }],
   }),
 })
@@ -118,7 +118,7 @@ mcp.tool('create-post', {
   handler: async ({ title, body, published }, { app }) => {
     const post = await Post.create({ title, body, published })
     return {
-      content: [{ type: 'text', text: <code>Created post #${post.id}: ${post.title}</code> }],
+      content: [{ type: 'text', text: `Created post #$\{post.id\}: $\{post.title\}` }],
     }
   },
 })
@@ -180,7 +180,7 @@ mcp.resource('strav://posts/{id}', {
       role: 'user',
       content: {
         type: 'text',
-        text: <code>Review this ${language} code and suggest improvements:\n\n${code}</code>,
+        text: `Review this $\{language\} code and suggest improvements:\n\n$\{code\}`,
       },
     }],
   }),
@@ -230,10 +230,10 @@ Every handler receives a <code>ToolHandlerContext</code> with access to the DI c
     const db = app.resolve(Database)
     const mailer = app.resolve(MailManager)
 
-    const [user] = await db.sql<code>SELECT * FROM users WHERE id = ${userId}</code>
+    const [user] = await db.sql`SELECT * FROM users WHERE id = $\{userId\}`
     await mailer.to(user.email).subject(subject).text(body).send()
 
-    return { content: [{ type: 'text', text: <code>Email sent to ${user.email}</code> }] }
+    return { content: [{ type: 'text', text: `Email sent to $\{user.email\}` }] }
   },
 })
 </code></pre>
@@ -257,33 +257,100 @@ const tool = mcp.getToolRegistration('get-user')
 
 MCP operations emit events through the <code>Emitter</code>:
 
-<p>| Event | Payload | When |</p>
-<p>|---|---|---|</p>
-| <code>mcp:tool-registered</code> | <code>{ name }</code> | Tool registered |
-| <code>mcp:resource-registered</code> | <code>{ uri }</code> | Resource registered |
-| <code>mcp:prompt-registered</code> | <code>{ name }</code> | Prompt registered |
-| <code>mcp:tool-called</code> | <code>{ name, params }</code> | Tool invoked by AI client |
-| <code>mcp:resource-read</code> | <code>{ uri }</code> | Resource read by AI client |
-| <code>mcp:prompt-called</code> | <code>{ name, args }</code> | Prompt used by AI client |
-| <code>mcp:stdio-starting</code> | — | Stdio transport starting |
-| <code>mcp:stdio-connected</code> | — | Stdio transport connected |
-| <code>mcp:stdio-closed</code> | — | Stdio transport closed |
-| <code>mcp:http-mounted</code> | <code>{ path }</code> | HTTP transport mounted |
-| <code>mcp:http-request</code> | <code>{ method, path }</code> | HTTP request received |
+<table>
+  <thead>
+    <tr>
+      <th>Event</th>
+      <th>Payload</th>
+      <th>When</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>mcp:tool-registered</code></td>
+      <td><code>{ name }</code></td>
+      <td>Tool registered</td>
+    </tr>
+    <tr>
+      <td><code>mcp:resource-registered</code></td>
+      <td><code>{ uri }</code></td>
+      <td>Resource registered</td>
+    </tr>
+    <tr>
+      <td><code>mcp:prompt-registered</code></td>
+      <td><code>{ name }</code></td>
+      <td>Prompt registered</td>
+    </tr>
+    <tr>
+      <td><code>mcp:tool-called</code></td>
+      <td><code>{ name, params }</code></td>
+      <td>Tool invoked by AI client</td>
+    </tr>
+    <tr>
+      <td><code>mcp:resource-read</code></td>
+      <td><code>{ uri }</code></td>
+      <td>Resource read by AI client</td>
+    </tr>
+    <tr>
+      <td><code>mcp:prompt-called</code></td>
+      <td><code>{ name, args }</code></td>
+      <td>Prompt used by AI client</td>
+    </tr>
+    <tr>
+      <td><code>mcp:stdio-starting</code></td>
+      <td>—</td>
+      <td>Stdio transport starting</td>
+    </tr>
+    <tr>
+      <td><code>mcp:stdio-connected</code></td>
+      <td>—</td>
+      <td>Stdio transport connected</td>
+    </tr>
+    <tr>
+      <td><code>mcp:stdio-closed</code></td>
+      <td>—</td>
+      <td>Stdio transport closed</td>
+    </tr>
+    <tr>
+      <td><code>mcp:http-mounted</code></td>
+      <td><code>{ path }</code></td>
+      <td>HTTP transport mounted</td>
+    </tr>
+    <tr>
+      <td><code>mcp:http-request</code></td>
+      <td><code>{ method, path }</code></td>
+      <td>HTTP request received</td>
+    </tr>
+  </tbody>
+</table>
 
 <pre><code class="language-typescript">import Emitter from '@strav/kernel'
 
 Emitter.on('mcp:tool-called', ({ name, params }) => {
-  console.log(<code>Tool "${name}" called with</code>, params)
+  console.log(`Tool "$\{name\}" called with`, params)
 })
 </code></pre>
 
 <h2>CLI commands</h2>
 
-<p>| Command | Description |</p>
-<p>|---|---|</p>
-| <code>bun strav mcp:serve</code> | Start the MCP server in stdio mode |
-| <code>bun strav mcp:list</code> | List all registered tools, resources, and prompts |
+<table>
+  <thead>
+    <tr>
+      <th>Command</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>bun strav mcp:serve</code></td>
+      <td>Start the MCP server in stdio mode</td>
+    </tr>
+    <tr>
+      <td><code>bun strav mcp:list</code></td>
+      <td>List all registered tools, resources, and prompts</td>
+    </tr>
+  </tbody>
+</table>
 
 <h2>Testing</h2>
 
@@ -319,8 +386,8 @@ mcp.tool('list-users', {
   handler: async ({ role }, { app }) => {
     const db = app.resolve(Database)
     const users = role
-      ? await db.sql<code>SELECT id, name, email FROM users WHERE role = ${role}</code>
-      : await db.sql<code>SELECT id, name, email FROM users</code>
+      ? await db.sql`SELECT id, name, email FROM users WHERE role = $\{role\}`
+      : await db.sql`SELECT id, name, email FROM users`
     return { content: [{ type: 'text', text: JSON.stringify(users) }] }
   },
 })
@@ -334,8 +401,8 @@ mcp.tool('update-user', {
   },
   handler: async ({ id, field, value }, { app }) => {
     const db = app.resolve(Database)
-    await db.sql<code>UPDATE users SET ${db.sql(field)} = ${value} WHERE id = ${id}</code>
-    return { content: [{ type: 'text', text: <code>Updated user #${id}</code> }] }
+    await db.sql`UPDATE users SET $\{db.sql(field)\} = $\{value\} WHERE id = $\{id\}`
+    return { content: [{ type: 'text', text: `Updated user #$\{id\}` }] }
   },
 })
 
@@ -344,7 +411,7 @@ mcp.resource('strav://users/{id}', {
   description: 'User details by ID',
   handler: async (uri, { id }, { app }) => {
     const db = app.resolve(Database)
-    const [user] = await db.sql<code>SELECT * FROM users WHERE id = ${Number(id)}</code>
+    const [user] = await db.sql`SELECT * FROM users WHERE id = $\{Number(id)\}`
     return { contents: [{ uri: uri.href, text: JSON.stringify(user) }] }
   },
 })
@@ -357,7 +424,7 @@ mcp.prompt('onboard-user', {
       role: 'user',
       content: {
         type: 'text',
-        text: <code>Write a friendly onboarding email for ${name} who joined as ${role}.</code>,
+        text: `Write a friendly onboarding email for $\{name\} who joined as $\{role\}.`,
       },
     }],
   }),

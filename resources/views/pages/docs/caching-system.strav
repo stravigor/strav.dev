@@ -49,7 +49,7 @@ The <code>cache</code> object is the primary API. All keys are automatically pre
 
 <p>The most common pattern — return a cached value or compute and cache it:</p>
 
-<pre><code class="language-typescript">const user = await cache.remember(<code>user:${id}</code>, 300, () => User.find(id))
+<pre><code class="language-typescript">const user = await cache.remember(`user:${id}`, 300, () => User.find(id))
 
 const stats = await cache.remember('dashboard:stats', 60, async () => {
   const [users, projects] = await Promise.all([User.count(), Project.count()])
@@ -71,7 +71,7 @@ Same as <code>remember</code> but without expiry:
 <pre><code class="language-typescript">await cache.set('features', { darkMode: true }, 3600)   // TTL in seconds
 await cache.set('features', { darkMode: true })          // uses config default TTL
 
-const features = await cache.get<{ darkMode: boolean }>('features')
+const features = await cache.get&lt;{ darkMode: boolean }&gt;('features')
 // { darkMode: true } or null
 </code></pre>
 
@@ -132,18 +132,19 @@ httpCache({ directives: ['private', 'must-revalidate'], maxAge: 0 })
 
 The default <code>MemoryCacheStore</code> uses a <code>Map</code> with lazy TTL eviction — suitable for single-process deployments. For distributed setups, implement the <code>CacheStore</code> interface and swap it in:
 
-<pre><code class="language-typescript">import type { CacheStore } from '@strav/kernel'
+<pre><code class="language-typescript">
+import type { CacheStore } from '@strav/kernel'
 import { CacheManager } from '@strav/kernel'
 
 class RedisCacheStore implements CacheStore {
   private redis = new Bun.RedisClient()
 
-  async get<T>(key: string): Promise<T | null> {
+  async get&lt;T&gt;(key: string): Promise&lt;T | null&gt; {
     const value = await this.redis.get(key)
     return value ? JSON.parse(value) : null
   }
 
-  async set(key: string, value: unknown, ttl?: number): Promise<void> {
+  async set(key: string, value: unknown, ttl?: number): Promise&lt;void&gt; {
     const serialized = JSON.stringify(value)
     if (ttl) {
       await this.redis.set(key, serialized, 'EX', ttl)
@@ -152,15 +153,15 @@ class RedisCacheStore implements CacheStore {
     }
   }
 
-  async has(key: string): Promise<boolean> {
+  async has(key: string): Promise&lt;boolean&gt; {
     return (await this.redis.exists(key)) === 1
   }
 
-  async forget(key: string): Promise<void> {
+  async forget(key: string): Promise&lt;void&gt; {
     await this.redis.del(key)
   }
 
-  async flush(): Promise<void> {
+  async flush(): Promise&lt;void&gt; {
     await this.redis.flushdb()
   }
 }
@@ -175,10 +176,10 @@ CacheManager.useStore(new RedisCacheStore())
 
 export default class ProjectController {
   async index(ctx: Context) {
-    const org = ctx.get<Organization>('organization')
+    const org = ctx.get&lt;Organization&gt;('organization')
 
     const projects = await cache.remember(
-      <code>org:${org.id}:projects</code>,
+      `org:${org.id}:projects`,
       120,
       () => Project.where('organization_id', org.id).all()
     )
@@ -188,12 +189,12 @@ export default class ProjectController {
 
   async update(ctx: Context) {
     const project = ctx.get('resource') as Project
-    const data = await ctx.body<Record<string, unknown>>()
+    const data = await ctx.body&lt;Record&lt;string, unknown&gt;&gt;()
 
     await project.fill(data).save()
 
     // Invalidate cache after mutation
-    await cache.forget(<code>org:${project.organizationId}:projects</code>)
+    await cache.forget(`org:${project.organizationId}:projects`)
 
     return ctx.json({ project })
   }
@@ -203,8 +204,8 @@ export default class ProjectController {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <a href="/docs/core/kernel/configuration" class="prev">← Configuration</a>
-    <a href="/docs/core/kernel/encryption" class="next">Encryption →</a>
+    <a href="/docs/configuration-guide" class="prev">← Configuration</a>
+    <a href="/docs/data-encryption" class="next">Encryption →</a>
   </div>
 </article>
 @end

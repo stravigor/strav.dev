@@ -65,11 +65,13 @@ export default {
 
 The <code>session()</code> middleware runs on every request and handles the full lifecycle:
 
+<ul>
 <li>Reads the session cookie and loads the session from the database.</li>
 <li>Creates a new anonymous session if absent or expired.</li>
 <li>Ages flash data so previous-request flash values are readable.</li>
 <li>Sets <code>ctx.get('session')</code> and <code>ctx.get('csrfToken')</code> for downstream handlers.</li>
 <li>After the handler: saves dirty data to DB and refreshes the cookie (sliding expiration).</li>
+</ul>
 
 <pre><code class="language-typescript">import { router } from '@strav/http'
 import { session } from '@strav/http'
@@ -90,10 +92,10 @@ router.group({ middleware: [session()] }, (r) => {
 <pre><code class="language-typescript">import type { Session } from '@strav/http'
 
 router.post('/cart/add', async (ctx) => {
-  const s = ctx.get<Session>('session')
-  const { itemId } = await ctx.body<{ itemId: string }>()
+  const s = ctx.get&lt;Session&gt;('session')
+  const { itemId } = await ctx.body&lt;{ itemId: string }&gt;()
 
-  const cart = s.get<string[]>('cart', [])
+  const cart = s.get&lt;string[]&gt;('cart', [])
   cart.push(itemId)
   s.set('cart', cart)
 
@@ -112,7 +114,7 @@ router.post('/cart/add', async (ctx) => {
   </thead>
   <tbody>
     <tr>
-      <td><code>get<T>(key, default?)</code></td>
+      <td><code>get&lt;T&gt;(key, default?)</code></td>
       <td>Read a value (returns default if absent)</td>
     </tr>
     <tr>
@@ -162,7 +164,7 @@ Flash uses a two-bucket system (<code>_flash</code> and <code>_flash_old</code>)
 
 <h2>Authentication</h2>
 
-The session supports optional user association. See the <a href="./auth.md">auth guide</a> for the full authentication flow.
+The session supports optional user association. See the <a href="./authentication-system">auth guide</a> for the full authentication flow.
 
 <pre><code class="language-typescript">// Login — associate a user with the session
 s.authenticate(user)      // accepts BaseModel instance or raw ID
@@ -214,7 +216,7 @@ return Session.destroy(ctx, response)
 <pre><code class="language-typescript">import { SessionManager } from '@strav/http'
 
 const deleted = await SessionManager.gc()
-console.log(<code>Cleaned up ${deleted} expired sessions</code>)
+console.log(`Cleaned up ${deleted} expired sessions`)
 </code></pre>
 
 <p>Call this periodically via a cron job, CLI command, or timer.</p>
@@ -287,8 +289,8 @@ Login POST:    session() → csrf() → handler          (anonymous CSRF works!)
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="./routing-middleware">← Routing & Middleware</a>
+    <a href="./social-login-integration">Social Login Integration →</a>
   </div>
 </article>
 @end

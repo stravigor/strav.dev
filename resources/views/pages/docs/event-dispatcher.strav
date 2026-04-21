@@ -41,7 +41,7 @@ await Emitter.emit('user.registered', { user })
 
 <h3>off — remove a listener</h3>
 
-<pre><code class="language-typescript">const listener = async (payload) => { /<em> ... </em>/ }
+<pre><code class="language-typescript">const listener = async (payload) => { /* ... */ }
 
 Emitter.on('user.deleted', listener)
 Emitter.off('user.deleted', listener)
@@ -72,11 +72,11 @@ Emitter.removeAllListeners()
   invitedBy?: number
 }
 
-Emitter.on<UserRegistered>('user.registered', async ({ user, invitedBy }) => {
+Emitter.on&lt;UserRegistered&gt;('user.registered', async ({ user, invitedBy }) => {
   // user and invitedBy are typed
 })
 
-await Emitter.emit<UserRegistered>('user.registered', { user })
+await Emitter.emit&lt;UserRegistered&gt;('user.registered', { user })
 </code></pre>
 
 <h2>Error isolation</h2>
@@ -137,7 +137,7 @@ notifications.wireEvents()
 
 When <code>task.assigned</code> fires, the notification is automatically created and delivered to the resolved recipients through all configured channels (email, in-app, webhook, Discord, etc.).
 
-See the <a href="./notification.md">Notification guide</a> for full details.
+See the <a href="./real-time-notifications">Real-time Notifications guide</a> for full details.
 
 <h2>Testing</h2>
 
@@ -154,8 +154,8 @@ afterEach(() => {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="./email-sending">← Email Sending</a>
+    <a href="./exception-handling">Exception Handling →</a>
   </div>
 </article>
 @end

@@ -46,13 +46,14 @@ const logger = app.resolve(Logger)
 </code></pre>
 
 <h3>Log methods</h3>
-<p>logger.trace('entering function', { fn: 'processOrder' })</p>
-<p>logger.debug('cache miss', { key: 'user:42' })</p>
-<p>logger.info('server started', { port: 3000 })</p>
-<p>logger.warn('rate limit approaching', { current: 95, max: 100 })</p>
-<p>logger.error('request failed', { statusCode: 500, path: '/api/users' })</p>
-<p>logger.fatal('database unreachable', { host: 'db.example.com' })</p>
-<p>``<code></p>
+
+<pre><code class="language-typescript">logger.trace('entering function', { fn: 'processOrder' })
+logger.debug('cache miss', { key: 'user:42' })
+logger.info('server started', { port: 3000 })
+logger.warn('rate limit approaching', { current: 95, max: 100 })
+logger.error('request failed', { statusCode: 500, path: '/api/users' })
+logger.fatal('database unreachable', { host: 'db.example.com' })
+</code></pre>
 
 <p>Every method accepts an optional context object that gets merged into the structured JSON output.</p>
 
@@ -60,7 +61,7 @@ const logger = app.resolve(Logger)
 
 <h3>ConsoleSink</h3>
 
-Outputs to stdout using </code>pino-pretty<code> for human-readable development logs.
+Outputs to stdout using <code>pino-pretty</code> for human-readable development logs.
 
 <pre><code class="language-typescript">{ enabled: true, level: 'debug' }
 </code></pre>
@@ -74,7 +75,7 @@ Outputs to stdout using </code>pino-pretty<code> for human-readable development 
 
 <h3>Custom sinks</h3>
 
-Extend the </code>LogSink<code> base class and register it in the sink registry inside </code>logger.ts`:
+Extend the <code>LogSink</code> base class and register it in the sink registry inside <code>logger.ts</code>:
 
 <pre><code class="language-typescript">import { LogSink, type SinkConfig } from '@strav/kernel'
 
@@ -95,8 +96,8 @@ class CustomSink extends LogSink {
 
   <!-- Navigation -->
   <div class="doc-nav">
-    <span></span>
-    <span></span>
+    <a href="./job-queue-management">← Job Queue Management</a>
+    <a href="./model-context-protocol">Model Context Protocol →</a>
   </div>
 </article>
 @end

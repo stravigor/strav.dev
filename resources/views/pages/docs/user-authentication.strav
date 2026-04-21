@@ -1,5 +1,7 @@
 @layout('layouts/docs')
 
+@set('title', 'User Authentication - Strav Documentation')
+
 @section('content')
 <article class="doc-content">
 <h1>Auth</h1>
@@ -200,7 +202,7 @@ const strength = calculatePasswordStrength(password)
 
 if (strength.score < 3) {
   return {
-    message: <code>Password is ${strength.label}</code>,
+    message: `Password is ${strength.label}`,
     suggestions: strength.suggestions
   }
 }
@@ -241,7 +243,7 @@ const token = createSignedToken(
 )
 
 // Send token in email
-await sendEmail(user.email, <code>Reset your password: ${url}?token=${token}</code>)
+await sendEmail(user.email, `Reset your password: ${url}?token=${token}`)
 
 // Later, verify the token
 try {
@@ -270,8 +272,8 @@ const token = createMagicLinkToken(userId, {
   expiresInMinutes: 15
 })
 
-const magicLink = <code>https://app.com/auth/magic?token=${token}</code>
-await sendEmail(user.email, <code>Click to login: ${magicLink}</code>)
+const magicLink = `https://app.com/auth/magic?token=${token}`
+await sendEmail(user.email, `Click to login: ${magicLink}`)
 
 // Verify when user clicks link
 try {
@@ -344,16 +346,16 @@ if (userId) {
 // Create state store (use Redis/DB in production)
 const stateStore = createOAuthStateStore({
   async store(state) {
-    await redis.setex(<code>oauth:${state.value}</code>, 600, JSON.stringify(state))
+    await redis.setex(`oauth:${state.value}`, 600, JSON.stringify(state))
   },
 
   async retrieve(value) {
-    const data = await redis.get(<code>oauth:${value}</code>)
+    const data = await redis.get(`oauth:${value}`)
     return data ? JSON.parse(data) : null
   },
 
   async delete(value) {
-    await redis.del(<code>oauth:${value}</code>)
+    await redis.del(`oauth:${value}`)
   },
 
   ttl: 600 // 10 minutes
@@ -365,7 +367,7 @@ const stateValue = await stateStore.generate({
   data: { provider: 'github' }
 })
 
-const authUrl = <code>https://github.com/login/oauth/authorize?state=${stateValue}&amp;...</code>
+const authUrl = `https://github.com/login/oauth/authorize?state=${stateValue}&...`
 
 // After OAuth callback
 const state = await stateStore.verify(req.query.state)
@@ -474,6 +476,7 @@ async function resetPassword(token: string, newPassword: string) {
 
 <h2>Security Considerations</h2>
 
+<ul>
 <li><strong>Zero Dependencies</strong>: This package has no external dependencies, eliminating supply chain attack vectors that could compromise your authentication system</li>
 <li><strong>Secret Management</strong>: Store JWT secrets securely using environment variables and rotate them periodically</li>
 <li><strong>Token Storage</strong>: Never store tokens in localStorage for sensitive apps; use httpOnly cookies when possible</li>
@@ -482,6 +485,7 @@ async function resetPassword(token: string, newPassword: string) {
 <li><strong>Recovery Codes</strong>: Hash recovery codes before storage and mark as used after verification</li>
 <li><strong>Rate Limiting</strong>: Implement rate limiting on authentication endpoints</li>
 <li><strong>Token Rotation</strong>: Implement refresh token rotation to limit exposure window</li>
+</ul>
 
 
 

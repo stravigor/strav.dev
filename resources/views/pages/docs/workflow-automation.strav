@@ -45,8 +45,8 @@ result.duration         // Total execution time in ms
 Every step receives a <code>WorkflowContext</code> with two properties:
 
 <pre><code class="language-typescript">interface WorkflowContext {
-  input: Record<string, unknown>    // The original input passed to .run()
-  results: Record<string, unknown>  // Accumulated results from completed steps
+  input: Record&lt;string, unknown&gt;    // The original input passed to .run()
+  results: Record&lt;string, unknown&gt;  // Accumulated results from completed steps
 }
 </code></pre>
 
@@ -209,9 +209,11 @@ For multi-step processes where partial failure needs rollback, define <code>comp
 </code></pre>
 
 If <code>schedule-shipping</code> fails:
+<ol>
 <li><code>refundCharge</code> runs (reverse of <code>charge-payment</code>)</li>
 <li><code>releaseItems</code> runs (reverse of <code>reserve-inventory</code>)</li>
 <li>The original error is re-thrown</li>
+</ol>
 
 <h3>Compensation errors</h3>
 
@@ -341,7 +343,7 @@ Create a new <code>Workflow</code> instance.
 
 <ul>
 <li><code>resolver</code> — <code>(ctx: WorkflowContext) => string | Promise<string></code></li>
-<li><code>branches</code> — <code>Record<string, StepHandler></code></li>
+<li><code>branches</code> — <code>Record&lt;string, StepHandler&gt;</code></li>
 </ul>
 
 <h3><code>Workflow.loop(name, handler, options)</code></h3>
@@ -358,7 +360,7 @@ Create a new <code>Workflow</code> instance.
 Execute the workflow. Returns <code>Promise<WorkflowResult></code>.
 
 <pre><code class="language-typescript">interface WorkflowResult {
-  results: Record<string, unknown>
+  results: Record&lt;string, unknown&gt;
   duration: number
 }
 </code></pre>

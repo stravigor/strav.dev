@@ -16,8 +16,8 @@ import User from '../app/models/user'
 
 const UserFactory = Factory.define(User, (seq) => ({
   pid: crypto.randomUUID(),
-  name: <code>User ${seq}</code>,
-  email: <code>user-${seq}@test.com</code>,
+  name: `User $\{seq\}`,
+  email: `user-$\{seq\}@test.com`,
   passwordHash: 'hashed',
 }))
 
@@ -172,7 +172,7 @@ t.config   // Configuration instance — for reading config values
 
 <h3>Shared factory definitions</h3>
 
-Define factories in <code>database/factories/</code> so both tests and <a href="./database.md#seeding">seeders</a> can import them:
+Define factories in <code>database/factories/</code> so both tests and <a href="./database-migrations">database operations</a> can import them:
 
 <pre><code>database/
   factories/
@@ -187,8 +187,8 @@ import User from '../../app/models/user'
 
 export const UserFactory = Factory.define(User, (seq) => ({
   pid: crypto.randomUUID(),
-  name: <code>User ${seq}</code>,
-  email: <code>user-${seq}@test.com</code>,
+  name: `User $\{seq\}`,
+  email: `user-$\{seq\}@test.com`,
   passwordHash: 'hashed',
 }))
 </code></pre>
@@ -206,13 +206,13 @@ import Post from '../app/models/post'
 
 const UserFactory = Factory.define(User, (seq) => ({
   pid: crypto.randomUUID(),
-  name: <code>User ${seq}</code>,
-  email: <code>user-${seq}@test.com</code>,
+  name: `User $\{seq\}`,
+  email: `user-$\{seq\}@test.com`,
   passwordHash: 'hashed',
 }))
 
 const PostFactory = Factory.define(Post, (seq) => ({
-  title: <code>Post ${seq}</code>,
+  title: `Post $\{seq\}`,
   body: 'Lorem ipsum',
   status: 'draft',
 }))
@@ -302,14 +302,14 @@ import Post from '../app/models/post'
 
 const UserFactory = Factory.define(User, (seq) => ({
   pid: crypto.randomUUID(),
-  name: <code>User ${seq}</code>,
-  email: <code>user-${seq}@test.com</code>,
+  name: `User $\{seq\}`,
+  email: `user-$\{seq\}@test.com`,
   passwordHash: 'hashed',
 }))
 
 const PostFactory = Factory.define(Post, (seq) => ({
-  title: <code>Post ${seq}</code>,
-  body: <code>Content for post ${seq}</code>,
+  title: `Post $\{seq\}`,
+  body: `Content for post $\{seq\}`,
 }))
 
 const t = await TestCase.boot({
@@ -324,7 +324,7 @@ describe('Posts API', () => {
     const user = await UserFactory.create()
     await t.actingAs(user)
 
-    const res = await t.post(<code>/api/users/${user.pid}/posts</code>, {
+    const res = await t.post(`/api/users/$\{user.pid\}/posts`, {
       title: 'My Post',
       body: 'Hello world',
     })
@@ -342,7 +342,7 @@ describe('Posts API', () => {
     await PostFactory.create({ userPid: user.pid })
     await PostFactory.create({ userPid: user.pid })
 
-    const res = await t.get(<code>/api/users/${user.pid}/posts</code>)
+    const res = await t.get(`/api/users/$\{user.pid\}/posts`)
     expect(res.status).toBe(200)
     const data = await res.json() as any[]
     expect(data).toHaveLength(2)

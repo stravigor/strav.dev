@@ -107,10 +107,10 @@ When writing files to disk (<code>writeAll()</code>), all generated TypeScript f
 
 <h3>Usage via CLI</h3>
 
-<pre><code class="language-bash"><h1>Generate models for all scopes</h1>
+<pre><code class="language-bash"># Generate models for all scopes
 bun strav generate:models
 
-<h1>Generate models for specific scope</h1>
+# Generate models for specific scope
 bun strav generate:models --scope=public    # Only public models
 bun strav generate:models --scope=tenants   # Only tenant models
 bun strav generate:models --scope=all       # Both scopes (default)
@@ -204,15 +204,44 @@ export enum UserRole {
 
 <h3>Type mapping</h3>
 
-<p>| PostgreSQL type | TypeScript type |</p>
-<p>|----------------|-----------------|</p>
-| <code>serial</code>, <code>integer</code>, <code>smallint</code>, <code>real</code>, <code>double</code> | <code>number</code> |
-| <code>bigserial</code>, <code>bigint</code> | <code>bigint</code> |
-| <code>varchar</code>, <code>text</code>, <code>uuid</code>, <code>char</code> | <code>string</code> |
-| <code>boolean</code> | <code>boolean</code> |
-| <code>timestamp</code>, <code>timestamptz</code> | <code>DateTime</code> |
-| <code>json</code>, <code>jsonb</code> | <code>Record<string, unknown></code> |
-| Custom enum | Generated enum type (e.g., <code>UserRole</code>) |
+<table>
+<thead>
+<tr>
+<th>PostgreSQL type</th>
+<th>TypeScript type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>serial</code>, <code>integer</code>, <code>smallint</code>, <code>real</code>, <code>double</code></td>
+<td><code>number</code></td>
+</tr>
+<tr>
+<td><code>bigserial</code>, <code>bigint</code></td>
+<td><code>bigint</code></td>
+</tr>
+<tr>
+<td><code>varchar</code>, <code>text</code>, <code>uuid</code>, <code>char</code></td>
+<td><code>string</code></td>
+</tr>
+<tr>
+<td><code>boolean</code></td>
+<td><code>boolean</code></td>
+</tr>
+<tr>
+<td><code>timestamp</code>, <code>timestamptz</code></td>
+<td><code>DateTime</code></td>
+</tr>
+<tr>
+<td><code>json</code>, <code>jsonb</code></td>
+<td><code>Record&lt;string, unknown&gt;</code></td>
+</tr>
+<tr>
+<td>Custom enum</td>
+<td>Generated enum type (e.g., <code>UserRole</code>)</td>
+</tr>
+</tbody>
+</table>
 
 <h3>Relationships</h3>
 
@@ -271,12 +300,32 @@ export const UserEvents = {
 } as const
 </code></pre>
 
-<p>| Archetype | Events |</p>
-<p>|-----------|--------|</p>
-<p>| entity, attribute, contribution, reference | CREATED, UPDATED, SYNCED, DELETED |</p>
-<p>| component | UPDATED, SYNCED |</p>
-<p>| event | CREATED |</p>
-<p>| configuration | UPDATED, SYNCED |</p>
+<table>
+<thead>
+<tr>
+<th>Archetype</th>
+<th>Events</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>entity, attribute, contribution, reference</td>
+<td>CREATED, UPDATED, SYNCED, DELETED</td>
+</tr>
+<tr>
+<td>component</td>
+<td>UPDATED, SYNCED</td>
+</tr>
+<tr>
+<td>event</td>
+<td>CREATED</td>
+</tr>
+<tr>
+<td>configuration</td>
+<td>UPDATED, SYNCED</td>
+</tr>
+</tbody>
+</table>
 
 <h4>Validator rules — <code>app/validators/{name}_validator.ts</code></h4>
 
@@ -325,7 +374,7 @@ A <code>Resource<T></code> subclass that controls the JSON shape for API respons
 import { Resource } from '@strav/http'
 import type User from '../models/user'
 
-export default class UserResource extends Resource<User> {
+export default class UserResource extends Resource&lt;User&gt; {
   define(user: User) {
     return {
       pid: user.pid,
@@ -371,7 +420,7 @@ export default class UserService {
 
 Services are decorated with <code>@inject</code> so the DI container can resolve them as controller dependencies.
 
-The <code>list</code> method returns a <code>PaginationResult<T></code> with <code>data</code> and <code>meta</code> (page, perPage, total, lastPage, from, to).
+The <code>list</code> method returns a <code>PaginationResult&lt;T&gt;</code> with <code>data</code> and <code>meta</code> (page, perPage, total, lastPage, from, to).
 
 <p>Archetype-specific behaviour:</p>
 <ul>
@@ -398,7 +447,7 @@ export default class UserController {
   }
 
   async store(ctx: Context) {
-    const body = await ctx.body<Record<string, unknown>>()
+    const body = await ctx.body&lt;Record&lt;string, unknown&gt;&gt;()
     const { data: validated, errors } = validate(body, UserRules.store!)
     if (errors) return ctx.json({ errors }, 422)
     const item = await this.service.create(validated)
@@ -413,7 +462,7 @@ The <code>index</code> action reads <code>?page=1&perPage=20</code> from the que
 <p>For dependent archetypes, the parent FK is added after validation so it isn't stripped:</p>
 
 <pre><code class="language-typescript">  async store(ctx: Context) {
-    const body = await ctx.body<Record<string, unknown>>()
+    const body = await ctx.body&lt;Record&lt;string, unknown&gt;&gt;()
     const { data: validated, errors } = validate(body, PostRules.store!)
     if (errors) return ctx.json({ errors }, 422)
     const item = await this.service.create({ ...validated, userPid: ctx.params.parentId! })
@@ -456,12 +505,37 @@ router.group({ prefix: '/api', middleware: [auth()] }, r => {
 
 <p>Routing rules by archetype:</p>
 
-<p>| Archetype | Routing | Notes |</p>
-<p>|-----------|---------|-------|</p>
-| entity, reference | <code>r.resource()</code> at root | Full CRUD |
-| contribution, attribute, component, event | <code>r.resource()</code> nested under parent | Actions vary by archetype |
-| configuration | <code>r.resource().singleton()</code> under parent | No <code>:id</code> param — show, update, destroy |
-<p>| association | Skipped | No routes |</p>
+<table>
+<thead>
+<tr>
+<th>Archetype</th>
+<th>Routing</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>entity, reference</td>
+<td><code>r.resource()</code> at root</td>
+<td>Full CRUD</td>
+</tr>
+<tr>
+<td>contribution, attribute, component, event</td>
+<td><code>r.resource()</code> nested under parent</td>
+<td>Actions vary by archetype</td>
+</tr>
+<tr>
+<td>configuration</td>
+<td><code>r.resource().singleton()</code> under parent</td>
+<td>No <code>:id</code> param — show, update, destroy</td>
+</tr>
+<tr>
+<td>association</td>
+<td>Skipped</td>
+<td>No routes</td>
+</tr>
+</tbody>
+</table>
 
 Route paths are auto-pluralized: <code>user</code> → <code>/users</code>, <code>category</code> → <code>/categories</code>. Dependent schemas strip the parent prefix: <code>post_content</code> (parent: post) → <code>/contents</code>.
 

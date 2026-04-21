@@ -47,6 +47,52 @@ const rows = await sql.unsafe(
 
 The <code>sql</code> export is a transparent proxy to the Database singleton's underlying Bun SQL connection. It's available after the Database is resolved through the DI container during bootstrap.
 
+<h3>Configuration</h3>
+
+<p>Complete database configuration options in <code>config/database.ts</code>:</p>
+
+<pre><code class="language-typescript">export default {
+  // Connection settings
+  host: env('DB_HOST', '127.0.0.1'),
+  port: env.int('DB_PORT', 5432),
+  username: env('DB_USER', 'postgres'),
+  password: env('DB_PASSWORD', ''),
+  database: env('DB_DATABASE', 'strav'),
+
+  // Connection pool settings
+  pool: env.int('DB_POOL_MAX', 10),           // max connections in pool
+  idleTimeout: env.int('DB_IDLE_TIMEOUT', 20), // idle timeout in seconds
+
+  // Multi-schema support (for multi-tenant applications)
+  multiSchema: {
+    enabled: env.bool('DB_MULTI_SCHEMA', false),
+  },
+}
+</code></pre>
+
+<h3>Multi-schema support</h3>
+
+<p>Enable multi-schema mode for multi-tenant applications where each tenant has its own database schema:</p>
+
+<pre><code class="language-typescript">// config/database.ts
+export default {
+  multiSchema: {
+    enabled: true,
+  },
+}
+</code></pre>
+
+<p>When enabled, the database automatically sets <code>search_path</code> based on the current schema context. Queries run within a schema context automatically target the correct tenant schema:</p>
+
+<pre><code class="language-typescript">import { withSchema } from '@strav/database'
+
+// All database operations within this block target the 'tenant_123' schema
+await withSchema('tenant_123', async () => {
+  const users = await sql<code>SELECT * FROM "user"</code>  // searches tenant_123.user
+  const orders = await Order.all()  // ORM queries also respect schema context
+})
+</code></pre>
+
 <h3>Transactions</h3>
 
 Never use raw <code>BEGIN</code>/<code>COMMIT</code> — Bun throws <code>ERR_POSTGRES_UNSAFE_TRANSACTION</code> with connection pooling.

@@ -305,11 +305,11 @@ The runner handles the tool-use loop automatically: when the model calls a tool,
   }
 
   async onToolCall(call: ToolCall) {
-    console.log(<code>Calling tool: ${call.name}</code>)
+    console.log(`Calling tool: $\{call.name\}`)
   }
 
   async onToolResult(record: ToolCallRecord) {
-    console.log(<code>Tool ${record.name} took ${record.duration}ms</code>)
+    console.log(`Tool $\{record.name\} took $\{record.duration\}ms`)
   }
 
   async onComplete(result: AgentResult) {
@@ -368,7 +368,7 @@ class MyAgent extends Agent {
   parameters: z.object({ url: z.string() }),
   execute: async ({ url }) => {
     const res = await fetch(url)
-    if (!res.ok) throw new Error(<code>API returned ${res.status}</code>)
+    if (!res.ok) throw new Error(`API returned $\{res.status\}`)
     return await res.json()
   },
 })
@@ -400,10 +400,10 @@ const reply = await thread.send('I need help with my order')
 
 <pre><code class="language-typescript">// Save
 const snapshot = thread.serialize()
-await cache.set(<code>thread:${userId}</code>, snapshot, 3600)
+await cache.set(`thread:$\{userId\}`, snapshot, 3600)
 
 // Restore
-const saved = await cache.get<SerializedThread>(<code>thread:${userId}</code>)
+const saved = await cache.get<SerializedThread>(`thread:$\{userId\}`)
 const thread = brain.thread().restore(saved)
 const reply = await thread.send('Continue our conversation')
 </code></pre>
@@ -640,7 +640,7 @@ TokenCounter.contextWindow('claude-sonnet-4-20250514')       // 200000
 <pre><code class="language-typescript">const result = await brain.workflow('content-pipeline')
   .step('research', ResearchAgent)
   .step('write', WriterAgent, (ctx) => ({
-    prompt: <code>Write about: ${ctx.results.research.text}</code>,
+    prompt: `Write about: $\{ctx.results.research.text\}`,
   }))
   .step('review', ReviewerAgent)
   .run({ topic: 'AI in healthcare' })
@@ -708,7 +708,7 @@ The router's output must contain a <code>route</code> field matching one of the 
       const score = JSON.parse(result.text).quality
       return score >= 8
     },
-    feedback: (result) => <code>Previous attempt scored ${JSON.parse(result.text).quality}/10. Improve.</code>,
+    feedback: (result) => `Previous attempt scored $\{JSON.parse(result.text).quality\}/10. Improve.`,
   })
   .run({ task: 'Write a product description' })
 </code></pre>
@@ -721,11 +721,11 @@ Register global before/after hooks on <code>BrainManager</code> for logging, cos
 
 // Log all completions
 BrainManager.before((request) => {
-  console.log(<code>AI request: ${request.model}, ${request.messages.length} messages</code>)
+  console.log(`AI request: $\{request.model\}, $\{request.messages.length\} messages`)
 })
 
 BrainManager.after((request, response) => {
-  console.log(<code>AI response: ${response.usage.totalTokens} tokens</code>)
+  console.log(`AI response: $\{response.usage.totalTokens\} tokens`)
 })
 </code></pre>
 
@@ -787,7 +787,7 @@ class MockProvider implements AIProvider {
 
   queueResponse(response: Partial<CompletionResponse>) {
     this.responses.push({
-      id: <code>mock-${this.responses.length}</code>,
+      id: `mock-$\{this.responses.length\}`,
       content: '',
       toolCalls: [],
       stopReason: 'end',
