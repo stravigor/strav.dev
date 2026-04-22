@@ -266,6 +266,8 @@ result.iterations // number of completion rounds (1 if no tool use)
 
 The runner handles the tool-use loop automatically: when the model calls a tool, the runner executes it, feeds the result back, and re-requests until the model stops or hits <code>maxIterations</code>.
 
+<p><code>run()</code> returns <code>AgentResult | SuspendedRun</code>. It returns a <code>SuspendedRun</code> only when the agent defines the <code>shouldSuspend</code> hook and decides to halt before a tool call — see <a href="#pause-and-resume">Pause and resume</a>. Agents without <code>shouldSuspend</code> always return <code>AgentResult</code>.</p>
+
 <h3>Provider override</h3>
 
 <p>Override the provider for a specific run without changing the agent class:</p>
@@ -288,6 +290,10 @@ The runner handles the tool-use loop automatically: when the model calls a tool,
       break
     case 'done':
       console.log('Final result:', event.result!.data)
+      break
+    case 'suspended':
+      // Agent paused before a tool call (see "Pause and resume"); no 'done'
+      // event is emitted. event.suspended contains pendingToolCalls + state.
       break
   }
 }
@@ -321,6 +327,109 @@ The runner handles the tool-use loop automatically: when the model calls a tool,
   }
 }
 </code></pre>
+
+<h3 id="pause-and-resume">Pause and resume</h3>
+
+<p>An agent can halt its tool-use loop before a tool executes, hand a JSON-serializable snapshot of the loop to the caller, and later resume from that snapshot once an out-of-band result is available. This is a policy-free primitive — the framework does not care <em>why</em> you suspend. Common use cases:</p>
+
+<ul>
+<li><strong>Human-in-the-loop approval</strong> for mutating tools (e.g., <code>issue_refund</code>, <code>delete_user</code>): pause the loop, show a UI card, resume after click.</li>
+<li><strong>Long-running or external tools</strong>: dispatch the tool to a worker, cache, or separate service; resume when the result is ready.</li>
+<li><strong>Cross-process handoff</strong>: persist the snapshot to a queue, let a different process pick it up.</li>
+</ul>
+
+<h4>Opting in: <code>shouldSuspend</code></h4>
+
+<p>Implement <code>shouldSuspend</code> on the agent. Return <code>true</code> to halt before the runner executes <code>call</code>:</p>
+
+<pre><code class="language-typescript">class SupportAgent extends Agent {
+  instructions = 'You help customers.'
+  tools = [lookupOrderTool, issueRefundTool]
+
+  shouldSuspend(call: ToolCall): boolean {
+    // Policy lives in your code. The framework just asks yes/no.
+    return MUTATING_TOOLS.has(call.name)
+  }
+}
+</code></pre>
+
+<p>Without this hook, nothing changes — the agent runs to completion as before.</p>
+
+<h4>The suspended result</h4>
+
+<p>When <code>shouldSuspend</code> returns <code>true</code>, <code>run()</code> resolves with a <code>SuspendedRun</code> instead of an <code>AgentResult</code>:</p>
+
+<pre><code class="language-typescript">import type { AgentResult, SuspendedRun } from '@strav/brain'
+
+function isSuspended(r: AgentResult | SuspendedRun): r is SuspendedRun {
+  return (r as SuspendedRun).status === 'suspended'
+}
+
+const result = await brain.agent(SupportAgent).input('refund order 123').run()
+
+if (isSuspended(result)) {
+  result.pendingToolCalls  // ToolCall[] — the calls awaiting an external result
+  result.state             // SerializedAgentState — JSON-serializable snapshot
+}
+</code></pre>
+
+<p><code>SerializedAgentState</code> carries everything the loop needs to continue: <code>messages</code>, <code>allToolCalls</code>, <code>totalUsage</code>, <code>iterations</code>. It is plain data; <code>JSON.stringify(state)</code> → store → <code>JSON.parse</code> → <code>resume()</code> is supported.</p>
+
+<h4>Resuming</h4>
+
+<p>Call <code>resume(state, toolResults)</code> with one result per pending call. The matching tool message is appended and the loop continues until it either completes or suspends again.</p>
+
+<pre><code class="language-typescript">const resumed = await brain.agent(SupportAgent).resume(state, [
+  { toolCallId: 'tc_1', result: { id: 'ord_123', refunded: 50 } },
+])
+</code></pre>
+
+<p>Rejecting a pending call: supply a synthetic error as the result. The model sees a normal tool failure and adapts its reply (typically: asks the human to handle it).</p>
+
+<pre><code class="language-typescript">await brain.agent(SupportAgent).resume(state, [
+  { toolCallId: 'tc_1', result: { error: 'rejected by agent alice' } },
+])
+</code></pre>
+
+<p>Chained suspensions are fine: a resume that hits another suspending tool call returns a new <code>SuspendedRun</code> with fresh state. Loop the pattern until you get an <code>AgentResult</code>.</p>
+
+<h4>Batch semantics</h4>
+
+<p>When the model requests several tool calls in one turn, the runner iterates them in order. Calls before the first suspending one execute normally; when a suspending call is reached, it and every remaining unprocessed call in that batch are captured together in <code>pendingToolCalls</code>. You must supply a result for each — this keeps the provider's <code>tool_use</code> ↔ <code>tool_result</code> pairing balanced on resume.</p>
+
+<p>For example, if the model calls <code>[lookup_order, issue_refund, lookup_order]</code> and only <code>issue_refund</code> suspends, <code>lookup_order</code> (first one) runs and its result is in <code>state.messages</code>; <code>pendingToolCalls</code> contains <code>[issue_refund, lookup_order (second)]</code>. Resume with two results.</p>
+
+<h4>Cross-process pattern</h4>
+
+<pre><code class="language-typescript">// Process A: drive the agent, persist on suspension
+const result = await brain.agent(SupportAgent).input(userMessage).run()
+if (isSuspended(result)) {
+  await db.pendingToolCall.create({
+    ticketId,
+    pendingToolCalls: result.pendingToolCalls,
+    state: result.state,             // jsonb column
+    expiresAt: addDays(new Date(), 7),
+  })
+  // Render UI asking for approval; worker exits cleanly.
+}
+
+// Process B: after human approval, resume
+const row = await db.pendingToolCall.findById(pendingId)
+const results = row.pendingToolCalls.map(call => ({
+  toolCallId: call.id,
+  result: await executeApprovedTool(call),
+}))
+const resumed = await brain.agent(SupportAgent).resume(row.state, results)
+// If still suspended, persist again; otherwise, done.
+</code></pre>
+
+<h4>Streaming</h4>
+
+<p><code>stream()</code> emits a <code>{ type: 'suspended', suspended: SuspendedRun }</code> event instead of <code>done</code> when the agent halts. To continue, call <code>resume()</code> on a fresh runner (streaming resume is not currently provided; resume runs non-streaming).</p>
+
+<h4>Not supported by workflows</h4>
+
+<p><code>Workflow</code> steps orchestrate agents end-to-end and have no resume path. A workflow step whose agent suspends throws a clear error. Use <code>AgentRunner.run()</code> / <code>resume()</code> directly for pause-and-resume flows.</p>
 
 <h2>Tools</h2>
 
