@@ -79,6 +79,7 @@
       <li><a href="/docs/oauth2-server">OAuth2 Server</a></li>
       <li><a href="/docs/social-login-integration">Social Login Integration</a></li>
       <li><a href="/docs/email-sending">Email Sending</a></li>
+      <li><a href="/docs/email-receiving">Email Receiving</a></li>
       <li><a href="/docs/real-time-notifications">Real-Time Notifications</a></li>
       <li><a href="/docs/websocket-broadcasting">WebSocket Broadcasting</a></li>
       <li><a href="/docs/server-sent-events">Server-Sent Events</a></li>

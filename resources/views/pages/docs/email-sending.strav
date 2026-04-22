@@ -1,12 +1,12 @@
 @layout('layouts/docs')
 
-@set('title', 'Mail - Strav Documentation')
+@set('title', 'Email Sending - Strav Documentation')
 
 @section('content')
 <article class="doc-content">
-<h1>Mail</h1>
+<h1>Email Sending</h1>
 
-Transactional email with pluggable transports (SMTP, Resend, SendGrid, Mailgun, Alibaba DirectMail), <code>.strav</code> templates, automatic CSS inlining, and optional Tailwind support.
+Transactional email with pluggable transports (SMTP, Resend, SendGrid, Mailgun, Alibaba DirectMail), <code>.strav</code> templates, automatic CSS inlining, and optional Tailwind support. To receive mail — provider webhooks (Postmark, Mailgun) or IMAP polling — see <a href="./email-receiving">Email Receiving</a>.
 
 <h2>Quick start</h2>
 
