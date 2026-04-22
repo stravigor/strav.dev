@@ -6,18 +6,26 @@
 <article class="doc-content">
 <h1>Session</h1>
 
-The session module provides a unified server-side session backed by a database row and an HTTP-only cookie. A single <code>Session</code> class handles both anonymous visitors and authenticated users.
+The session module provides a unified server-side session backed by a pluggable <strong>session store</strong> and an HTTP-only cookie. A single <code>Session</code> class handles both anonymous visitors and authenticated users.
+
+The storage backend is pluggable: <code>@strav/kernel</code> defines the <code>SessionStore</code> interface and <code>@strav/database</code> ships two implementations — <code>PostgresSessionStore</code> (default) and <code>RedisSessionStore</code>. Choose at provider registration time.
 
 <h2>Setup</h2>
 
 <h3>Using a service provider (recommended)</h3>
 
 <pre><code class="language-typescript">import { SessionProvider } from '@strav/http'
+import { RedisProvider } from '@strav/database'
 
+// Postgres (default)
 app.use(new SessionProvider())
+
+// Redis
+app.use(new RedisProvider())
+app.use(new SessionProvider({ driver: 'redis' }))
 </code></pre>
 
-The <code>SessionProvider</code> registers <code>SessionManager</code> as a singleton and creates the <code>_strav_sessions</code> table automatically. It depends on the <code>database</code> provider.
+<code>SessionProvider</code> registers <code>SessionManager</code> as a singleton, resolves the store for the configured driver, and plugs it in. It depends on <code>database</code> (and on <code>redis</code> when <code>driver: 'redis'</code>).
 
 <p>Options:</p>
 
@@ -31,9 +39,14 @@ The <code>SessionProvider</code> registers <code>SessionManager</code> as a sing
   </thead>
   <tbody>
     <tr>
-      <td><code>ensureTable</code></td>
+      <td><code>driver</code></td>
+      <td><code>'postgres'</code></td>
+      <td><code>'postgres'</code> or <code>'redis'</code> — selects the backing store</td>
+    </tr>
+    <tr>
+      <td><code>ensureSchema</code></td>
       <td><code>true</code></td>
-      <td>Auto-create the sessions table</td>
+      <td>For Postgres, auto-create <code>_strav_sessions</code>. No-op for Redis (uses native TTL).</td>
     </tr>
   </tbody>
 </table>
@@ -41,10 +54,15 @@ The <code>SessionProvider</code> registers <code>SessionManager</code> as a sing
 <h3>Manual setup</h3>
 
 <pre><code class="language-typescript">import { SessionManager } from '@strav/http'
+import { PostgresSessionStore } from '@strav/database'
 
 app.singleton(SessionManager)
+app.singleton(PostgresSessionStore)
+
 app.resolve(SessionManager)
-await SessionManager.ensureTable()
+const store = app.resolve(PostgresSessionStore)
+SessionManager.useStore(store)
+await store.ensureSchema()
 </code></pre>
 
 <h2>Configuration</h2>
@@ -53,24 +71,50 @@ await SessionManager.ensureTable()
 import { env } from '@strav/kernel'
 
 export default {
-  cookie: 'stravigor_session', // cookie name
-  lifetime: 120,               // minutes
+  driver: env('SESSION_DRIVER', 'postgres') as 'postgres' | 'redis',
+  cookie: 'strav_session', // cookie name
+  lifetime: 120,           // minutes
   httpOnly: true,
   secure: env.bool('APP_SECURE', true),
   sameSite: 'lax' as const,
 }
 </code></pre>
 
+<p>The <code>driver</code> field is informational for <code>SessionManager.config</code> — the actual driver is chosen when you construct <code>SessionProvider</code>. Pass the same value to both so they stay in sync:</p>
+
+<pre><code class="language-typescript">const driver = config.get('session.driver') as 'postgres' | 'redis'
+app.use(new SessionProvider({ driver }))
+</code></pre>
+
+<h3>Redis-backed sessions</h3>
+
+<p>See the <code>@strav/database</code> Redis documentation for client setup. In short:</p>
+
+<pre><code class="language-env"># .env
+SESSION_DRIVER=redis
+REDIS_URL=redis://localhost:6379
+</code></pre>
+
+<pre><code class="language-typescript">import { RedisProvider } from '@strav/database'
+import { SessionProvider } from '@strav/http'
+
+app
+  .use(new RedisProvider())
+  .use(new SessionProvider({ driver: 'redis' }))
+</code></pre>
+
+<p><code>RedisSessionStore</code> leans on Redis TTL (set from <code>session.lifetime</code>), so expired sessions are evicted automatically — <code>SessionManager.gc()</code> is a no-op for Redis.</p>
+
 <h2>session() middleware</h2>
 
 The <code>session()</code> middleware runs on every request and handles the full lifecycle:
 
 <ul>
-<li>Reads the session cookie and loads the session from the database.</li>
+<li>Reads the session cookie and loads the session from the store.</li>
 <li>Creates a new anonymous session if absent or expired.</li>
 <li>Ages flash data so previous-request flash values are readable.</li>
 <li>Sets <code>ctx.get('session')</code> and <code>ctx.get('csrfToken')</code> for downstream handlers.</li>
-<li>After the handler: saves dirty data to DB and refreshes the cookie (sliding expiration).</li>
+<li>After the handler: saves dirty data and refreshes the cookie (sliding expiration).</li>
 </ul>
 
 <pre><code class="language-typescript">import { router } from '@strav/http'
@@ -87,7 +131,7 @@ router.group({ middleware: [session()] }, (r) => {
 
 <h2>Data bag</h2>
 
-<p>Store arbitrary key-value data in the session's JSONB column:</p>
+<p>Store arbitrary key-value data in the session:</p>
 
 <pre><code class="language-typescript">import type { Session } from '@strav/http'
 
@@ -140,7 +184,7 @@ router.post('/cart/add', async (ctx) => {
   </tbody>
 </table>
 
-<p>Data is only persisted to the database when the session is dirty (something was modified). Read-only requests incur no DB writes.</p>
+<p>Data is only persisted when the session is dirty (something was modified). Read-only requests incur no store writes.</p>
 
 <h2>Flash data</h2>
 
@@ -160,7 +204,7 @@ s.getFlash('success')    // undefined
 
 <h3>How it works</h3>
 
-Flash uses a two-bucket system (<code>_flash</code> and <code>_flash_old</code>). At the start of each request, the middleware calls <code>ageFlash()</code> which moves current flash to "old" (readable this request) and clears the current bucket. The old bucket is stripped before saving to the database, so stale flash data doesn't persist.
+Flash uses a two-bucket system (<code>_flash</code> and <code>_flash_old</code>). At the start of each request, the middleware calls <code>ageFlash()</code> which moves current flash to "old" (readable this request) and clears the current bucket. The old bucket is stripped before saving, so stale flash data doesn't persist.
 
 <h2>Authentication</h2>
 
@@ -191,11 +235,11 @@ Session.destroy(ctx, ctx.redirect('/login'))
 
 <h3>save()</h3>
 
-Persists session data to the database using an upsert. No-op if the session hasn't been modified. Called automatically by the <code>session()</code> middleware after each request.
+Persists session data via the configured store. No-op if the session hasn't been modified. Called automatically by the <code>session()</code> middleware after each request.
 
 <h3>touch()</h3>
 
-Updates only the <code>last_activity</code> timestamp without saving data. Called by the <code>auth()</code> middleware after authenticated requests.
+Refreshes the session's activity marker without rewriting data (SQL <code>UPDATE</code> for Postgres, <code>EXPIRE</code> for Redis). Called by the <code>auth()</code> middleware after authenticated requests.
 
 <h3>isExpired()</h3>
 
@@ -203,7 +247,7 @@ Checks whether the session has exceeded the configured lifetime based on <code>l
 
 <h3>destroy()</h3>
 
-<p>Deletes the session row from the database and clears the cookie:</p>
+<p>Deletes the session from the store and clears the cookie:</p>
 
 <pre><code class="language-typescript">const response = ctx.redirect('/login')
 return Session.destroy(ctx, response)
@@ -211,7 +255,7 @@ return Session.destroy(ctx, response)
 
 <h2>Garbage collection</h2>
 
-<p>Expired sessions remain in the database until cleaned up:</p>
+<p>For SQL-backed stores, expired sessions remain in the table until cleaned up:</p>
 
 <pre><code class="language-typescript">import { SessionManager } from '@strav/http'
 
@@ -219,7 +263,68 @@ const deleted = await SessionManager.gc()
 console.log(`Cleaned up ${deleted} expired sessions`)
 </code></pre>
 
-<p>Call this periodically via a cron job, CLI command, or timer.</p>
+<p>Call this periodically via a cron job, CLI command, or timer. For Redis-backed sessions this returns <code>0</code> — keys expire on their own via TTL.</p>
+
+<h2>Pluggable stores</h2>
+
+<p><code>SessionStore</code> is an interface in <code>@strav/kernel</code>:</p>
+
+<pre><code class="language-typescript">import type { SessionStore, SessionRecord } from '@strav/kernel'
+
+interface SessionStore {
+  ensureSchema?(): Promise&lt;void&gt;
+  find(id: string): Promise&lt;SessionRecord | null&gt;
+  save(record: SessionRecord): Promise&lt;void&gt;
+  destroy(id: string): Promise&lt;void&gt;
+  touch(id: string): Promise&lt;void&gt;
+  gc(cutoff: Date): Promise&lt;number&gt;
+}
+</code></pre>
+
+<p>Built-in implementations live in <code>@strav/database</code>:</p>
+
+<table class="doc-table">
+  <thead>
+    <tr>
+      <th>Store</th>
+      <th>Backend</th>
+      <th><code>gc()</code></th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>PostgresSessionStore</code></td>
+      <td><code>_strav_sessions</code> table</td>
+      <td>deletes old rows</td>
+      <td>Default. Uses <code>INSERT ... ON CONFLICT</code>.</td>
+    </tr>
+    <tr>
+      <td><code>RedisSessionStore</code></td>
+      <td><code>strav:session:&lt;id&gt;</code> keys</td>
+      <td>no-op (native TTL)</td>
+      <td>TTL synced from <code>session.lifetime</code>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Custom store</h3>
+
+<p>Implement <code>SessionStore</code> and plug it in before the session middleware runs:</p>
+
+<pre><code class="language-typescript">import type { SessionStore, SessionRecord } from '@strav/kernel'
+import { SessionManager } from '@strav/http'
+
+class MemcachedSessionStore implements SessionStore {
+  async find(id: string): Promise&lt;SessionRecord | null&gt; { /* ... */ }
+  async save(record: SessionRecord): Promise&lt;void&gt; { /* ... */ }
+  async destroy(id: string): Promise&lt;void&gt; { /* ... */ }
+  async touch(id: string): Promise&lt;void&gt; { /* ... */ }
+  async gc(_cutoff: Date): Promise&lt;number&gt; { return 0 }
+}
+
+SessionManager.useStore(new MemcachedSessionStore())
+</code></pre>
 
 <h2>Middleware stacks</h2>
 
@@ -230,7 +335,7 @@ Login page:    session() → guest('/dashboard') → handler
 Login POST:    session() → csrf() → handler          (anonymous CSRF works!)
 </code></pre>
 
-<h2>Database table</h2>
+<h2>Postgres table (driver: 'postgres')</h2>
 
 <strong>_strav_sessions</strong>
 
@@ -250,7 +355,7 @@ Login POST:    session() → csrf() → handler          (anonymous CSRF works!)
     </tr>
     <tr>
       <td>user_id</td>
-      <td>VARCHAR</td>
+      <td>VARCHAR(255)</td>
       <td>Nullable — null for anonymous visitors</td>
     </tr>
     <tr>
@@ -276,7 +381,7 @@ Login POST:    session() → csrf() → handler          (anonymous CSRF works!)
     <tr>
       <td>last_activity</td>
       <td>TIMESTAMPTZ</td>
-      <td>Updated on each request</td>
+      <td>Updated on save / touch</td>
     </tr>
     <tr>
       <td>created_at</td>
@@ -285,6 +390,10 @@ Login POST:    session() → csrf() → handler          (anonymous CSRF works!)
     </tr>
   </tbody>
 </table>
+
+<h2>Redis keys (driver: 'redis')</h2>
+
+<p>Each session is stored as a single JSON-serialized value under <code>strav:session:&lt;uuid&gt;</code> with a TTL equal to <code>session.lifetime * 60</code> seconds. <code>touch()</code> refreshes the TTL; no secondary indexes or cleanup tasks are needed.</p>
 
 
   <!-- Navigation -->
