@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Policy - Strav Documentation')
+@set('title', 'Authorization Policies')
 
 @section('content')
 <article class="doc-content">

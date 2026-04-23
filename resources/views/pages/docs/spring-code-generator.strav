@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', '@strav/spring - Strav Documentation')
+@set('title', 'Spring Code Generator')
 
 @section('content')
 <article class="doc-content">

@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Email Receiving - Strav Documentation')
+@set('title', 'Email Receiving')
 
 @section('content')
 <article class="doc-content">

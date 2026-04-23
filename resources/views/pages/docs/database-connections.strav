@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Database - Strav Documentation')
+@set('title', 'Database Connections')
 
 @section('content')
 <article class="doc-content">

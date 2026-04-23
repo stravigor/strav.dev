@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Error Handling & Exceptions - Strav Documentation')
+@set('title', 'Exception Handling')
 
 @section('content')
 <article class="doc-content">

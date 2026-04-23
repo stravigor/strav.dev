@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'CLI - Strav Documentation')
+@set('title', 'Command Line Interface')
 
 @section('content')
 <article class="doc-content">

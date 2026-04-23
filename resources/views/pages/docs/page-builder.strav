@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Static Pages - Strav Documentation')
+@set('title', 'Page Builder')
 
 @section('content')
 <article class="doc-content">

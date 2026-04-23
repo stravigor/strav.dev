@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Flag - Strav Documentation')
+@set('title', 'Feature Flags')
 
 @section('content')
 <article class="doc-content">

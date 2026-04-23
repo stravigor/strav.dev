@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Events - Strav Documentation')
+@set('title', 'Event Dispatcher')
 
 @section('content')
 <article class="doc-content">

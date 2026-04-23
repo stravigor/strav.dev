@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Core - Application, Service Providers & DI Container - Strav Documentation')
+@set('title', 'Dependency Injection Container')
 
 @section('content')
 <article class="doc-content">

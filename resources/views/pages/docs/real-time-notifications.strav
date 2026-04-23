@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Notification - Strav Documentation')
+@set('title', 'Real-Time Notifications')
 
 @section('content')
 <article class="doc-content">

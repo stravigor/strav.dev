@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Template Engine - Strav Documentation')
+@set('title', 'Template Engine')
 
 @section('content')
 <article class="doc-content">

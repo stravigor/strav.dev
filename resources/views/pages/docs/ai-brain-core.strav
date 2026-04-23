@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'AI - Strav Documentation')
+@set('title', 'AI Brain Core')
 
 @section('content')
 <article class="doc-content">

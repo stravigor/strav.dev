@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Broadcast - Strav Documentation')
+@set('title', 'WebSocket Broadcasting')
 
 @section('content')
 <article class="doc-content">

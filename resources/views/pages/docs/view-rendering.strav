@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'View Engine - Strav Documentation')
+@set('title', 'View Rendering')
 
 @section('content')
 <article class="doc-content">

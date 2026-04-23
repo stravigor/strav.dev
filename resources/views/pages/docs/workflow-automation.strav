@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Workflow - Strav Documentation')
+@set('title', 'Workflow Automation')
 
 @section('content')
 <article class="doc-content">

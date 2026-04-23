@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Session - Strav Documentation')
+@set('title', 'Session Management')
 
 @section('content')
 <article class="doc-content">

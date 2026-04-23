@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Validation - Strav Documentation')
+@set('title', 'Form Validation')
 
 @section('content')
 <article class="doc-content">

@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'HTTP Routing & Middleware - Strav Documentation')
+@set('title', 'Routing & Middleware')
 
 @section('content')
 <article class="doc-content">

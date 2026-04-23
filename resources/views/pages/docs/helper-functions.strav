@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Helpers - Strav Documentation')
+@set('title', 'Helper Functions')
 
 @section('content')
 <article class="doc-content">

@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'ORM - Strav Documentation')
+@set('title', 'Object Relational Mapping')
 
 @section('content')
 <article class="doc-content">

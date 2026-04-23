@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Search - Strav Documentation')
+@set('title', 'Full-Text Search')
 
 @section('content')
 <article class="doc-content">

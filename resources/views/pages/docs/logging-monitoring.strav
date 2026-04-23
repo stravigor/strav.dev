@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Logger - Strav Documentation')
+@set('title', 'Logging & Monitoring')
 
 @section('content')
 <article class="doc-content">

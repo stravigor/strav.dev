@@ -1,5 +1,7 @@
 @layout('layouts/docs')
 
+@set('title', 'Installation')
+
 @section('content')
 <article class="doc-content">
   <h1>Installation</h1>

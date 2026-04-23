@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Stripe - Strav Documentation')
+@set('title', 'Stripe Payment Integration')
 
 @section('content')
 <article class="doc-content">

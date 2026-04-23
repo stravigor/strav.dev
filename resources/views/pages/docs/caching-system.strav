@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Cache - Strav Documentation')
+@set('title', 'Caching System')
 
 @section('content')
 <article class="doc-content">

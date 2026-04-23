@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Scheduler - Strav Documentation')
+@set('title', 'Task Scheduling')
 
 @section('content')
 <article class="doc-content">

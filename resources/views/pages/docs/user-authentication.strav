@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'User Authentication - Strav Documentation')
+@set('title', 'User Authentication')
 
 @section('content')
 <article class="doc-content">

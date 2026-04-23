@@ -1,6 +1,6 @@
 @layout('layouts/docs')
 
-@set('title', 'Multi-Domain Database Support - Strav Documentation')
+@set('title', 'Multi-Domain Database')
 
 @section('content')
 <article class="doc-content">
