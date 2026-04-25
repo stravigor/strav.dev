@@ -59,11 +59,11 @@ Expressions are real JavaScript — <code>{{ items.length + 1 }}</code>, <code>{
 <h3>Conditionals</h3>
 
 <pre><code class="language-html">@if(user.isAdmin)
-  <span class="badge">Admin</span>
+  &lt;span class="badge"&gt;Admin&lt;/span&gt;
 @elseif(user.isMod)
-  <span class="badge">Moderator</span>
+  &lt;span class="badge"&gt;Moderator&lt;/span&gt;
 @else
-  <span class="badge">Member</span>
+  &lt;span class="badge"&gt;Member&lt;/span&gt;
 @end
 </code></pre>
 
@@ -71,11 +71,11 @@ Any JS expression works as the condition: <code>@if(items.length > 0)</code>, <c
 
 <h3>Loops</h3>
 
-<pre><code class="language-html"><ul>
+<pre><code class="language-html">&lt;ul&gt;
   @each(item in items)
-    <li>{{ item.name }}</li>
+    &lt;li&gt;{{ item.name }}&lt;/li&gt;
   @end
-</ul>
+&lt;/ul&gt;
 </code></pre>
 
 <p>Inside loops, these variables are available automatically:</p>
@@ -108,9 +108,9 @@ Any JS expression works as the condition: <code>@if(items.length > 0)</code>, <c
 </table>
 
 <pre><code class="language-html">@each(user in users)
-  <div class="{{ $first ? 'border-t' : '' }}">
+  &lt;div class="{{ $first ? 'border-t' : '' }}"&gt;
     {{ $index + 1 }}. {{ user.name }}
-  </div>
+  &lt;/div&gt;
 @end
 </code></pre>
 
@@ -128,28 +128,28 @@ The included template receives both the parent data and any additional data pass
 <p>Layouts define the page shell. Child templates fill named blocks.</p>
 
 <pre><code class="language-html">{{-- resources/views/layouts/app.strav --}}
-<!DOCTYPE html>
-<html>
-<head><title>{{ title }}</title></head>
-<body>
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;&lt;title&gt;{{ title }}&lt;/title&gt;&lt;/head&gt;
+&lt;body&gt;
   @include('partials/nav', { user })
-  <main>
+  &lt;main&gt;
     @if(content)
       {!! content !!}
     @else
-      <p>No content</p>
+      &lt;p&gt;No content&lt;/p&gt;
     @end
-  </main>
-</body>
-</html>
+  &lt;/main&gt;
+&lt;/body&gt;
+&lt;/html&gt;
 </code></pre>
 
 <pre><code class="language-html">{{-- resources/views/pages/dashboard.strav --}}
 @layout('layouts/app')
 
 @block('content')
-  <h1>Dashboard</h1>
-  <p>Welcome back, {{ user.name }}</p>
+  &lt;h1&gt;Dashboard&lt;/h1&gt;
+  &lt;p&gt;Welcome back, {{ user.name }}&lt;/p&gt;
 @end
 </code></pre>
 
@@ -161,14 +161,14 @@ For interactive components, use Vue islands. The server renders a placeholder <c
 
 <h3>In templates</h3>
 
-<pre><code class="language-html"><vue:search-bar placeholder="Search users..." />
-<vue:counter :initial="{{ startCount }}" label="Click me" />
+<pre><code class="language-html">&lt;vue:search-bar placeholder="Search users..." /&gt;
+&lt;vue:counter :initial="{{ startCount }}" label="Click me" /&gt;
 </code></pre>
 
 Static attributes pass string values. Bound attributes (<code>:prop</code>) evaluate the expression at render time. The server output:
 
-<pre><code class="language-html"><div data-vue="search-bar" data-props='{"placeholder":"Search users..."}'></div>
-<div data-vue="counter" data-props='{"initial":5,"label":"Click me"}'></div>
+<pre><code class="language-html">&lt;div data-vue="search-bar" data-props='{"placeholder":"Search users..."}'&gt;&lt;/div&gt;
+&lt;div data-vue="counter" data-props='{"initial":5,"label":"Click me"}'&gt;&lt;/div&gt;
 </code></pre>
 
 <h3>Vue SFC islands (recommended)</h3>
@@ -177,25 +177,25 @@ Write real <code>.vue</code> single-file components in a <code>resources/islands
 
 <strong>1. Create <code>.vue</code> files:</strong>
 
-<pre><code class="language-vue"><!-- resources/islands/counter.vue -->
-<template>
-  <div class="counter">
-    <button @click="count--">-</button>
-    <span>{{ count }}</span>
-    <button @click="count++">+</button>
-  </div>
-</template>
+<pre><code class="language-vue">&lt;!-- resources/islands/counter.vue --&gt;
+&lt;template&gt;
+  &lt;div class="counter"&gt;
+    &lt;button @click="count--"&gt;-&lt;/button&gt;
+    &lt;span&gt;{{ count }}&lt;/span&gt;
+    &lt;button @click="count++"&gt;+&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
 
-<script setup>
+&lt;script setup&gt;
 import { ref } from 'vue'
 
 const props = defineProps({ initial: { type: Number, default: 0 } })
 const count = ref(props.initial)
-</script>
+&lt;/script&gt;
 
-<style scoped>
+&lt;style scoped&gt;
 .counter { display: flex; gap: 8px; align-items: center; }
-</style>
+&lt;/style&gt;
 </code></pre>
 
 Both <code>&lt;script setup&gt;</code> and Options API (<code>&lt;script&gt;</code>) are supported. <code>&lt;style scoped&gt;</code> works as expected.
@@ -206,8 +206,8 @@ Both <code>&lt;script setup&gt;</code> and Options API (<code>&lt;script&gt;</co
 @layout('layouts/app')
 
 @block('content')
-  <h1>Welcome</h1>
-  <vue:counter :initial="{{ startCount }}" />
+  &lt;h1&gt;Welcome&lt;/h1&gt;
+  &lt;vue:counter :initial="{{ startCount }}" /&gt;
 @end
 
 @block('scripts')
@@ -249,14 +249,67 @@ server.start(router)
 })
 </code></pre>
 
+<strong>Multiple sources — modules and vendor packages:</strong>
+
+<p>When an app is organized by module (e.g. <code>app/modules/auth/islands</code>, <code>app/modules/billing/islands</code>) instead of one flat <code>islands/</code> directory, use <code>sources</code> to merge all of them into a <strong>single bundle</strong>. Each source contributes <code>.vue</code> files and optional CSS to the same output — one <code>&lt;script&gt;</code>, one Vue runtime, one mount loop.</p>
+
+<pre><code class="language-typescript">const islands = new IslandBuilder({
+  sources: [
+    { islandsDir: 'resources/islands' },                              // app, anonymous
+    { islandsDir: 'app/modules/auth/islands',    namespace: 'auth' },
+    { islandsDir: 'app/modules/billing/islands', namespace: 'billing' },
+  ],
+})
+</code></pre>
+
+<p>Component names are prefixed by namespace. A file at <code>app/modules/auth/islands/login-form.vue</code> is addressable as <code>&lt;vue:auth/login-form/&gt;</code> in templates. The unnamespaced source's components remain unprefixed (<code>&lt;vue:counter/&gt;</code>).</p>
+
+<p>Rules:</p>
+<ul>
+  <li>At most one source may omit <code>namespace</code> — that's the host app's "root" islands.</li>
+  <li>All other sources must declare a unique namespace.</li>
+  <li>Duplicate fully-qualified component names throw at build time with both source labels.</li>
+</ul>
+
+<strong>Vendor packages — <code>strav.islands</code> manifest:</strong>
+
+<p>Packages declare their island contribution via <code>package.json</code>:</p>
+
+<pre><code class="language-jsonc">{
+  "name": "@strav/admin-ui",
+  "strav": {
+    "islands": {
+      "namespace": "admin",                            // required
+      "dir": "./islands",                              // required, relative to package root
+      "css": { "admin": "./css/admin.scss" }           // optional, same shape as CssOptions.entry
+    }
+  }
+}
+</code></pre>
+
+<p>Packages ship raw <code>.vue</code> and <code>.scss</code> files — the host bundles them with its own Vue runtime, so there's no per-package bundle and no Vue duplication. The host opts in <strong>explicitly</strong> by name:</p>
+
+<pre><code class="language-typescript">new IslandBuilder({
+  sources: [
+    { islandsDir: 'app/modules/auth/islands', namespace: 'auth' },
+  ],
+  packages: ['@strav/admin-ui'],   // resolves package.json, reads strav.islands
+})
+</code></pre>
+
+<p>Each source may also ship a <code>setup.ts</code> (a <code>(app: App) =&gt; void</code> default export); all setups are invoked in source order on the shared Vue app, so vendor packages can register their own plugins or globals. CSS entries from each source merge into the same keyed map used by <code>@css('key')</code> — per-source keys are namespace-prefixed (<code>@css('admin/admin')</code>); top-level CSS keeps its plain key.</p>
+
 <strong>Dev mode — watch for changes:</strong>
 
-<pre><code class="language-typescript">// Rebuild islands.js automatically when .vue files change
+<pre><code class="language-typescript">// Rebuild islands.js automatically when .vue files change.
+// Watches every source directory and debounces rebuilds (50ms).
 islands.watch()
 
 // Stop watching
 islands.unwatch()
 </code></pre>
+
+<p>Package sources aren't watched by default (assumed immutable in <code>node_modules</code>). Pass <code>watchPackages: true</code> for workspace-symlinked vendor cases.</p>
 
 <strong>CSS Compilation:</strong> The IslandBuilder can also compile Sass/SCSS files alongside your islands:
 
@@ -298,7 +351,7 @@ import '@strav/view/client/islands'
 
 <p>Include the bundled script in your layout:</p>
 
-<pre><code class="language-html"><script type="module" src="/assets/app.js"></script>
+<pre><code class="language-html">&lt;script type="module" src="/assets/app.js"&gt;&lt;/script&gt;
 </code></pre>
 
 <h2>Static file serving</h2>

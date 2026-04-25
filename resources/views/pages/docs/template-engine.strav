@@ -419,14 +419,71 @@ css: {
 }
 </code></pre>
 
+<strong>Multiple sources — modules and vendor packages:</strong>
+
+<p>When an app is organized by module (e.g. <code>app/modules/auth/islands</code>, <code>app/modules/billing/islands</code>) instead of one flat <code>islands/</code> directory, use <code>sources</code> to merge all of them into a <strong>single bundle</strong>. Each source contributes <code>.vue</code> files and optional CSS to the same output — one <code>&lt;script&gt;</code>, one Vue runtime, one mount loop.</p>
+
+<pre><code class="language-typescript">const islands = new IslandBuilder({
+  sources: [
+    { islandsDir: 'resources/islands' },                              // app, anonymous
+    { islandsDir: 'app/modules/auth/islands',    namespace: 'auth' },
+    { islandsDir: 'app/modules/billing/islands', namespace: 'billing' },
+  ],
+})
+</code></pre>
+
+<p>Component names are prefixed by namespace. A file at <code>app/modules/auth/islands/login-form.vue</code> is addressable as <code>&lt;vue:auth/login-form/&gt;</code> in templates. The unnamespaced source's components remain unprefixed (<code>&lt;vue:counter/&gt;</code>).</p>
+
+<p>Rules:</p>
+<ul>
+  <li>At most one source may omit <code>namespace</code> — that's the host app's "root" islands.</li>
+  <li>All other sources must declare a unique namespace.</li>
+  <li>Duplicate fully-qualified component names (<code>auth/login</code> from two sources) throw at build time with both source labels.</li>
+</ul>
+
+<strong>Vendor packages — <code>strav.islands</code> manifest:</strong>
+
+<p>Packages declare their island contribution via <code>package.json</code>:</p>
+
+<pre><code class="language-jsonc">{
+  "name": "@strav/admin-ui",
+  "strav": {
+    "islands": {
+      "namespace": "admin",                            // required
+      "dir": "./islands",                              // required, relative to package root
+      "css": { "admin": "./css/admin.scss" }           // optional, same shape as CssOptions.entry
+    }
+  }
+}
+</code></pre>
+
+<p>Packages ship raw <code>.vue</code> and <code>.scss</code> files (via the <code>files</code> field in <code>package.json</code>) — the host bundles them with its own Vue runtime, so there's no per-package bundle and no Vue duplication.</p>
+
+<p>The host opts in <strong>explicitly</strong> by name:</p>
+
+<pre><code class="language-typescript">new IslandBuilder({
+  sources: [
+    { islandsDir: 'app/modules/auth/islands', namespace: 'auth' },
+  ],
+  packages: ['@strav/admin-ui'],   // resolves package.json, reads strav.islands
+})
+</code></pre>
+
+<p>Auto-discovery from <code>dependencies</code> is intentionally not supported — listing packages explicitly keeps the build predictable. Each source may also ship a <code>setup.ts</code> (a <code>(app: App) =&gt; void</code> default export); all setups are invoked in source order on the shared Vue app, so vendor packages can register their own plugins or globals.</p>
+
+<p>CSS entries from each source merge into the same keyed map used by <code>@css('key')</code>. Per-source keys are namespace-prefixed (<code>@css('admin/admin')</code>, <code>@css('auth/theme')</code>); top-level CSS keeps its plain key. Key collisions throw with both source labels.</p>
+
 <strong>Dev mode — watch for changes:</strong>
 
-<pre><code class="language-typescript">// Rebuild islands.js automatically when .vue files change
+<pre><code class="language-typescript">// Rebuild islands.js automatically when .vue files change.
+// Watches every source directory and debounces rebuilds (50ms).
 islands.watch()
 
 // Stop watching
 islands.unwatch()
 </code></pre>
+
+<p>Package sources aren't watched by default (assumed immutable in <code>node_modules</code>). Pass <code>watchPackages: true</code> for workspace-symlinked vendor cases.</p>
 
 <strong>Complete example with multiple CSS:</strong>
 
