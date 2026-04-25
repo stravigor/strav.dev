@@ -216,15 +216,15 @@ If no strategy matches, falls back to <code>config.default</code>.
 
 <p>Pass translated strings as props:</p>
 
-<pre><code class="language-strav"><vue:counter :label="{{ t('components.counter_label') }}" />
+<pre><code class="language-strav">&lt;vue:counter :label="{{ t('components.counter_label') }}" /&gt;
 </code></pre>
 
 <p>For components that need many translations, pass a translations object:</p>
 
-<pre><code class="language-strav"><vue:form :translations="{{ JSON.stringify({
+<pre><code class="language-strav">&lt;vue:form :translations="{{ JSON.stringify({
   submit: t('form.submit'),
   cancel: t('form.cancel'),
-}) }}" />
+}) }}" /&gt;
 </code></pre>
 
 <h2>Validation Integration</h2>

@@ -625,13 +625,13 @@ The <code>views</code> object maps view names (from route definitions) to Vue co
 
 <strong>Use in the shell component:</strong>
 
-<pre><code class="language-vue"><!-- islands/app.vue -->
-<template>
-  <aside><!-- sidebar --></aside>
-  <main>
-    <RouterView />
-  </main>
-</template>
+<pre><code class="language-vue">&lt;!-- islands/app.vue --&gt;
+&lt;template&gt;
+  &lt;aside&gt;&lt;!-- sidebar --&gt;&lt;/aside&gt;
+  &lt;main&gt;
+    &lt;RouterView /&gt;
+  &lt;/main&gt;
+&lt;/template&gt;
 </code></pre>
 
 <code>RouterView</code> renders the matched component with resolved props automatically.

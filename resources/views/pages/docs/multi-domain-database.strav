@@ -12,7 +12,7 @@ The <code>@strav/database</code> package provides comprehensive support for mult
 
 <p>Domains allow you to organize your database schemas by business domain or tenant type:</p>
 
-<pre><code>database/schemas/
+<pre><code class="language-typescript">database/schemas/
 ├── public/          # System-wide schemas (users, organizations, etc.)
 ├── tenant/          # Tenant-specific schemas (orders, products, etc.)
 ├── factory/         # Factory-specific schemas (machines, production, etc.)

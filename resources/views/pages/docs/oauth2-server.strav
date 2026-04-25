@@ -470,7 +470,7 @@ const authUrl = routeUrl('oauth2.api.authorize', {
 
 <h4>Step 1: Redirect the user</h4>
 
-<pre><code>GET /oauth/authorize?response_type=code
+<pre><code class="language-typescript">GET /oauth/authorize?response_type=code
   &amp;client_id=CLIENT_ID
   &amp;redirect_uri=https://example.com/callback
   &amp;scope=read write
@@ -496,7 +496,7 @@ For <strong>third-party clients</strong>, the handler returns a JSON payload for
 
 <h4>Step 2: User approves</h4>
 
-<pre><code>POST /oauth/authorize
+<pre><code class="language-typescript">POST /oauth/authorize
 Content-Type: application/json
 
 { "approved": true }
@@ -506,7 +506,7 @@ Redirects the user to <code>redirect_uri?code=AUTH_CODE&state=random-csrf-string
 
 <h4>Step 3: Exchange the code for tokens</h4>
 
-<pre><code>POST /oauth/token
+<pre><code class="language-typescript">POST /oauth/token
 Content-Type: application/json
 
 {
@@ -536,7 +536,7 @@ Confidential clients authenticate with <code>client_secret</code>. Public client
 
 <p>Machine-to-machine authentication with no user context.</p>
 
-<pre><code>POST /oauth/token
+<pre><code class="language-typescript">POST /oauth/token
 Content-Type: application/json
 
 {
@@ -559,7 +559,7 @@ Response includes an access token but <strong>no refresh token</strong> and no u
 
 <p>Exchange a refresh token for a new access + refresh token pair. The old pair is revoked (rotation).</p>
 
-<pre><code>POST /oauth/token
+<pre><code class="language-typescript">POST /oauth/token
 Content-Type: application/json
 
 {
@@ -575,7 +575,7 @@ Content-Type: application/json
 
 <h3>Token Revocation (RFC 7009)</h3>
 
-<pre><code>POST /oauth/revoke
+<pre><code class="language-typescript">POST /oauth/revoke
 Content-Type: application/json
 
 { "token": "a1b2c3d4..." }
@@ -585,7 +585,7 @@ Always returns <code>200</code> regardless of whether the token was found (per R
 
 <h3>Token Introspection (RFC 7662)</h3>
 
-<pre><code>POST /oauth/introspect
+<pre><code class="language-typescript">POST /oauth/introspect
 Content-Type: application/json
 
 { "token": "a1b2c3d4..." }
@@ -611,7 +611,7 @@ Returns <code>{ "active": false }</code> for invalid, expired, or revoked tokens
 
 <h3>Create</h3>
 
-<pre><code>POST /oauth/personal-tokens
+<pre><code class="language-typescript">POST /oauth/personal-tokens
 Authorization: Bearer <session-token>
 Content-Type: application/json
 
@@ -639,14 +639,14 @@ Content-Type: application/json
 
 <h3>List</h3>
 
-<pre><code>GET /oauth/personal-tokens
+<pre><code class="language-typescript">GET /oauth/personal-tokens
 </code></pre>
 
 <p>Returns all active personal access tokens for the authenticated user. Token hashes are never exposed.</p>
 
 <h3>Revoke</h3>
 
-<pre><code>DELETE /oauth/personal-tokens/:id
+<pre><code class="language-typescript">DELETE /oauth/personal-tokens/:id
 </code></pre>
 
 <h2>Middleware</h2>

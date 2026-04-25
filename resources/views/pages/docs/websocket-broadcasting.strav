@@ -198,7 +198,7 @@ Each connection receives a unique ID from the server. Available after the first 
 
 <p>All messages are JSON over a single WebSocket. Short keys minimize overhead:</p>
 
-<pre><code>Client → Server:
+<pre><code class="language-typescript">Client → Server:
   { "t": "sub",   "c": "chat/1" }                            subscribe
   { "t": "unsub", "c": "chat/1" }                            unsubscribe
   { "t": "msg",   "c": "chat/1", "e": "send", "d": {...} }  channel message

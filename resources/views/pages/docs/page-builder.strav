@@ -179,7 +179,7 @@ export default {
 
 <p>Static pages follow a simple file-to-URL mapping:</p>
 
-<pre><code>resources/views/pages/
+<pre><code class="language-typescript">resources/views/pages/
 ├── index.strav          → /
 ├── about.strav          → /about
 ├── contact.strav        → /contact
@@ -197,7 +197,7 @@ export default {
 
 <p>When subdomain routing is enabled, pages are organized by subdomain:</p>
 
-<pre><code>resources/views/pages/
+<pre><code class="language-typescript">resources/views/pages/
 ├── _default/                     # Main domain (example.com)
 │   ├── index.strav              → example.com/
 │   ├── about.strav              → example.com/about
@@ -400,7 +400,7 @@ ViewEngine.setGlobal('siteName', 'My Awesome Site')
 
 <p>Organize your pages logically:</p>
 
-<pre><code>resources/views/pages/
+<pre><code class="language-typescript">resources/views/pages/
 ├── index.strav                    # Homepage
 ├── about.strav                    # About page
 ├── contact.strav                  # Contact page
@@ -485,7 +485,7 @@ pages: {
 
 <h3>Documentation site</h3>
 
-<pre><code>pages/
+<pre><code class="language-typescript">pages/
 ├── index.strav              # Landing page
 ├── docs/
 │   ├── index.strav          # Docs home with navigation
@@ -500,7 +500,7 @@ pages: {
 
 <h3>Marketing site</h3>
 
-<pre><code>pages/
+<pre><code class="language-typescript">pages/
 ├── index.strav              # Homepage
 ├── features.strav           # Feature overview
 ├── pricing.strav            # Pricing plans
@@ -513,7 +513,7 @@ pages: {
 
 <h3>Blog</h3>
 
-<pre><code>pages/
+<pre><code class="language-typescript">pages/
 ├── blog/
 │   ├── index.strav                    # Blog listing
 │   ├── getting-started-with-strav.strav

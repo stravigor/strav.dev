@@ -48,7 +48,7 @@ bunx @strav/spring my-api --api
 
 <p>Spring creates a Laravel-inspired directory structure adapted for Strav conventions:</p>
 
-<pre><code>my-app/
+<pre><code class="language-typescript">my-app/
 ├── app/                      # Application logic
 │   ├── controllers/          # HTTP controllers (snake_case)
 │   ├── models/               # Database models (generated from schemas)
@@ -224,17 +224,17 @@ export default defineSchema('post', {
 <li><strong>Create island components</strong> in <code>resources/ts/islands/</code>:</li>
 
 <pre><code class="language-vue"><!-- resources/ts/islands/post_editor.vue -->
-<template>
-  <div class="post-editor">
-    <input v-model="title" placeholder="Post title" />
-    <textarea v-model="content" placeholder="Write your post..."></textarea>
-    <button @click="save" :disabled="saving">
+&lt;template&gt;
+  &lt;div class="post-editor"&gt;
+    &lt;input v-model="title" placeholder="Post title" /&gt;
+    &lt;textarea v-model="content" placeholder="Write your post..."&gt;&lt;/textarea&gt;
+    &lt;button @click="save" :disabled="saving"&gt;
       {{ saving ? 'Saving...' : 'Save Post' }}
-    </button>
-  </div>
-</template>
+    &lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
 
-<script setup>
+&lt;script setup&gt;
 import { ref } from 'vue'
 
 const props = defineProps({
@@ -256,17 +256,17 @@ async function save() {
   })
   saving.value = false
 }
-</script>
+&lt;/script&gt;
 </code></pre>
 
 <li><strong>Use in templates</strong>:</li>
 
-<pre><code class="language-html"><!-- resources/views/pages/create_post.strav -->
+<pre><code class="language-html">&lt;!-- resources/views/pages/create_post.strav --&gt;
 @layout('layouts/app')
 
 @section('content')
-  <h1>Create New Post</h1>
-  <vue:post-editor />
+  &lt;h1&gt;Create New Post&lt;/h1&gt;
+  &lt;vue:post-editor /&gt;
 @end
 </code></pre>
 </ol>

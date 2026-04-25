@@ -157,7 +157,7 @@ The introspector automatically excludes the <code>_strav_migrations</code> track
 
 Migrations are stored in <code>database/migrations/</code> as timestamped directories:
 
-<pre><code>database/migrations/
+<pre><code class="language-typescript">database/migrations/
   20250115_120000_create_users/
     manifest.json          # metadata: version, message, steps
     01_enums/
@@ -285,7 +285,7 @@ bun strav seed --fresh
 
 Seeders work with the <code>Factory</code> class from <code>@strav/testing</code>. Define factories in <code>database/factories/</code> so both seeders and tests can share them:
 
-<pre><code>database/
+<pre><code class="language-typescript">database/
   factories/
     user_factory.ts
     post_factory.ts

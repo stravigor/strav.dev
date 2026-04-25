@@ -162,27 +162,27 @@ Templates live under <code>views/emails/</code> (or wherever <code>templatePrefi
 <h3>Email layout</h3>
 
 <pre><code class="language-html">{{-- views/emails/layout.strav --}}
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;style&gt;
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
     .header { background: #4f46e5; color: white; padding: 20px; text-align: center; }
     .content { padding: 20px; }
     .footer { color: #6b7280; font-size: 12px; text-align: center; padding: 20px; }
     .btn { display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header"><h1>{{ appName }}</h1></div>
-    <div class="content">{!! content !!}</div>
-    <div class="footer">&copy; {{ year }} {{ appName }}</div>
-  </div>
-</body>
-</html>
+  &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div class="container"&gt;
+    &lt;div class="header"&gt;&lt;h1&gt;{{ appName }}&lt;/h1&gt;&lt;/div&gt;
+    &lt;div class="content"&gt;{!! content !!}&lt;/div&gt;
+    &lt;div class="footer"&gt;&amp;copy; {{ year }} {{ appName }}&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;
 </code></pre>
 
 <h3>Email template</h3>

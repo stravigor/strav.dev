@@ -544,7 +544,7 @@ expect(stored.length).toBe(3)
 
 The package follows the same Manager + Driver + Mixin + Helper architecture as <code>@strav/search</code>:
 
-<pre><code>RagProvider          →  registers RagManager singleton
+<pre><code class="language-typescript">RagProvider          →  registers RagManager singleton
 RagManager           →  config loading, driver resolution, collection naming
 VectorStore          →  interface implemented by drivers
 rag helper           →  convenience API (ingest, retrieve, delete, flush)
